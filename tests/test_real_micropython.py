@@ -198,7 +198,9 @@ def test_console_interrupt_stops_a_busy_loop(repl):
     s = ConsoleSession(repl)
     result = []
     out = []
-    t = in_thread(lambda: result.append(s.run("while True: pass", lambda tx, e: out.append(tx))))
+    # a loop that calls into the runtime: very old builds only look for Ctrl-C at calls, not in a bare `while: pass`
+    code = "import time\nwhile True:\n    time.sleep(0.01)"
+    t = in_thread(lambda: result.append(s.run(code, lambda tx, e: out.append(tx))))
     time.sleep(0.5)
     s.interrupt()
     t.join(10)

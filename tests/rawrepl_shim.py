@@ -30,9 +30,13 @@ def run(src):
     try:
         exec(src.decode(), g)
     except BaseException as e:             # includes KeyboardInterrupt from Ctrl-C
-        sio = io.StringIO()
-        sys.print_exception(e, sio)
-        err = sio.getvalue()
+        try:
+            sio = io.StringIO()
+            sys.print_exception(e, sio)
+            err = sio.getvalue()
+        except BaseException as e2:         # never leave the host waiting for the terminator
+            err = "Traceback (most recent call last):\n%s: %s\n[shim: print_exception failed: %r]\n" % (
+                type(e).__name__, e, e2)
     write(b"\x04" + err.encode() + b"\x04>")
 
 
