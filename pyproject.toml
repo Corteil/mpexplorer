@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mpexplorer"
+version = "0.1.0"
+description = "Dual-pane file explorer for MicroPython boards (Pico, EMF badges). Nothing is installed on the target."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+dependencies = ["pyserial>=3.5"]
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff"]
+
+[project.scripts]
+mpexplorer = "mpexplorer.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["mpexplorer*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["tests", "."]
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "W"]
