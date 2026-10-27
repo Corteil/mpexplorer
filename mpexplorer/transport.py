@@ -180,7 +180,7 @@ class RawREPL:
                 del self._rx[:1]
                 return bytes(out)
             if deadline is not None and time.monotonic() >= deadline:
-                raise TransportError("timeout waiting for program output")
+                raise TransportError("timeout waiting for program output (got %r)" % bytes(out[-200:]))
             data = self.ser.read(self.ser.in_waiting or 1)
             if data:
                 self._rx += data

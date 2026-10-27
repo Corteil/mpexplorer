@@ -22,6 +22,7 @@ def mpy_shim_serial(tmp_path):
     from ptyserial import PtySerial
     ser = PtySerial([micropython_binary(), SHIM], cwd=str(tmp_path), banner=b"READY\r\n")
     yield ser
+    print("pty transcript (tail):", bytes(ser.transcript[-1500:]), "alive:", ser.alive())
     ser.close()
 
 
@@ -31,4 +32,5 @@ def mpy_serial(tmp_path):
     from ptyserial import PtySerial
     ser = PtySerial([micropython_binary()], cwd=str(tmp_path))
     yield ser
+    print("pty transcript (tail):", bytes(ser.transcript[-1500:]), "alive:", ser.alive())
     ser.close()

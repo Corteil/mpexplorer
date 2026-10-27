@@ -30,6 +30,7 @@ class PtySerial:
         os.close(slave)
         self.fd = master
         self.closed = False
+        self.transcript = bytearray()               # tail of everything the program printed, for failure diagnostics
         self.started = self._wait_for(banner, banner_timeout) if banner else b""
 
     def _wait_for(self, text, timeout):
@@ -52,9 +53,12 @@ class PtySerial:
         try:
             if not select.select([self.fd], [], [], 0.05)[0]:
                 return b""
-            return os.read(self.fd, n)
+            data = os.read(self.fd, n)
+            self.transcript += data
+            del self.transcript[:-4000]
+            return data
         except OSError as e:
-            if e.errno == errno.EIO:        # the program exited and the pty hung up
+            if e.errno in (errno.EIO, errno.EBADF):     # the program exited / the test finished and closed us
                 return b""
             raise
 
