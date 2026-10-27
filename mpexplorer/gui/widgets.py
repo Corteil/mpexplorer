@@ -27,6 +27,7 @@ class Pane(ttk.LabelFrame):
         self._token = 0
         self._sort = ("name", False)
         self._drag = None
+        self.paused = False             # True while a terminal owns the device
         self.path_var = tk.StringVar()
         self.filter_var = tk.StringVar()
 
@@ -78,7 +79,15 @@ class Pane(ttk.LabelFrame):
         self.config(text=self.title if backend else self.title + " (not connected)")
         self.refresh()
 
+    def set_paused(self, paused):
+        self.paused = paused
+        if self.backend:
+            self.config(text=self.title + (" (terminal active - paused)" if paused else ""))
+            if not paused:
+                self.refresh()
+
     def clear(self):
+        self.paused = False
         self.backend = None
         self._entries = []
         self.config(text=self.title + " (not connected)")
@@ -90,7 +99,7 @@ class Pane(ttk.LabelFrame):
 
     def selected(self):
         """[(name, full_path)] for the selected rows."""
-        if not self.backend:
+        if not self.backend or self.paused:
             return []
         return [(n, self.backend.join(self.cwd, n)) for n in self.tree.selection()]
 
@@ -108,7 +117,7 @@ class Pane(ttk.LabelFrame):
             self.go(self.backend.parent(self.cwd))
 
     def refresh(self):
-        if not self.backend:
+        if not self.backend or self.paused:
             return
         self.path_var.set(self.cwd)
         self._token += 1
@@ -139,7 +148,7 @@ class Pane(ttk.LabelFrame):
 
     def _open(self, _event=None):
         sel = self.tree.selection()
-        if len(sel) != 1 or not self.backend:
+        if len(sel) != 1 or not self.backend or self.paused:
             return "break"
         e = self.entry(sel[0])
         if e and e.is_dir:
