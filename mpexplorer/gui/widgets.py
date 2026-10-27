@@ -244,6 +244,7 @@ class Editor(tk.Toplevel):
         super().__init__(app)
         self.app, self.backend, self.path = app, backend, path
         self.title("%s: %s" % (backend.label, path))
+        self.transient(app)         # tell the WM the editor belongs to the main window (else clicks fall through to it)
         self.geometry("720x520")
         bar = ttk.Frame(self)
         bar.pack(fill="x")
@@ -262,6 +263,12 @@ class Editor(tk.Toplevel):
         self.text.edit_modified(False)
         self.bind("<Control-s>", lambda _e: self.save() or "break")
         self.protocol("WM_DELETE_WINDOW", self._close)
+        self.after(50, self._take_focus)
+
+    def _take_focus(self):
+        """A new Toplevel starts with focus on the window itself, not the text box, so typing goes nowhere."""
+        self.lift()
+        self.text.focus_force()
 
     def save(self):
         data = self.text.get("1.0", "end-1c").encode("utf-8")
