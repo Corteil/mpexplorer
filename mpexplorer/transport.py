@@ -33,6 +33,7 @@ class RawREPL:
         self.raw = False
         self.paste = None if paste in (None, True) else False     # None = not yet probed
         self._rx = bytearray()
+        self.terminal = False   # True while a terminal owns the line; exec() is refused
         self.trace = None       # optional callable(kind, text): "send" | "recv" | "error" | "info"
         self.lock = threading.RLock()
 
@@ -104,6 +105,22 @@ class RawREPL:
         self._trace("info", "stdin: %s" % text)
         self.ser.write(text.encode() + b"\n")
 
+    def begin_terminal(self):
+        """Hand the line to a terminal: leave raw mode so the board shows its normal REPL prompt."""
+        with self.lock:
+            self.ser.write(b"\x02" if self.raw else b"\r")
+            self.raw = False
+            self.terminal = True
+            self._rx.clear()
+            self._trace("info", "terminal mode on")
+
+    def end_terminal(self):
+        """Take the line back. Raw mode is re-entered (with Ctrl-C) by the next exec(); board state is untouched."""
+        with self.lock:
+            self.terminal = False
+            self.raw = False
+            self._trace("info", "terminal mode off")
+
     def mark_dirty(self):
         """Force a clean re-entry of raw mode before the next exec (discards stray stdin bytes)."""
         self.raw = False
@@ -114,6 +131,8 @@ class RawREPL:
         on_output(chunk) is called with stdout as it arrives. timeout=None waits indefinitely.
         """
         with self.lock:
+            if self.terminal:
+                raise TransportError("terminal mode is active; switch the console back to emulated mode first")
             if not self.raw:
                 self.enter_raw()
             data = code.encode()
