@@ -7,7 +7,7 @@ name = "mpexplorer"
 version = "0.1.0"
 description = "Dual-pane file explorer for MicroPython boards (Pico, EMF badges). Nothing is installed on the target."
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 license = { text = "MIT" }
 dependencies = ["pyserial>=3.5"]
 
