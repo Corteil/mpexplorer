@@ -29,9 +29,19 @@ GUI (Tkinter) -> JobRunner (one worker thread) -> Backend
 Each operation is a short Python snippet run on the board. File data travels as base64 in 2 KB chunks. Copies within
 the device run entirely on the board. Expected speed is tens of KB/s.
 
-## Planned: raw-paste mode (still no installed code)
-MicroPython >= 1.14 supports raw-paste (`Ctrl-E A Ctrl-A`), a flow-controlled way to send snippets. This removes the
-per-256-byte pauses and should roughly double upload speed. Detected at connect, with fallback to plain raw REPL.
+## Raw-paste mode (implemented, still no installed code)
+MicroPython >= 1.14 supports raw-paste (`Ctrl-E A Ctrl-A`), a flow-controlled way to send snippets: the device
+reports a window size and says (`\x01`) when it can take more, so the host no longer pauses after every 256 bytes.
+`RawREPL` probes on the first command and remembers the result:
+
+| Device reply | Meaning | Action |
+|---|---|---|
+| `R\x01` + window | supported | upload with flow control |
+| `R\x00` | understood but disabled | plain raw REPL |
+| `ra...` (banner) | old firmware | consume banner, plain raw REPL |
+
+`RawREPL(ser, paste=False)` turns it off. The fake board in `tests/` supports all three behaviours and checks the
+host never exceeds the window. Real speed gains still need measuring on hardware.
 
 ## Planned: agent mode (opt-in)
 **What:** a ~3 KB helper (`mpexplorer/agent_src.py`) that speaks a binary, CRC-checked protocol, for fast transfers and

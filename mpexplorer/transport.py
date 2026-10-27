@@ -3,6 +3,7 @@
 Nothing is installed on the device: every operation is a snippet of Python sent
 to the stock REPL (Ctrl-A raw mode) and executed there, as `mpremote` does.
 """
+import struct
 import threading
 import time
 
@@ -26,9 +27,11 @@ class DeviceError(TransportError):
 
 
 class RawREPL:
-    def __init__(self, ser):
+    def __init__(self, ser, paste=None):
+        """paste: None = use raw-paste if the firmware supports it, False = never, True = same as None."""
         self.ser = ser
         self.raw = False
+        self.paste = None if paste in (None, True) else False     # None = not yet probed
         self._rx = bytearray()
         self.lock = threading.RLock()
 
@@ -84,11 +87,12 @@ class RawREPL:
                 self.enter_raw()
             data = code.encode()
             try:
-                for i in range(0, len(data), WRITE_BLOCK):
-                    self.ser.write(data[i:i + WRITE_BLOCK])
-                    time.sleep(WRITE_PAUSE)
-                self.ser.write(b"\x04")
-                self._read_until(b"OK", timeout)
+                if not (self.paste is not False and self._send_paste(data, timeout)):
+                    for i in range(0, len(data), WRITE_BLOCK):
+                        self.ser.write(data[i:i + WRITE_BLOCK])
+                        time.sleep(WRITE_PAUSE)
+                    self.ser.write(b"\x04")
+                    self._read_until(b"OK", timeout)
                 out = self._read_until(b"\x04", timeout)[:-1]
                 err = self._read_until(b"\x04", timeout)[:-1]
                 try:
@@ -102,6 +106,55 @@ class RawREPL:
             if err:
                 raise DeviceError(err.decode(errors="replace"))
             return out
+
+    def _read_n(self, n, timeout):
+        end = time.monotonic() + timeout
+        while len(self._rx) < n:
+            if time.monotonic() >= end:
+                raise TransportError("timeout reading %d byte(s) (got %r)" % (n, bytes(self._rx)))
+            chunk = self.ser.read(self.ser.in_waiting or 1)
+            if chunk:
+                self._rx += chunk
+            else:
+                time.sleep(0.001)
+        out = bytes(self._rx[:n])
+        del self._rx[:n]
+        return out
+
+    def _send_paste(self, data, timeout):
+        """Send code with raw-paste flow control (MicroPython >= 1.14).
+
+        Returns False, with the REPL still ready for a plain raw-mode upload, if the firmware
+        lacks raw-paste. Unlike plain raw mode there are no per-block pauses: the device tells
+        us how many more bytes it can take.
+        """
+        self.ser.write(b"\x05A\x01")
+        head = self._read_n(2, timeout)
+        if head == b"R\x01":
+            self.paste = True
+            window = struct.unpack("<H", self._read_n(2, timeout))[0]
+            remain, i = window, 0
+            while i < len(data):
+                while remain == 0 or self.ser.in_waiting or self._rx:
+                    b = self._read_n(1, timeout)
+                    if b == b"\x01":
+                        remain += window
+                    elif b == b"\x04":
+                        self.ser.write(b"\x04")
+                        raise TransportError("device aborted the raw-paste upload")
+                    else:
+                        raise TransportError("unexpected byte %r during raw-paste" % b)
+                n = min(remain, len(data) - i)
+                self.ser.write(data[i:i + n])
+                i += n
+                remain -= n
+            self.ser.write(b"\x04")
+            self._read_until(b"\x04", timeout)         # device acknowledges end of input
+            return True
+        self.paste = False
+        if head != b"R\x00":       # old firmware: it echoed the start of the raw REPL banner instead
+            self._read_until(b"w REPL; CTRL-B to exit\r\n>", timeout)
+        return False
 
     def soft_reset(self):
         with self.lock:

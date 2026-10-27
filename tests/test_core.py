@@ -11,9 +11,9 @@ from mpexplorer.ops import (ConflictPolicy, Progress, copy_tree, delete_tree, is
 from mpexplorer.transport import DeviceError, RawREPL
 
 
-@pytest.fixture
-def dev(tmp_path):
-    return DeviceBackend(RawREPL(FakeSerial())), str(tmp_path)
+@pytest.fixture(params=["on", "off", "old"])
+def dev(request, tmp_path):
+    return DeviceBackend(RawREPL(FakeSerial(paste=request.param))), str(tmp_path)
 
 
 @pytest.fixture
@@ -144,3 +144,35 @@ def test_job_runner():
             break
         time.sleep(0.02)
     assert got[0][1] == 42 and isinstance(got[1][2], ZeroDivisionError)
+
+
+@pytest.mark.parametrize("mode,expected", [("on", True), ("off", False), ("old", False)])
+def test_paste_negotiation(mode, expected):
+    ser = FakeSerial(paste=mode)
+    repl = RawREPL(ser)
+    assert repl.exec("print(1+1)").strip() == b"2"
+    assert repl.paste is expected
+    assert repl.exec("print(3)").strip() == b"3"           # still works after the probe
+    assert (ser.paste_used == 2) is expected
+
+
+def test_paste_flow_control_and_large_code():
+    ser = FakeSerial(paste="on", window=32)
+    repl = RawREPL(ser)
+    blob = "x=%r\nprint(len(x))" % ("a" * 5000)
+    assert repl.exec(blob).strip() == b"5000"
+    assert ser.flow_violations == 0
+
+
+def test_paste_can_be_disabled():
+    ser = FakeSerial(paste="on")
+    repl = RawREPL(ser, paste=False)
+    assert repl.exec("print(7)").strip() == b"7"
+    assert ser.paste_used == 0
+
+
+def test_paste_reports_device_errors():
+    repl = RawREPL(FakeSerial(paste="on"))
+    with pytest.raises(DeviceError):
+        repl.exec("1/0")
+    assert repl.exec("print('ok')").strip() == b"ok"
