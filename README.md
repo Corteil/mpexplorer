@@ -9,8 +9,11 @@ board over USB serial. **Nothing is installed on the board**: it works through t
 - Upload / download files and folders (buttons, drag between panes, or copy and paste)
 - Copy, cut, paste, rename, delete, new file / folder, properties, free space
 - Conflict handling (overwrite / skip / keep both / apply to all), progress, speed and cancel
-- **REPL console** (Device > REPL console): run Python on the board, see output as it arrives, Esc to interrupt,
-  history with Up/Down. Variables persist between runs. While a command runs, other device operations wait.
+- **REPL console** (Device > REPL console), emulated mode: run Python on the board, output streams as it arrives.
+  `_` holds the last result, Ctrl+D soft-resets, Esc interrupts, Up/Down is history, Shift+Enter adds a line.
+  `input()` works: while a program runs, Enter sends your line to it. **Show activity** displays every snippet
+  sent to the board and every reply (file operations included), which is handy for debugging. While a command
+  runs, other device operations wait. A true terminal mode (the board's own REPL) is planned, see docs/DESIGN.md.
 - **Folder sync** (Tools > Sync this folder to the other pane): compares by size and SHA-256 (computed on the
   device, so nothing is transferred to check), shows a preview, copies only what changed, optional mirror-delete.
   `__pycache__`, `.git`, `*.pyc` are skipped. Files are written under a temporary name so a cancel never loses
