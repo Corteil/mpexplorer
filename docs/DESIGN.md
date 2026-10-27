@@ -91,33 +91,33 @@ its persistent state.
 - Limits: no tab completion, auto-indent or line editing on the board; helper names (`os json gc b _f _v`) share the
   namespace; a long-running command blocks other device operations because there is one worker thread.
 
-### Terminal mode (planned): the board's real REPL
-Goal: an exact REPL feel - the board's own tab completion, history, auto-indent, paste mode (Ctrl-E), `_`, Ctrl-D and
-`input()` - by passing keystrokes straight through instead of emulating.
+### Terminal mode (built): the board's real REPL
+Keystrokes are passed straight through, so the board's own tab completion, history, auto-indent, paste mode (Ctrl-E),
+Ctrl-D and `input()` all work, with no emulation.
 
-1. **Connection ownership.** The raw REPL (files, sync, emulated console) and the friendly REPL cannot be used at the
-   same time on one serial line. Add an explicit "device mode" to the app: `RAW` (default) or `TERMINAL`. Switching to
-   terminal waits for the job queue to drain, sends Ctrl-B (`\x02`) to leave raw mode, and the file panes show
-   "Terminal active - device operations paused". Switching back sends Ctrl-C, Ctrl-A and re-probes. Board state
-   (variables, imports) survives because the interpreter is never reset by these switches.
-2. **`TerminalSession`** (GUI-free): owns a reader thread that pushes received bytes into a queue, and
-   `send(bytes)` for keystrokes. No `exec` framing, no `OK`/`\x04` parsing.
-3. **`AnsiScreen`** (GUI-free, unit-tested): a small screen-buffer that applies what the MicroPython line editor
-   emits: `\r`, `\n`, `\b`, `ESC[K` (erase to end of line), `ESC[nD`/`ESC[nC` (cursor left/right), `ESC[J`. It exposes
-   lines plus cursor position for the Tk widget to draw. Scrollback is a plain list of finished lines.
-4. **`TerminalWidget`** (Tk): a `Text` widget that captures `<Key>`, maps keys to bytes (Enter -> `\r`, Backspace ->
-   `\x7f`, arrows -> `ESC[A/B/C/D`, Home/End, Tab -> `\t`, Ctrl-letter -> control byte; Ctrl-C/D/E/A/B pass through,
-   copy/paste use Ctrl+Shift+C / Ctrl+Shift+V). Multi-line paste is wrapped in paste mode (`\x05 ... \x04`) so
-   indentation is not mangled.
-5. **Testing.** Extend `FakeSerial` with a friendly-REPL state: prompt `>>> `, echo, backspace, history arrows, tab
-   completion, `ESC[K` redraws, Ctrl-C/D/E handling and the raw-mode switch (`\x01` / `\x02`). Unit-test `AnsiScreen`
-   directly with recorded byte streams; test the mode switch (state preserved, queue drained, panes paused).
-6. **Risks.** Key mapping differences between desktop environments; UTF-8 and non-printable bytes in output; a program
-   that never returns blocks the switch back until Ctrl-C; firmware without tab completion; USB re-enumeration after a
-   hard reset leaves the terminal disconnected (offer Reconnect).
-
-Phases: (a) `AnsiScreen` + tests, (b) fake friendly REPL + `TerminalSession` + tests, (c) mode switching in the app,
-(d) Tk widget and the console-window mode selector (currently shown disabled), (e) hardware shakedown.
+- **Connection ownership.** The raw REPL (files, sync, emulated console) and the normal REPL cannot share the line.
+  `RawREPL.begin_terminal()` sends Ctrl-B (or CR if not in raw mode) and sets `terminal = True`; from then on
+  `exec()` raises `TransportError` instead of corrupting the session. `end_terminal()` clears the flag and marks raw
+  mode as not entered, so the next operation re-enters it with Ctrl-C/Ctrl-A. Neither switch resets the interpreter, so
+  variables survive both ways (tested). The app pauses the device pane while the terminal is active
+  (`Pane.set_paused`, `App.set_device_paused`); entering terminal mode is refused while a job is running.
+- **`TerminalSession`** (`terminal.py`): a reader thread hands received bytes to a callback; `send()` writes keystrokes;
+  a dead port is reported through `on_error`.
+- **`AnsiScreen`** (`screen.py`): applies CR, LF, backspace, tab and the CSI sequences the REPL's line editor emits
+  (erase line/screen, cursor left/right/up/down, delete/insert/erase characters, column). Colours, window titles and
+  private modes are accepted and ignored. Lines are unbounded logical lines with a 1000-line scrollback; absolute row
+  addressing is not supported (the REPL never needs it).
+- **Keys** (`key_bytes`): Enter -> CR, Backspace -> 0x7f, arrows/Home/End/Delete -> CSI sequences, Ctrl+letter ->
+  control byte (so Ctrl-C always interrupts, as in a real terminal). **Paste** (`paste_bytes`): one line is typed;
+  several lines are wrapped in paste mode so indentation survives.
+- **Tk widget** (`gui/terminal_widget.py`): a read-only `Text` that captures keys, redraws from the screen every 30 ms
+  when something changed, and draws the cursor as a highlighted cell.
+- **Testing.** `FakeSerial` implements a friendly REPL: prompt, echo, backspace, mid-line edits, history, tab
+  completion, `... ` continuation, paste mode, Ctrl-C/D/B, `input()` and the raw-mode switches. Tests drive a
+  `TerminalSession` into an `AnsiScreen` and assert on what a user would see.
+- **Known limits / to verify on hardware:** key mapping on different desktops; a program that never returns holds the
+  line until Ctrl-C; USB re-enumeration after a hard reset ends the session (shown as "connection lost"); firmware
+  differences in escape sequences; the fake cannot interrupt a running program with Ctrl-C.
 
 ## Folder sync
 `sync.py` builds a `Plan` (mkdir / copy / delete actions) by walking both folders, then `apply_plan` runs it.

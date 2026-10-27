@@ -1,7 +1,9 @@
 """REPL console window: type Python, run it on the board, see the output as it arrives."""
 import queue
 import tkinter as tk
-from tkinter import ttk
+from tkinter import messagebox, ttk
+
+from .terminal_widget import TerminalWidget
 
 
 class ConsoleWindow(tk.Toplevel):
@@ -22,18 +24,22 @@ class ConsoleWindow(tk.Toplevel):
         self.stop_btn.pack(side="left", padx=4)
         ttk.Button(bar, text="Clear", command=self.clear).pack(side="left")
         self.activity = tk.BooleanVar(value=False)
-        ttk.Checkbutton(bar, text="Show activity", variable=self.activity,
-                        command=self._toggle_activity).pack(side="left", padx=10)
+        self.activity_btn = ttk.Checkbutton(bar, text="Show activity", variable=self.activity,
+                                            command=self._toggle_activity)
+        self.activity_btn.pack(side="left", padx=10)
         mode = ttk.Frame(self)
         mode.pack(fill="x", padx=6)
         self.mode = tk.StringVar(value="emulated")
         ttk.Label(mode, text="Mode:").pack(side="left")
-        ttk.Radiobutton(mode, text="Emulated (raw REPL)", variable=self.mode,
-                        value="emulated").pack(side="left", padx=4)
-        ttk.Radiobutton(mode, text="Terminal (real REPL) - planned", variable=self.mode, value="terminal",
-                        state="disabled").pack(side="left")
+        ttk.Radiobutton(mode, text="Emulated (raw REPL)", variable=self.mode, value="emulated",
+                        command=self._mode_changed).pack(side="left", padx=4)
+        ttk.Radiobutton(mode, text="Terminal (real REPL)", variable=self.mode, value="terminal",
+                        command=self._mode_changed).pack(side="left")
+        self.term = None
 
-        body = ttk.Frame(self)
+        self.emu = ttk.Frame(self)
+        self.emu.pack(fill="both", expand=True)
+        body = ttk.Frame(self.emu)
         body.pack(fill="both", expand=True, padx=4)
         self.out = tk.Text(body, state="disabled", wrap="word", font="TkFixedFont")
         sb = ttk.Scrollbar(body, command=self.out.yview)
@@ -44,9 +50,9 @@ class ConsoleWindow(tk.Toplevel):
         self.out.tag_configure("echo", foreground="#2060c0")
         self.out.tag_configure("trace", foreground="#808080")
 
-        self.prompt = ttk.Label(self)
+        self.prompt = ttk.Label(self.emu)
         self.prompt.pack(anchor="w", padx=6)
-        self.inp = tk.Text(self, height=4, font="TkFixedFont", undo=True)
+        self.inp = tk.Text(self.emu, height=4, font="TkFixedFont", undo=True)
         self.inp.pack(fill="x", padx=4, pady=(0, 4))
         self._set_prompt()
         self.inp.bind("<Return>", self._enter)
@@ -54,7 +60,7 @@ class ConsoleWindow(tk.Toplevel):
         self.inp.bind("<Up>", lambda e: self._history(-1))
         self.inp.bind("<Down>", lambda e: self._history(1))
         self.inp.bind("<Control-d>", self._ctrl_d)
-        self.bind("<Escape>", lambda _e: self.interrupt())
+        self.bind("<Escape>", lambda _e: self.interrupt() if self.term is None else None)
         self.inp.focus_set()
         self.protocol("WM_DELETE_WINDOW", self.close)
         self._drain()
@@ -87,6 +93,49 @@ class ConsoleWindow(tk.Toplevel):
         self.prompt.config(text=(
             "Program input: Enter sends this line to the running program (input())" if self.busy else
             "Python: Enter = run, Shift+Enter = new line, Up/Down = history, Ctrl+D = soft reset, Esc = interrupt"))
+
+    # -- emulated <-> terminal --------------------------------------------
+    def _mode_changed(self):
+        if self.mode.get() == "terminal":
+            self._enter_terminal()
+        else:
+            self._leave_terminal()
+
+    def _enter_terminal(self):
+        if self.busy or self.app.runner.busy:
+            messagebox.showinfo("Busy", "Wait for the running command or file operation to finish first.", parent=self)
+            self.mode.set("emulated")
+            return
+        self.emu.pack_forget()
+        self.term = TerminalWidget(self, self.session.repl, on_error=lambda _e: None)
+        self.term.pack(fill="both", expand=True, padx=4, pady=4)
+        try:
+            self.term.start()
+        except Exception as e:
+            self.term.destroy()
+            self.term = None
+            self.emu.pack(fill="both", expand=True)
+            self.mode.set("emulated")
+            messagebox.showerror("Terminal", str(e), parent=self)
+            return
+        self.activity_btn.state(["disabled"])
+        self.run_btn.state(["disabled"])
+        self.stop_btn.state(["disabled"])
+        self.app.set_device_paused(True)
+        self.title("REPL console - terminal (real REPL)")
+
+    def _leave_terminal(self):
+        if self.term is None:
+            return
+        self.term.stop()
+        self.term.destroy()
+        self.term = None
+        self.emu.pack(fill="both", expand=True)
+        for w in (self.activity_btn, self.run_btn, self.stop_btn):
+            w.state(["!disabled"])
+        self.app.set_device_paused(False)
+        self.title("REPL console")
+        self.inp.focus_set()
 
     # -- activity trace ----------------------------------------------------
     def _toggle_activity(self):
@@ -165,6 +214,7 @@ class ConsoleWindow(tk.Toplevel):
                 self.write("Interrupt failed: %s\n" % e, "err")
 
     def close(self):
+        self._leave_terminal()
         self.session.repl.trace = None
         self.interrupt()
         self.app.console = None

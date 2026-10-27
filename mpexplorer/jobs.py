@@ -44,6 +44,10 @@ class JobRunner(threading.Thread):
             except queue.Empty:
                 return out
 
+    @property
+    def busy(self):
+        return self.current is not None or not self.q.empty()
+
     def cancel_all(self):
         while True:
             try:

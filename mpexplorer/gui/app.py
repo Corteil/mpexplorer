@@ -169,7 +169,16 @@ class App(tk.Tk):
         if not pane.backend:
             messagebox.showinfo("Not connected", "Connect to a device first.")
             return None
+        if pane.paused:
+            messagebox.showinfo("Terminal active", "The console is in terminal mode. Switch it back to emulated "
+                                "mode to use the device files.")
+            return None
         return pane
+
+    def set_device_paused(self, paused):
+        """Terminal mode owns the serial line, so the device pane is frozen until it is released."""
+        if self.right.backend:
+            self.right.set_paused(paused)
 
     # -- connection --------------------------------------------------------
     def scan_ports(self):
@@ -462,7 +471,7 @@ class App(tk.Tk):
         self.runner.submit(lambda prog: apply_plan(plan, prog, include_delete), done, "Syncing ...")
 
     def free_space(self):
-        if self.device:
+        if self.device and self._need_backend(self.right):
             dev = self.device
             self.runner.submit(lambda prog: dev.free_space("/"),
                                lambda res, exc: messagebox.showinfo(
@@ -470,7 +479,9 @@ class App(tk.Tk):
                                "Checking space", quiet=True)
 
     def soft_reset(self):
-        if self.device and messagebox.askyesno("Soft reset", "Soft-reset the board? Any running program stops."):
+        if not (self.device and self._need_backend(self.right)):
+            return
+        if messagebox.askyesno("Soft reset", "Soft-reset the board? Any running program stops."):
             dev = self.device
             self.runner.submit(lambda prog: dev.soft_reset(), lambda r, e: self._refresh_all(),
                                "Resetting", quiet=True)

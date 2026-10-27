@@ -13,7 +13,12 @@ board over USB serial. **Nothing is installed on the board**: it works through t
   `_` holds the last result, Ctrl+D soft-resets, Esc interrupts, Up/Down is history, Shift+Enter adds a line.
   `input()` works: while a program runs, Enter sends your line to it. **Show activity** displays every snippet
   sent to the board and every reply (file operations included), which is handy for debugging. While a command
-  runs, other device operations wait. A true terminal mode (the board's own REPL) is planned, see docs/DESIGN.md.
+  runs, other device operations wait. 
+  **Terminal mode** (the radio button at the top of the console) is the board's real REPL: keystrokes go straight
+  to it, so you get its own tab completion, history, auto-indent, paste mode (multi-line paste is wrapped
+  automatically), Ctrl+C/D/E/B, `_` and `input()`. Copy and paste with Ctrl+Shift+C / Ctrl+Shift+V. While the
+  terminal is active the device pane is paused (the serial line has one user at a time); switch back and your
+  variables are still there.
 - **Folder sync** (Tools > Sync this folder to the other pane): compares by size and SHA-256 (computed on the
   device, so nothing is transferred to check), shows a preview, copies only what changed, optional mirror-delete.
   `__pycache__`, `.git`, `*.pyc` are skipped. Files are written under a temporary name so a cancel never loses
