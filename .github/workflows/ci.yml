@@ -30,7 +30,7 @@ jobs:
       matrix:
         # Older releases (e.g. v1.22.2) abort on the first exception when built with the runner's GCC 15, so they would
         # need an older toolchain (a ubuntu:22.04 container). Add tags here once that is set up.
-        mpy: ["v1.26.0"]
+        mpy: ["v1.26.0", "v1.28.0"]      # v1.28.0 is what the 2024 badge firmware (badge-2024-software) is built on
     env:
       MPY_REQUIRED: "1"       # a missing binary must fail here, not skip
     steps:
