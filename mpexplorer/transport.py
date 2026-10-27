@@ -80,21 +80,29 @@ class RawREPL:
                 return
             raise TransportError("could not enter the raw REPL (wrong port, or the port is busy?)")
 
-    def exec(self, code, timeout=10.0):
-        """Run code on the device and return its stdout as bytes."""
+    def interrupt(self):
+        """Send Ctrl-C to stop running code. Safe to call from another thread while exec() waits."""
+        self.ser.write(b"\x03")
+
+    def exec(self, code, timeout=10.0, on_output=None):
+        """Run code on the device and return its stdout as bytes.
+
+        on_output(chunk) is called with stdout as it arrives. timeout=None waits indefinitely.
+        """
         with self.lock:
             if not self.raw:
                 self.enter_raw()
             data = code.encode()
+            ctl = 10.0 if timeout is None else timeout      # handshake steps always have a time limit
             try:
-                if not (self.paste is not False and self._send_paste(data, timeout)):
+                if not (self.paste is not False and self._send_paste(data, ctl)):
                     for i in range(0, len(data), WRITE_BLOCK):
                         self.ser.write(data[i:i + WRITE_BLOCK])
                         time.sleep(WRITE_PAUSE)
                     self.ser.write(b"\x04")
-                    self._read_until(b"OK", timeout)
-                out = self._read_until(b"\x04", timeout)[:-1]
-                err = self._read_until(b"\x04", timeout)[:-1]
+                    self._read_until(b"OK", ctl)
+                out = self._read_stream(timeout, on_output)
+                err = self._read_until(b"\x04", ctl)[:-1]
                 try:
                     self._read_until(b">", 1)
                 except TransportError:
@@ -106,6 +114,30 @@ class RawREPL:
             if err:
                 raise DeviceError(err.decode(errors="replace"))
             return out
+
+    def _read_stream(self, timeout, on_output):
+        """Read stdout up to the 0x04 terminator, handing chunks to on_output as they arrive."""
+        out = bytearray()
+        deadline = None if timeout is None else time.monotonic() + timeout
+        while True:
+            i = self._rx.find(b"\x04")
+            n = i if i >= 0 else len(self._rx)
+            if n:
+                chunk = bytes(self._rx[:n])
+                del self._rx[:n]
+                out += chunk
+                if on_output:
+                    on_output(chunk)
+            if i >= 0:
+                del self._rx[:1]
+                return bytes(out)
+            if deadline is not None and time.monotonic() >= deadline:
+                raise TransportError("timeout waiting for program output")
+            data = self.ser.read(self.ser.in_waiting or 1)
+            if data:
+                self._rx += data
+            else:
+                time.sleep(0.001)
 
     def _read_n(self, n, timeout):
         end = time.monotonic() + timeout
