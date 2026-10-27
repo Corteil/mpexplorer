@@ -1,0 +1,19 @@
+name: Bug report
+description: Something does not work with a board
+labels: [bug]
+body:
+  - type: input
+    id: board
+    attributes: {label: Board, placeholder: "Pico 2 / Pico W / EMF 2022 badge"}
+    validations: {required: true}
+  - type: input
+    id: mpy
+    attributes: {label: MicroPython version, description: "Output of os.uname() on the board"}
+    validations: {required: true}
+  - type: input
+    id: host
+    attributes: {label: Host, placeholder: "Raspberry Pi 5, Raspberry Pi OS Bookworm, Python 3.11"}
+  - type: textarea
+    id: what
+    attributes: {label: What happened, description: Steps, what you expected, any error text}
+    validations: {required: true}
