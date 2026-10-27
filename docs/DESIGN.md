@@ -139,6 +139,13 @@ Findings so far from layer 2 (v1.26.0): `input()` is echoed by the board, so the
 available in the unix port's REPL, so it is only tested on the fake. Older releases (v1.22.2) abort on exceptions when
 compiled with the runner's GCC 15, so they need an older-toolchain container before they can be added to the matrix.
 
+### Which MicroPython do the badges run?
+- **2024 / 2026 badge:** the `badge-2024-software` firmware pins its `micropython` submodule at commit `e0e9fbb`,
+  the upstream "Bump version to 1.28.0" commit, so it is **MicroPython 1.28.0** for the **ESP32-S3** port (ESP-IDF
+  5.5.1). CI runs the real-MicroPython tests on v1.28.0 (and v1.26.0) for that reason. Still untested: the ESP32
+  port itself (USB serial, its raw-paste behaviour, the badge's own modules).
+- **2022 badge (RP2040):** version not yet determined; run `import os; print(os.uname())` on it.
+
 ## Folder sync
 `sync.py` builds a `Plan` (mkdir / copy / delete actions) by walking both folders, then `apply_plan` runs it.
 Size differs -> changed; same size -> compare SHA-256 (`Backend.checksum`, computed on the board with `hashlib`).
