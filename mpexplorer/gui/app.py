@@ -7,11 +7,15 @@ from tkinter import messagebox, scrolledtext, simpledialog, ttk
 from .. import __version__
 from ..backends import CHUNK, DeviceBackend, LocalBackend, human
 from ..clipboard import Clipboard
+from ..console import ConsoleSession
 from ..errors import BackendError, Cancelled
 from ..jobs import JobRunner
+from ..sync import apply_plan, build_plan
 from ..ops import (ConflictPolicy, copy_tree, delete_tree, is_within, move_item, total_size,
                    unique_name)
 from ..transport import DeviceError, RawREPL
+from .console_window import ConsoleWindow
+from .sync_dialog import SyncDialog
 from .widgets import ConflictDialog, Editor, fmt_time, Pane
 
 MAX_EDIT_BYTES = 256 * 1024
@@ -39,6 +43,8 @@ class App(tk.Tk):
         self.clipboard = Clipboard()
         self.local = LocalBackend()
         self.device = None
+        self.session = None
+        self.console = None
         self.show_hidden = tk.BooleanVar(value=False)
         self.show_hidden.trace_add("write", lambda *_: [p._render() for p in self.panes])
         self._asks = queue.Queue()
@@ -87,10 +93,14 @@ class App(tk.Tk):
         v.add_command(label="Refresh\tF5", command=lambda: [p.refresh() for p in self.panes])
         m.add_cascade(label="View", menu=v)
         d = tk.Menu(m, tearoff=0)
+        d.add_command(label="REPL console...", command=self.open_console)
         d.add_command(label="Run selected script", command=self.run_script)
         d.add_command(label="Free space", command=self.free_space)
         d.add_command(label="Soft reset", command=self.soft_reset)
         m.add_cascade(label="Device", menu=d)
+        t = tk.Menu(m, tearoff=0)
+        t.add_command(label="Sync this folder to the other pane...", command=self.sync_folders)
+        m.add_cascade(label="Tools", menu=t)
         self.config(menu=m)
 
     def _build_toolbar(self):
@@ -191,6 +201,7 @@ class App(tk.Tk):
                 messagebox.showerror("Connection failed", str(exc))
                 return
             self.device = dev
+            self.session = ConsoleSession(dev.repl)
             self.right.set_location(dev, dev.root)
             self.set_status("Connected to %s" % port)
         self.runner.submit(work, done, "Connecting", quiet=True)
@@ -198,6 +209,9 @@ class App(tk.Tk):
     def disconnect(self):
         if self.device:
             dev, self.device = self.device, None
+            self.session = None
+            if self.console:
+                self.console.close()
             self.right.clear()
             self.runner.submit(lambda prog: dev.close(), label="Disconnecting", quiet=True)
             self.set_status("Disconnected")
@@ -404,6 +418,48 @@ class App(tk.Tk):
             box.pack(fill="both", expand=True)
             box.insert("end", exc.traceback if isinstance(exc, DeviceError) else (str(exc) if exc else out))
         self.runner.submit(lambda prog: be.run(path), done, "Running " + path, quiet=True)
+
+    def open_console(self):
+        if not self.session:
+            messagebox.showinfo("Not connected", "Connect to a device first.")
+        elif self.console:
+            self.console.lift()
+        else:
+            self.console = ConsoleWindow(self, self.session)
+
+    def sync_folders(self):
+        src = self.active
+        dst = self.other_pane(src)
+        if not (self._need_backend(src) and self._need_backend(dst)):
+            return
+        s_be, s_dir, d_be, d_dir = src.backend, src.cwd, dst.backend, dst.cwd
+        if s_be is d_be and (is_within(s_be, d_dir, s_dir) or is_within(s_be, s_dir, d_dir)):
+            messagebox.showerror("Sync", "The two folders must be separate (neither inside the other).")
+            return
+
+        def done(plan, exc):
+            if exc:
+                if not isinstance(exc, Cancelled):
+                    messagebox.showerror("Sync", str(exc))
+                self.set_status("Sync cancelled" if isinstance(exc, Cancelled) else "Sync failed")
+            elif not plan.actions:
+                self.set_status("Folders are already in sync")
+                messagebox.showinfo("Sync", "Nothing to do: the folders already match.")
+            else:
+                SyncDialog(self, plan)
+        self.runner.submit(lambda prog: build_plan(s_be, s_dir, d_be, d_dir, prog), done, "Comparing folders ...")
+
+    def run_sync(self, plan, include_delete):
+        def done(_res, exc):
+            self._refresh_all()
+            if isinstance(exc, Cancelled):
+                self.set_status("Sync cancelled")
+            elif exc:
+                self.set_status("Sync failed")
+                messagebox.showerror("Sync failed", str(exc))
+            else:
+                self.set_status("Sync complete")
+        self.runner.submit(lambda prog: apply_plan(plan, prog, include_delete), done, "Syncing ...")
 
     def free_space(self):
         if self.device:

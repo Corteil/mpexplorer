@@ -1,5 +1,6 @@
 """Filesystem backends: the host's disk and a MicroPython device over the raw REPL."""
 import binascii
+import hashlib
 import json
 import os
 import posixpath
@@ -76,6 +77,13 @@ class LocalBackend:
     def free_space(self, p):
         st = os.statvfs(p)
         return st.f_bavail * st.f_frsize
+
+    def checksum(self, p):
+        h = hashlib.sha256()
+        with open(p, "rb") as f:
+            for block in iter(lambda: f.read(65536), b""):
+                h.update(block)
+        return h.hexdigest()
 
 
 class _DeviceReader:
@@ -189,6 +197,15 @@ class DeviceBackend:
 
     def free_space(self, p):
         return int(self._run("st=os.statvfs(%r);print(st[1]*st[4])" % p).strip())
+
+    def checksum(self, p):
+        """SHA-256 computed on the device (no data crosses the link); None if it has no hashlib."""
+        out = self._run(
+            "try:\n import hashlib\nexcept ImportError:\n print('')\nelse:\n"
+            " h=hashlib.sha256();buf=bytearray(512)\n with open(%r,'rb') as f:\n  while True:\n"
+            "   n=f.readinto(buf)\n   if not n:\n    break\n   h.update(memoryview(buf)[:n])\n"
+            " print(b.hexlify(h.digest()).decode())" % p, timeout=30 + self.stat(p).size / 5000)
+        return out.strip().decode() or None
 
     def copy_file(self, src, dst, on_bytes=None):
         """Copy on the device itself so the data never crosses the serial link."""

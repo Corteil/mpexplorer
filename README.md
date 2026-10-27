@@ -9,6 +9,12 @@ board over USB serial. **Nothing is installed on the board**: it works through t
 - Upload / download files and folders (buttons, drag between panes, or copy and paste)
 - Copy, cut, paste, rename, delete, new file / folder, properties, free space
 - Conflict handling (overwrite / skip / keep both / apply to all), progress, speed and cancel
+- **REPL console** (Device > REPL console): run Python on the board, see output as it arrives, Esc to interrupt,
+  history with Up/Down. Variables persist between runs. While a command runs, other device operations wait.
+- **Folder sync** (Tools > Sync this folder to the other pane): compares by size and SHA-256 (computed on the
+  device, so nothing is transferred to check), shows a preview, copies only what changed, optional mirror-delete.
+  `__pycache__`, `.git`, `*.pyc` are skipped. Files are written under a temporary name so a cancel never loses
+  the old copy.
 - Built-in text editor that saves straight back to the board; run a script and see its output; soft reset
 
 ## Install (Raspberry Pi OS)

@@ -72,5 +72,19 @@ Binary reads/writes use 4-8 KB frames, giving an estimated 5-10x speed-up and on
 in a few KB on a 264 KB device); a running `main.py` must be interrupted first; resync after a lost frame (the CRC
 and a `Ctrl-C` x2 recovery sequence).
 
+## REPL console
+`console.py` (GUI-free, tested) runs each entered line through the same raw REPL, so no second connection or mode
+switch is needed. The raw REPL keeps its globals between executions, which gives the console its persistent state.
+Expressions are detected on the host (`compile(..., "eval")`) and echoed like a real REPL; statements and
+multi-line blocks run as typed. Output is streamed to the window while the program runs (`exec(on_output=...)`,
+no timeout), and Esc sends Ctrl-C from the GUI thread. Limits: no `input()`/stdin, and the single worker thread
+means other device operations queue behind a long-running command.
+
+## Folder sync
+`sync.py` builds a `Plan` (mkdir / copy / delete actions) by walking both folders, then `apply_plan` runs it.
+Size differs -> changed; same size -> compare SHA-256 (`Backend.checksum`, computed on the board with `hashlib`).
+If a board has no `hashlib`, equal-size files are assumed identical and the plan says so. Deletes are always
+planned but only run when the user ticks "mirror". A file/folder type clash aborts planning rather than guessing.
+
 ## Later
-Sync a folder by hash, REPL console pane, persistent connection profiles.
+Persistent connection profiles; agent mode if measured speed demands it.
