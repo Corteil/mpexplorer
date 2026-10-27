@@ -95,9 +95,9 @@ def test_paste_bytes_single_and_multiline():
 class Term:
     """A terminal session wired to a screen, like the Tk widget does."""
 
-    def __init__(self, ser=None):
+    def __init__(self, ser=None, repl=None):
         self.ser = ser or FakeSerial()
-        self.repl = RawREPL(self.ser)
+        self.repl = repl or RawREPL(self.ser)
         self.screen = AnsiScreen()
         self.lock = threading.Lock()
         self.errors = []
