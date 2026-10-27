@@ -175,7 +175,7 @@ def test_console_input_reaches_running_program(repl):
     _wait(ser.waiting_input.is_set)
     s.send_input("Bob\x04\x03")                       # control characters are stripped
     t.join(3)
-    assert "".join(out) == "Name? Hi Bob\n"
+    assert "".join(out) == "Name? Bob\nHi Bob\n"            # the board echoes what input() reads
 
 
 def test_unread_input_does_not_leak_into_next_run(repl):

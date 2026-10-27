@@ -334,7 +334,10 @@ class FakeSerial(FriendlyREPL):
             except queue.Empty:
                 raise EOFError("no input")
             if c in (b"\n", b"\r"):
-                return b"".join(chars).decode()
+                text = b"".join(chars).decode()
+                if not self._friendly_prog:     # real MicroPython's input() echoes what it reads (readline does)
+                    print(text)
+                return text
             chars.append(c)
 
     def _run(self, code, ok):
