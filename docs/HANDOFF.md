@@ -1,15 +1,17 @@
 # Handoff / project memory
 
 Written so a new Claude session can take over with no other context. Update it as you work. Last updated at
-`main` = `bc23eea`; all CI green (Python 3.11/3.12/3.13 + real MicroPython v1.26.0 and v1.28.0).
+`main` = `1b32266` (2026-10-27); CI green (Python 3.11/3.12/3.13 + real MicroPython v1.26.0 and v1.28.0).
 
 ## The user and how they work
 - Owner: Corteil (GitHub), builds EMF Camp badge hardware (see their repos `rp2350-hdmi-hexpansion`,
   `tildagon-hdmi-manager`, which are separate and were not changed). Prefers Python / MicroPython / CircuitPython.
 - Workflow pattern: asks for a feature -> you build and push to the feature branch -> they say "merge it into main"
   -> then "check if the CI passed". Keep replies short and honest about what was and was not verified.
-- They did **not** have a Raspberry Pi or any hardware available during the original session, so nothing has been
-  tested on real boards or with a real display.
+- The original session had no Raspberry Pi or hardware. Since 2026-10-27 the GUI has been run on the owner's
+  Raspberry Pi 5 (Raspberry Pi OS, Python 3.11.2, Tk 8.6, Wayland/XWayland) with a real Tildagon attached, driving it
+  from a Claude Code session on that Pi (screenshots with `grim`). Small PRs from `fix-*` branches off `main`, merged
+  with `gh pr merge --rebase` (linear history), is the pattern that session used.
 
 ## Original request (paraphrased)
 "Design/plan a file explorer for MicroPython with a GUI for the Raspberry Pi. Targets are Raspberry Pi (Picos) and the
@@ -41,15 +43,23 @@ raw-paste with fallback, REPL console (emulated: `_`, Ctrl-D reset, `input()`, i
 through, `AnsiScreen`, key/paste mapping, device pane paused while active), three test layers (see DESIGN.md).
 
 ## Verified vs not verified
-- Verified: core logic against the fake board (77 tests) and against real MicroPython unix port v1.26.0 / v1.28.0
-  (16 tests, through `rawrepl_shim.py` for file/console/sync and the unix REPL for terminal tests).
-- NOT verified: **the whole Tk GUI** (never launched), raw-paste and the real raw-REPL framing (unix port has no raw
-  REPL), USB serial behaviour, ESP32-S3 and RP2 ports, DTR/RTS handling on the badges, speed, the 2022 badge's
-  MicroPython. Add rows to `docs/HARDWARE.md` once tested.
+- Verified in tests: core logic against the fake board (77 tests) and against real MicroPython unix port
+  v1.26.0 / v1.28.0 (16 tests, through `rawrepl_shim.py` for file/console/sync and the unix REPL for terminal tests).
+  There are **no automated GUI tests**.
+- Verified by hand on a Tildagon (Pi 5, 2026-10-27): the GUI launches and renders; Scan, Connect and Disconnect work
+  (the button toggles); the device pane lists `/`; the toolbar fits the window; the REPL console opens with a visible
+  input box that has keyboard focus (confirmed by the owner after the fix; it used to be hidden and unfocused).
+  What was typed into the console and what came back was not recorded, so running code through it is not confirmed.
+- NOT verified: running code in the REPL console, terminal mode, upload/download, editor, run script, sync and soft reset on a real
+  board; whether raw-paste is negotiated on the badge (not traced); Pico / RP2 and the 2022 badge (the DTR change
+  below could behave differently there); transfer speed; whether a clean Disconnect restores the badge's own app
+  (see lessons). Add rows to `docs/HARDWARE.md` once tested.
 
 ## Open items / suggested next steps
-1. User runs it on the Pi 5 (`sudo apt install python3-tk`; `pip install -e .`; `python -m mpexplorer`) with a Pico and a
-   badge, reports breakage; fix GUI layout/bugs. Likely first problems: Tk layout, drag between panes, connect flow.
+1. Keep running it on the Pi 5 (`sudo apt install python3-tk`; `pip install -e .`; `python -m mpexplorer`) with a
+   Pico and a badge and fix breakage. Done so far: connect/list on a Tildagon, toolbar, console opens focused. Still to try:
+   running code in the console, terminal mode, transfers, drag between panes, editor, sync, a Pico, the 2022 badge. Consider GUI smoke
+   tests (build `App` against the fake board; CI would need `xvfb`).
 2. Get `os.uname()` from the 2022 badge; if old, add an older-toolchain CI leg (container `ubuntu:22.04`; GCC 15 breaks
    releases <= ~1.22: they abort with "stack smashing detected" on the first exception).
 3. Measure transfer speed with raw-paste on/off on hardware; tune `CHUNK` (2 KB) / `WRITE_BLOCK`.
@@ -70,4 +80,22 @@ through, `AnsiScreen`, key/paste mapping, device pane paused while active), thre
 - `git checkout <file>` discards uncommitted edits to it. Commit first.
 - Web access: only the repos in the session scope are readable through GitHub tools; for other public repos use
   WebFetch on the github.com pages (the API host returned 403).
+- **DTR must be asserted on the Tildagon.** `RawREPL.open()` used to set DTR and RTS low; with DTR low the badge's USB
+  CDC returns scrambled output for any reply over ~256 bytes (starts mid-string, tail repeated), so listing `/` failed
+  with a JSON "Extra data" error. Tested with plain pyserial: DTR on (RTS on or off) is intact, DTR off is corrupt.
+  Now `dtr = True`, `rts = False` (RTS is the line that can reset ESP32-S3 boards). Not tried on Pico / 2022 badge.
+- **Raw REPL freezes the badge UI.** Connecting sends Ctrl-C to interrupt the running app; the badge screen stays
+  frozen while in raw REPL. Killing the GUI (`pkill`) leaves it frozen: send Ctrl-B then Ctrl-D (soft reset) on the
+  port, or press the badge's reset button. Disconnect only leaves raw REPL and does not soft-reset, so the app may not
+  come back; unconfirmed.
+- Tk on this Pi: the clam theme forces a 104 px minimum width on every `TButton`, which made the toolbar 1457 px wide
+  in a 1180 px window (right-hand buttons clipped). `style.configure("TButton", width=0, ...)` fixes it and the
+  window has a `minsize` equal to the toolbar's requested width.
+- Tk packing: a `tk.Text` requests 24 lines by default and squeezed the console's input box to 1x1 px (not viewable,
+  so it can never take focus). Give the output Text a small `height` and let `expand` fill. A new `Toplevel` also
+  starts with focus on the window itself, not a child widget, so call `lift()` and `inp.focus_force()` after it maps.
+  Debug with `root.tk.call("focus")`, `winfo_viewable()` and `winfo_width()/height()`.
+- Shell gotcha: `pkill -f 'python3 -m mpexplorer'` also matches the shell command that contains that text and kills
+  it (exit 144). Use `pgrep -fa '[p]ython3 -m mpexplorer'` or kill by pid. `gh pr edit` can fail on a GraphQL
+  "Projects (classic)" warning; use `gh api -X PATCH repos/Corteil/mpexplorer/pulls/N` instead.
 - No persistent memory store exists outside the repo, so this file and CLAUDE.md are the memory. Keep them current.
