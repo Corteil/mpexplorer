@@ -24,6 +24,7 @@ jobs:
   # The same behaviours against real MicroPython (unix port) instead of the fake board.
   micropython:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -35,23 +36,31 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Cache MicroPython unix port
+      - name: Restore MicroPython build
         id: cache
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: ~/mpy-bin
           key: micropython-unix-${{ matrix.mpy }}-v1
       - name: Build MicroPython unix port
+        id: build
         if: steps.cache.outputs.cache-hit != 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y libffi-dev pkg-config
           git clone --depth 1 --branch ${{ matrix.mpy }} https://github.com/micropython/micropython "$RUNNER_TEMP/mpy"
-          make -C "$RUNNER_TEMP/mpy/mpy-cross" -j"$(nproc)"
+          # old releases do not compile warning-free with the runner's newer GCC
+          make -C "$RUNNER_TEMP/mpy/mpy-cross" -j"$(nproc)" CFLAGS_EXTRA=-Wno-error
           make -C "$RUNNER_TEMP/mpy/ports/unix" submodules
-          make -C "$RUNNER_TEMP/mpy/ports/unix" -j"$(nproc)"
+          make -C "$RUNNER_TEMP/mpy/ports/unix" -j"$(nproc)" CFLAGS_EXTRA=-Wno-error
           mkdir -p ~/mpy-bin
           cp "$RUNNER_TEMP/mpy/ports/unix/build-standard/micropython" ~/mpy-bin/micropython
+      - name: Save MicroPython build
+        if: always() && steps.build.outcome == 'success'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/mpy-bin
+          key: micropython-unix-${{ matrix.mpy }}-v1
       - run: ~/mpy-bin/micropython -c "import sys; print(sys.version)"
       - run: pip install -e '.[dev]'
       - name: Tests against real MicroPython

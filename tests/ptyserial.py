@@ -18,6 +18,11 @@ import time
 class PtySerial:
     def __init__(self, argv, cwd=None, banner=b">>> ", banner_timeout=10.0):
         master, slave = pty.openpty()
+        attrs = termios.tcgetattr(slave)            # like a serial line: bytes arrive at once, no echo, CR stays CR
+        attrs[0] &= ~(termios.ICRNL | termios.INLCR | termios.IGNCR | termios.IXON)
+        attrs[3] &= ~(termios.ECHO | termios.ICANON | termios.IEXTEN)   # ISIG stays on: Ctrl-C becomes SIGINT
+        attrs[6][termios.VMIN], attrs[6][termios.VTIME] = 1, 0
+        termios.tcsetattr(slave, termios.TCSANOW, attrs)
         self.proc = subprocess.Popen(
             argv, stdin=slave, stdout=slave, stderr=slave, cwd=cwd, close_fds=True, start_new_session=True,
             env={"PATH": os.environ.get("PATH", ""), "HOME": cwd or "/tmp", "TERM": "dumb"},
@@ -25,7 +30,7 @@ class PtySerial:
         os.close(slave)
         self.fd = master
         self.closed = False
-        self.started = self._wait_for(banner, banner_timeout)
+        self.started = self._wait_for(banner, banner_timeout) if banner else b""
 
     def _wait_for(self, text, timeout):
         """Read until text appears (the REPL banner); returns everything read."""
