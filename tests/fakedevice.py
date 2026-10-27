@@ -2,7 +2,9 @@
 import contextlib
 import io
 import os
+import queue
 import struct
+import threading
 import traceback
 
 if not hasattr(os, "ilistdir"):             # MicroPython-only API used by the snippets
@@ -32,6 +34,10 @@ class FakeSerial:
         self.execs = []
         self.paste_used = 0
         self.flow_violations = 0
+        self.resets = 0
+        self.running = False
+        self._stdin = queue.Queue()
+        self.waiting_input = threading.Event()
 
     @property
     def in_waiting(self):
@@ -54,10 +60,17 @@ class FakeSerial:
         self._out += b"raw REPL; CTRL-B to exit\r\n>"
 
     def _byte(self, b):
+        if self.running:                        # a program is executing: bytes are its stdin
+            if b != b"\x03":
+                self._stdin.put(b)
+            return
         if not self._raw:
             if b == b"\x01":
                 self._raw = True
                 self._banner()
+            elif b == b"\x04":                  # Ctrl-D at the friendly REPL: soft reset
+                self.globals.clear()
+                self.resets += 1
             return
         if self._state == "paste_data":
             return self._paste_byte(b)
@@ -111,11 +124,32 @@ class FakeSerial:
 
     def _execute(self, code, ok):
         self.execs.append(code)
+        self.running = True
+        threading.Thread(target=self._run, args=(code, ok), daemon=True).start()
+
+    def _input(self, prompt=""):
+        print(prompt, end="")
+        self.waiting_input.set()
+        chars = []
+        while True:
+            try:
+                c = self._stdin.get(timeout=5)
+            except queue.Empty:
+                raise EOFError("no input")
+            if c == b"\n":
+                return b"".join(chars).decode()
+            chars.append(c)
+
+    def _run(self, code, ok):
         out = io.StringIO()
         err = ""
+        self.globals["input"] = self._input
         try:
             with contextlib.redirect_stdout(out):
                 exec(code, self.globals)
         except Exception:
             err = traceback.format_exc()
+        self.running = False
+        while not self._stdin.empty():          # unread stdin ends up in the REPL's input buffer
+            self._buf += self._stdin.get()
         self._out += (b"OK" if ok else b"") + out.getvalue().encode() + b"\x04" + err.encode() + b"\x04>"

@@ -33,6 +33,7 @@ class RawREPL:
         self.raw = False
         self.paste = None if paste in (None, True) else False     # None = not yet probed
         self._rx = bytearray()
+        self.trace = None       # optional callable(kind, text): "send" | "recv" | "error" | "info"
         self.lock = threading.RLock()
 
     @classmethod
@@ -42,6 +43,13 @@ class RawREPL:
         ser.dtr = ser.rts = False       # opening with DTR/RTS asserted resets ESP32-S3 boards
         ser.open()
         return cls(ser)
+
+    def _trace(self, kind, text):
+        if self.trace:
+            try:
+                self.trace(kind, text)
+            except Exception:
+                pass            # a broken observer must never break the connection
 
     def _read_until(self, ending, timeout):
         """Consume input up to and including `ending`; anything after it stays buffered."""
@@ -77,12 +85,28 @@ class RawREPL:
                 except TransportError:
                     continue
                 self.raw = True
+                self._trace("info", "entered raw REPL")
                 return
             raise TransportError("could not enter the raw REPL (wrong port, or the port is busy?)")
 
     def interrupt(self):
         """Send Ctrl-C to stop running code. Safe to call from another thread while exec() waits."""
+        self._trace("info", "Ctrl-C")
         self.ser.write(b"\x03")
+
+    def send_input(self, text):
+        """Type a line into the running program's stdin (what input() reads).
+
+        Control characters are dropped so pasted text can never act as Ctrl-C/Ctrl-D.
+        Safe to call from another thread while exec() waits.
+        """
+        text = "".join(ch for ch in text if ch == "\t" or ch >= " ")
+        self._trace("info", "stdin: %s" % text)
+        self.ser.write(text.encode() + b"\n")
+
+    def mark_dirty(self):
+        """Force a clean re-entry of raw mode before the next exec (discards stray stdin bytes)."""
+        self.raw = False
 
     def exec(self, code, timeout=10.0, on_output=None):
         """Run code on the device and return its stdout as bytes.
@@ -93,6 +117,7 @@ class RawREPL:
             if not self.raw:
                 self.enter_raw()
             data = code.encode()
+            self._trace("send", code)
             ctl = 10.0 if timeout is None else timeout      # handshake steps always have a time limit
             try:
                 if not (self.paste is not False and self._send_paste(data, ctl)):
@@ -107,11 +132,15 @@ class RawREPL:
                     self._read_until(b">", 1)
                 except TransportError:
                     pass
-            except TransportError:
+            except TransportError as e:
+                self._trace("error", str(e))
                 self.raw = False                # resync on next call
                 self.ser.write(b"\x03\x03")
                 raise
+            if out:
+                self._trace("recv", out.decode(errors="replace"))
             if err:
+                self._trace("error", err.decode(errors="replace"))
                 raise DeviceError(err.decode(errors="replace"))
             return out
 
@@ -165,6 +194,7 @@ class RawREPL:
         if head == b"R\x01":
             self.paste = True
             window = struct.unpack("<H", self._read_n(2, timeout))[0]
+            self._trace("info", "raw-paste, window %d" % window)
             remain, i = window, 0
             while i < len(data):
                 while remain == 0 or self.ser.in_waiting or self._rx:
@@ -184,12 +214,14 @@ class RawREPL:
             self._read_until(b"\x04", timeout)         # device acknowledges end of input
             return True
         self.paste = False
+        self._trace("info", "raw-paste not available, using plain raw REPL")
         if head != b"R\x00":       # old firmware: it echoed the start of the raw REPL banner instead
             self._read_until(b"w REPL; CTRL-B to exit\r\n>", timeout)
         return False
 
     def soft_reset(self):
         with self.lock:
+            self._trace("info", "soft reset")
             self.ser.write(b"\x02\x04")         # leave raw mode, Ctrl-D
             self.raw = False
             time.sleep(0.5)
