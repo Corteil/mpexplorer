@@ -35,10 +35,12 @@ class App(tk.Tk):
         super().__init__()
         self.title("MicroPython Explorer %s" % __version__)
         self.geometry("1180x680")
+        style = ttk.Style()
         try:
-            ttk.Style().theme_use("clam")
+            style.theme_use("clam")
         except tk.TclError:
             pass
+        style.configure("TButton", width=0, padding=(8, 3))     # clam forces a wide minimum; size to the label
         self.runner = JobRunner()
         self.clipboard = Clipboard()
         self.local = LocalBackend()
@@ -64,6 +66,8 @@ class App(tk.Tk):
         self.left.set_location(self.local, self.local.root)
         self.right.clear()
         self.protocol("WM_DELETE_WINDOW", self._quit)
+        self.update_idletasks()
+        self.minsize(self.winfo_reqwidth(), 400)        # never narrower than the toolbar
         self.after(100, self._poll)
 
     # -- ui construction ---------------------------------------------------
@@ -111,7 +115,7 @@ class App(tk.Tk):
         self.port_box = ttk.Combobox(bar, textvariable=self.port_var, width=38)
         self.port_box.pack(side="left", padx=4)
         ttk.Button(bar, text="Scan", command=self.scan_ports).pack(side="left")
-        self.connect_btn = ttk.Button(bar, text="Connect", command=self.connect)
+        self.connect_btn = ttk.Button(bar, text="Connect", command=self.toggle_connection)
         self.connect_btn.pack(side="left", padx=4)
         ttk.Separator(bar, orient="vertical").pack(side="left", fill="y", padx=6)
         ttk.Button(bar, text="Upload >>", command=lambda: self.transfer(self.left, self.right)).pack(side="left")
@@ -187,6 +191,12 @@ class App(tk.Tk):
         if ports and not self.port_var.get():
             self.port_var.set(ports[0])
 
+    def toggle_connection(self):
+        if self.device:
+            self.disconnect()
+        else:
+            self.connect()
+
     def connect(self):
         port = self.port_var.get().split("  ")[0].strip()
         if not port:
@@ -194,6 +204,7 @@ class App(tk.Tk):
             return
         self.disconnect()
         self.set_status("Connecting to %s ..." % port)
+        self.connect_btn.config(text="Connecting...", state="disabled")
 
         def work(prog):
             repl = RawREPL.open(port)
@@ -206,12 +217,14 @@ class App(tk.Tk):
 
         def done(dev, exc):
             if exc:
+                self.connect_btn.config(text="Connect", state="normal")
                 self.set_status("Connection failed")
                 messagebox.showerror("Connection failed", str(exc))
                 return
             self.device = dev
             self.session = ConsoleSession(dev.repl)
             self.right.set_location(dev, dev.root)
+            self.connect_btn.config(text="Disconnect", state="normal")
             self.set_status("Connected to %s" % port)
         self.runner.submit(work, done, "Connecting", quiet=True)
 
@@ -223,6 +236,7 @@ class App(tk.Tk):
                 self.console.close()
             self.right.clear()
             self.runner.submit(lambda prog: dev.close(), label="Disconnecting", quiet=True)
+            self.connect_btn.config(text="Connect", state="normal")
             self.set_status("Disconnected")
 
     def _quit(self):
