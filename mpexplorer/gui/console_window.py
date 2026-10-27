@@ -41,7 +41,8 @@ class ConsoleWindow(tk.Toplevel):
         self.emu.pack(fill="both", expand=True)
         body = ttk.Frame(self.emu)
         body.pack(fill="both", expand=True, padx=4)
-        self.out = tk.Text(body, state="disabled", wrap="word", font="TkFixedFont")
+        # small requested height: the default (24 lines) squeezed the input box out of view
+        self.out = tk.Text(body, state="disabled", wrap="word", font="TkFixedFont", height=8)
         sb = ttk.Scrollbar(body, command=self.out.yview)
         self.out.configure(yscrollcommand=sb.set)
         sb.pack(side="right", fill="y")
@@ -61,9 +62,14 @@ class ConsoleWindow(tk.Toplevel):
         self.inp.bind("<Down>", lambda e: self._history(1))
         self.inp.bind("<Control-d>", self._ctrl_d)
         self.bind("<Escape>", lambda _e: self.interrupt() if self.term is None else None)
-        self.inp.focus_set()
         self.protocol("WM_DELETE_WINDOW", self.close)
+        self.after(50, self._take_focus)
         self._drain()
+
+    def _take_focus(self):
+        """A new Toplevel starts with focus on the window itself, not the input box, so typing goes nowhere."""
+        self.lift()
+        self.inp.focus_force()
 
     # -- output ------------------------------------------------------------
     def write(self, text, tag=None):
