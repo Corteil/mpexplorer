@@ -13,6 +13,15 @@ def fmt_time(t):
         return ""
 
 
+def _inside(widget, ancestor):
+    """True if widget is ancestor or one of its descendants (Tk paths are no good: '.!pane2' starts with '.!pane')."""
+    while widget is not None:
+        if widget is ancestor:
+            return True
+        widget = widget.master
+    return False
+
+
 class Pane(ttk.LabelFrame):
     """One directory listing bound to a backend (host or device)."""
 
@@ -200,7 +209,7 @@ class Pane(ttk.LabelFrame):
         self._drag = None
         target = self.winfo_toplevel().winfo_containing(event.x_root, event.y_root)
         other = self.app.other_pane(self)
-        if target is not None and str(target).startswith(str(other)):
+        if _inside(target, other):
             self.app.transfer(self, other)
         elif self.tree.identify_row(event.y) == row:
             self.tree.selection_set(row)    # a plain click on a selected row selects just it
