@@ -2,14 +2,14 @@
 
 ## Goals
 - Run on a Raspberry Pi 5; targets are Pico-class boards (RP2040/RP2350) and the EMF Camp badges:
-  2022 (RP2040), 2024 Tildagon (ESP32-S3) and 2026 (to be confirmed). The raw REPL is chip-independent, so all
+  2022 (RP2040), 2024 Tildagon and 2026 (the same hardware and firmware as 2024, new front plate; ESP32-S3). The raw REPL is chip-independent, so all
   of them use the same code path.
 
 ## Per-board notes
 - **ESP32-S3 (Tildagon):** opening the port with DTR/RTS asserted can reset the board, so the port is opened with both low.
   The badge OS app keeps running; Ctrl-C x2 on connect interrupts it (the board returns to its app after a reset).
   Time epoch is 2000 as on RP2; detected at connect from `time.gmtime(0)`.
-- **2026 badge:** no assumptions made; needs a hardware test (chip, USB mode, firmware) before it is listed as supported.
+- **2026 badge:** same board and firmware repo as the 2024 Tildagon, so it is treated identically.
 - Standard explorer features: browse, upload/download, copy/cut/paste, rename, delete, edit.
 - **Default: no code is installed on the target.**
 
