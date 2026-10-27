@@ -35,7 +35,10 @@ class RawREPL:
     @classmethod
     def open(cls, port, baud=115200):
         import serial
-        return cls(serial.serial_for_url(port, baudrate=baud, timeout=0.1))
+        ser = serial.serial_for_url(port, baudrate=baud, timeout=0.1, do_not_open=True)
+        ser.dtr = ser.rts = False       # opening with DTR/RTS asserted resets ESP32-S3 boards
+        ser.open()
+        return cls(ser)
 
     def _read_until(self, ending, timeout):
         """Consume input up to and including `ending`; anything after it stays buffered."""
