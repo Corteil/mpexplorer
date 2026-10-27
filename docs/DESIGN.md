@@ -2,7 +2,7 @@
 
 ## Goals
 - Run on a Raspberry Pi 5; targets are Pico-class boards (RP2040/RP2350) and the EMF Camp badges:
-  2022 (RP2040), 2024 Tildagon and 2026 (the same hardware and firmware as 2024, new front plate; ESP32-S3). The raw REPL is chip-independent, so all
+  2022 (TiLDA Mk6, ESP32-S3), 2024 Tildagon and 2026 (the same hardware and firmware as 2024, new front plate; ESP32-S3). The raw REPL is chip-independent, so all
   of them use the same code path.
 
 ## Per-board notes
@@ -144,7 +144,13 @@ compiled with the runner's GCC 15, so they need an older-toolchain container bef
   the upstream "Bump version to 1.28.0" commit, so it is **MicroPython 1.28.0** for the **ESP32-S3** port (ESP-IDF
   5.5.1). CI runs the real-MicroPython tests on v1.28.0 (and v1.26.0) for that reason. Still untested: the ESP32
   port itself (USB serial, its raw-paste behaviour, the badge's own modules).
-- **2022 badge (RP2040):** version not yet determined; run `import os; print(os.uname())` on it.
+- **2022 badge (TiLDA Mk6):** the `TiDAL-Firmware` repo is a MicroPython board definition for the **ESP32-S3** (not
+  the RP2040 assumed earlier), built with ESP-IDF 4.4.1 (the build image is `esp_idf:4.4.1`) and a `micropython.diff` patch.
+  Its `micropython` submodule is pinned at upstream commit `afceb56` ("esp32/boards: Add support for LilyGO LoRa32
+  boards"), a master snapshot from 2022 that is not a release. The exact version is **not confirmed**: it is probably
+  between v1.18 and v1.19.x, which would also fit IDF 4.4. Confirm with `import os; print(os.uname())` on the badge.
+  Releases that old do not build cleanly with the runner's GCC 15, so adding one to CI needs an older-toolchain
+  container (ubuntu:22.04).
 
 ## Folder sync
 `sync.py` builds a `Plan` (mkdir / copy / delete actions) by walking both folders, then `apply_plan` runs it.
