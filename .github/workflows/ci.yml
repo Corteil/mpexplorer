@@ -41,7 +41,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ~/mpy-bin
-          key: micropython-unix-${{ matrix.mpy }}-v1
+          key: micropython-unix-${{ matrix.mpy }}-v2
       - name: Build MicroPython unix port
         id: build
         if: steps.cache.outputs.cache-hit != 'true'
@@ -49,10 +49,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libffi-dev pkg-config
           git clone --depth 1 --branch ${{ matrix.mpy }} https://github.com/micropython/micropython "$RUNNER_TEMP/mpy"
-          # old releases do not compile warning-free with the runner's newer GCC
-          make -C "$RUNNER_TEMP/mpy/mpy-cross" -j"$(nproc)" CFLAGS_EXTRA=-Wno-error
+          # old releases do not compile warning-free with the runner's newer GCC, and v1.22 aborts with
+          # "stack smashing detected" on the first exception when built with its default hardening
+          make -C "$RUNNER_TEMP/mpy/mpy-cross" -j"$(nproc)" CFLAGS_EXTRA="-Wno-error -fno-stack-protector"
           make -C "$RUNNER_TEMP/mpy/ports/unix" submodules
-          make -C "$RUNNER_TEMP/mpy/ports/unix" -j"$(nproc)" CFLAGS_EXTRA=-Wno-error
+          make -C "$RUNNER_TEMP/mpy/ports/unix" -j"$(nproc)" CFLAGS_EXTRA="-Wno-error -fno-stack-protector"
           mkdir -p ~/mpy-bin
           cp "$RUNNER_TEMP/mpy/ports/unix/build-standard/micropython" ~/mpy-bin/micropython
       - name: Save MicroPython build
@@ -60,7 +61,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: ~/mpy-bin
-          key: micropython-unix-${{ matrix.mpy }}-v1
+          key: micropython-unix-${{ matrix.mpy }}-v2
       - run: ~/mpy-bin/micropython -c "import sys; print(sys.version)"
       - run: pip install -e '.[dev]'
       - name: Tests against real MicroPython
