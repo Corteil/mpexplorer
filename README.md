@@ -1,7 +1,7 @@
 # mpexplorer
 
-A dual-pane file explorer with a GUI for MicroPython boards (Raspberry Pi Pico / Pico 2, EMF Camp 2022 badge, anything
-that runs MicroPython). It runs on a **Raspberry Pi 5** (or any computer with Python 3 and Tkinter) and talks to the
+A dual-pane file explorer with a GUI for MicroPython boards (Raspberry Pi Pico / Pico 2, EMF Camp badges from 2022, 2024
+(Tildagon) and 2026, anything that runs MicroPython). It runs on a **Raspberry Pi 5** (or any computer with Python 3 and Tkinter) and talks to the
 board over USB serial. **Nothing is installed on the board**: it works through the stock raw REPL, like `mpremote`.
 
 ## Features
