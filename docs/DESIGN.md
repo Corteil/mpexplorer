@@ -119,6 +119,26 @@ Ctrl-D and `input()` all work, with no emulation.
   line until Ctrl-C; USB re-enumeration after a hard reset ends the session (shown as "connection lost"); firmware
   differences in escape sequences; the fake cannot interrupt a running program with Ctrl-C.
 
+## Testing against real MicroPython
+Three layers, each catching different mistakes:
+1. **Fake board** (`tests/fakedevice.py`): fast, deterministic, runs everywhere. Models the raw REPL, raw-paste, the
+   friendly REPL and `input()`.
+2. **Real MicroPython, unix port** (`tests/test_real_micropython.py`, CI job `micropython`): a real interpreter on a pty
+   (`tests/ptyserial.py`, a serial-port look-alike whose tty turns Ctrl-C into SIGINT as a keyboard would).
+   - The unix port ignores Ctrl-A, so there is no raw REPL to talk to. File, console and sync tests therefore run
+     real MicroPython behind `tests/rawrepl_shim.py`, which provides the raw-REPL framing (and answers "not supported"
+     to raw-paste). This verifies everything that executes *inside* the snippets: `os.ilistdir/stat/rename`, file
+     I/O, `readinto` + `memoryview`, `binascii`, `hashlib`, `json`, tracebacks, `input()`, KeyboardInterrupt.
+   - Terminal tests use the unix port's own friendly REPL, so line editing, history, Ctrl-C and paste mode are
+     checked against genuine escape sequences.
+3. **Hardware**: the only place the real raw-REPL framing, raw-paste, USB serial behaviour and board-specific
+   modules are exercised. Not automated.
+
+Findings so far from layer 2 (v1.26.0): `input()` is echoed by the board, so the console must not echo it again
+(fixed, and the fake now echoes too); the REPL line-editor redraws are handled by `AnsiScreen`; tab completion is not
+available in the unix port's REPL, so it is only tested on the fake. Older releases (v1.22.2) abort on exceptions when
+compiled with the runner's GCC 15, so they need an older-toolchain container before they can be added to the matrix.
+
 ## Folder sync
 `sync.py` builds a `Plan` (mkdir / copy / delete actions) by walking both folders, then `apply_plan` runs it.
 Size differs -> changed; same size -> compare SHA-256 (`Backend.checksum`, computed on the board with `hashlib`).
