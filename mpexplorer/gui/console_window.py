@@ -176,8 +176,7 @@ class ConsoleWindow(tk.Toplevel):
         self.inp.delete("1.0", "end")
         self._hist = None
         if self.busy:                   # a program is running: this line answers its input()
-            self.write(line + "\n", "echo")
-            try:
+            try:                        # no local echo: the board echoes what input() reads (seen on real MicroPython)
                 self.session.send_input(line)
             except Exception as e:
                 self.write("Could not send input: %s\n" % e, "err")
