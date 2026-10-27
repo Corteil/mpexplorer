@@ -41,7 +41,10 @@ class RawREPL:
     def open(cls, port, baud=115200):
         import serial
         ser = serial.serial_for_url(port, baudrate=baud, timeout=0.1, do_not_open=True)
-        ser.dtr = ser.rts = False       # opening with DTR/RTS asserted resets ESP32-S3 boards
+        # RTS asserted can reset ESP32-S3 boards. DTR must be asserted: the Tildagon's USB CDC corrupts
+        # any output over ~256 bytes while DTR is low.
+        ser.dtr = True
+        ser.rts = False
         ser.open()
         return cls(ser)
 
