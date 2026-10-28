@@ -33,10 +33,12 @@ Python >= 3.11, line length 120, ruff rules E/F/W only, no type-annotation churn
   verified (tests/CI, or by hand on which board) and what was not.
 - Serial: keep DTR asserted and RTS low in `RawREPL.open()` (Tildagon corrupts long replies with DTR low). Never kill
   a connected GUI with `pkill`/SIGKILL: it leaves the badge in raw REPL with a frozen screen (Ctrl-B, Ctrl-D recovers).
-- New `Toplevel`s need `transient(app)` (else clicks fall through to the main window on labwc/XWayland) and
-  `lift()` + `focus_force()` on the input child after `after(50, ...)`. Never compare Tk path strings for containment;
-  walk `widget.master` (`_inside` in `widgets.py`). Every pop-up must be transient, so it stays off the taskbar and
-  the taskbar icon (matched by `WM_CLASS` instance, set in `App`) only applies to the main window.
+- Pop-ups: dialogs are `transient(app)` (else clicks fall through to the main window on labwc/XWayland). The editor
+  and console are `AppWindow`s (own taskbar entry, minimisable, listed in the Window menu); they re-map once on
+  open for the same reason. Both need `lift()` + `focus_force()` on the input child after a short `after`. Don't
+  open a modal `messagebox` from them (it ignored the mouse): use an in-window bar. Never compare Tk path strings
+  for containment; walk `widget.master` (`_inside` in `widgets.py`). Test mouse behaviour with the virtual mouse
+  in `docs/HANDOFF.md`, not by guessing.
 - Tk layout bugs: measure (`winfo_reqwidth`, `winfo_viewable`, `tk.call("focus")`) instead of guessing.
 - Behaviour that differs between the fake board and real MicroPython: fix the code, or the fake if the fake is wrong.
 - Git: develop on a feature branch (the original was `claude/micropython-file-explorer-gui-7tsgfy`; recent fixes used

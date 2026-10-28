@@ -98,18 +98,34 @@ through, `AnsiScreen`, key/paste mapping, device pane paused while active), thre
   starts with focus on the window itself, not a child widget, so call `lift()` and `inp.focus_force()` after it maps.
   Debug with `root.tk.call("focus")`, `winfo_viewable()` and `winfo_width()/height()`.
   The same focus fix is on the `Editor`. Other pop-ups (conflict and sync dialogs) have not been checked for it.
-  `ConsoleWindow` and the script Output window were missing `transient` too (the owner reported the console losing the
-  mouse; `xprop` showed no `WM_TRANSIENT_FOR`) and now have it. Not yet confirmed by hand on the console.
-- Tk on labwc/XWayland: a `Toplevel` without `transient(app)` let mouse clicks fall through to the main window
-  underneath (the editor looked focused but the main app reacted). `transient(app)` fixes it; `lift()` alone does not.
-  `ConflictDialog` already uses `transient`.
+  `ConflictDialog`, `SyncDialog` and the script Output window are `transient` to the main window.
+- Editor and console are NOT transient: they are `AppWindow`s (`widgets.py`) so they get their own taskbar entry and
+  can be minimised on their own. On labwc/XWayland a window mapped once sends the pointer's clicks to the window
+  underneath (editor looked focused, main app reacted). Found with a virtual mouse (below): `lift`, `-topmost`,
+  `lower/lift`, `_NET_ACTIVE_WINDOW`, iconify, a 1 px move and a single late map all fail; mapping, unmapping and
+  mapping again with `update_idletasks()` between (about 1 ms unmapped, no visible flash) works. `transient(app)`
+  also works but gives no taskbar entry and cannot be minimised separately.
+- A modal `messagebox` opened from the editor ignored mouse clicks (keyboard worked). Cause not isolated (a dialog
+  parented to the editor took clicks in one test, one parented to the main window did not). The editor now confirms
+  unsaved changes with a bar inside its own window and shows save errors in its status text. The other dialogs
+  (conflict, sync, message boxes on the main window) have not been tested with the mouse.
+- Window menu (`App._fill_window_menu`): lists the open editors/console, Minimise all, Restore all. Tk's
+  `deiconify()` does nothing for a minimised window under labwc and `state()`/`winfo_viewable()` can't tell it is
+  minimised; `gui/wm.py` sends `_NET_ACTIVE_WINDOW` (ctypes, libX11) to Tk's wrapper window (the parent of
+  `winfo_id()`, which is what the window manager manages). Minimising one sub window with its title-bar button hid
+  the others for the owner once; not reproduced, cause unknown.
 - Taskbar icon (wf-panel-pi on labwc): the panel matches a window to a launcher by its `WM_CLASS` *instance* name
   (first field), not by `_NET_WM_ICON`/`iconphoto`. `App` sets `baseName="mpexplorer"`, `className="Mpexplorer"`; the
   launcher is `~/.local/share/applications/mpexplorer.desktop` (`Icon=mpexplorer`, `StartupWMClass=Mpexplorer`) plus
-  `~/.local/share/icons/hicolor/256x256/apps/mpexplorer.png`. Those files live outside the repo. Tk names a pop-up's
-  instance after its widget (`!consolewindow`) and sibling names must be unique, so pop-ups cannot share it; they
-  don't need to, because `transient` windows get no taskbar entry. The desktop icon needs `quick_exec=1` in
-  `~/.config/libfm/libfm.conf` or pcmanfm asks "Execute?" on every double-click.
+  `~/.local/share/icons/hicolor/256x256/apps/mpexplorer.png`. Those files live outside the repo. Tk names a window's
+  instance after its widget (`!consolewindow`) and sibling names must be unique, so `AppWindow` names itself
+  `mpexplorer` under a throwaway parent Frame. Transient pop-ups get no taskbar entry. The desktop icon needs
+  `quick_exec=1` in `~/.config/libfm/libfm.conf` or pcmanfm asks "Execute?" on every double-click.
+- Testing clicks: Claude cannot click, but `/dev/uinput` works with `sudo` (`pip install evdev` in a scratch venv;
+  a root daemon creates a virtual absolute mouse and keyboard, fed through a FIFO). Pitfalls: close every real GUI
+  first (the rig clicks whatever is on screen); labwc centres dialogs on the screen, so their buttons can sit under
+  the terminal at x >= 960; the first click after a pointer jump is sometimes swallowed; never `pkill -f` the daemon.
+  Stop the daemon when done.
 - Tk widget paths are not containment: `'.!pane2'.startswith('.!pane')` is True, so `Pane._release` treated a
   double-click on a selected row as a drop on the other pane and downloaded a copy to the Host folder. Use
   `_inside(widget, ancestor)` (walks `.master`).
