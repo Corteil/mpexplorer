@@ -42,6 +42,26 @@ raw-paste with fallback, REPL console (emulated: `_`, Ctrl-D reset, `input()`, i
 (size + on-device SHA-256, preview, optional mirror delete, atomic writes), terminal mode (real REPL: keystrokes pass
 through, `AnsiScreen`, key/paste mapping, device pane paused while active), three test layers (see DESIGN.md).
 
+## GTK interface (default from 2026-10-28)
+`python -m mpexplorer` now opens the GTK 3 interface (`mpexplorer/gtkui/`, PyGObject from `python3-gi`; GTK 3.24 is
+what Raspberry Pi OS Bookworm ships: no GTK 4, libadwaita or GtkSourceView). It was written because the Tk GUI kept
+hitting labwc/XWayland quirks (see lessons: clicks falling through new windows, dialogs ignoring the mouse, taskbar
+icon matching, minimise/restore). GTK talks Wayland natively. `--tk` / `MPEXPLORER_UI=tk` runs the Tk GUI, which is
+also the automatic fallback when PyGObject is missing. Both GUIs use the same core modules unchanged; port discovery
+moved to `mpexplorer/ports.py`. Feature parity: panes (sort, filter, hidden, drag between panes, context menu), transfers,
+copy/cut/paste, rename/delete/new, properties, free space, soft reset, conflict prompt, editor (unsaved-changes info
+bar inside the window), run script output, folder sync, REPL console (emulated) and Terminal mode (VTE widget,
+`gir1.2-vte-2.91`, optional; Tk's hand-drawn `AnsiScreen` is not used by GTK), Window menu. The Tk GUI is kept, not
+deleted; remove it once GTK has had enough hardware time.
+
+GTK notes: import GTK only through `gtkui/common.py` (it pins Gtk/Gdk/GdkPixbuf versions before import, otherwise
+PyGIWarning). The window app id is `mpexplorer` (`GLib.set_prgname`), so the taskbar matches
+`~/.local/share/applications/mpexplorer.desktop` and its `Icon=mpexplorer`; no `StartupWMClass` is needed. VTE here is
+0.70: it has no `set_enable_bracketed_paste` (added in 0.76; MicroPython never asks for bracketed paste anyway) and
+`get_text()` is deprecated. Install with `pipx install --system-site-packages` or pipx cannot see PyGObject. Wayland
+clients do not know their own screen position, so the virtual-mouse rig (below, lessons) cannot aim at a GTK window
+with `winfo_rootx()`-style calls: find the window by differencing `grim` screenshots instead.
+
 ## Verified vs not verified
 - Verified in tests: core logic against the fake board (77 tests) and against real MicroPython unix port
   v1.26.0 / v1.28.0 (16 tests, through `rawrepl_shim.py` for file/console/sync and the unix REPL for terminal tests).
@@ -52,12 +72,21 @@ through, `AnsiScreen`, key/paste mapping, device pane paused while active), thre
   text editor opens focused and clicks stay in it; double-clicking a selected device file no longer downloads a copy.
   The editor and drop fixes were seen working, but a save from the editor was not traced.
   What was typed into the console and what came back was not recorded, so running code through it is not confirmed.
-- NOT verified: running code in the REPL console, terminal mode, upload/download, saving from the editor, run script, sync and soft reset on a real
+- GTK interface, verified by tests against the fake board (in-process probes, not in CI): list both panes, upload,
+  open a device file in the editor, save back, run code in the emulated console, switch to Terminal mode (VTE shows the
+  board's banner and prompt, `print(6*7)` returns `42`), switch back and the device pane un-pauses. Seen on the Pi 5
+  with a Tildagon plugged in: the window renders with its taskbar icon and the owner said it "looks good" (2026-10-28).
+  NOT verified for GTK: clicks with the virtual mouse, real typing into the terminal, anything on the actual badge
+  beyond the above, drag between panes, the conflict/sync dialogs with the mouse, the Window menu.
+- NOT verified (Tk, and mostly GTK too): running code in the REPL console, terminal mode, upload/download, saving from the editor, run script, sync and soft reset on a real
   board; whether raw-paste is negotiated on the badge (not traced); Pico / RP2 and the 2022 badge (the DTR change
   below could behave differently there); transfer speed; whether a clean Disconnect restores the badge's own app
   (see lessons). Add rows to `docs/HARDWARE.md` once tested.
 
 ## Open items / suggested next steps
+0. GTK follow-ups: run the GTK GUI against the Tildagon and a Pico (connect, list, transfer, editor, console,
+   terminal); test clicks and dialogs with the virtual mouse (locate windows via screenshot diffs); decide when to
+   delete the Tk GUI; add GUI smoke tests (GTK needs a display: weston/xvfb in CI).
 1. Keep running it on the Pi 5 (`sudo apt install python3-tk`; `pip install -e .`; `python -m mpexplorer`) with a
    Pico and a badge and fix breakage. Done so far: connect/list on a Tildagon, toolbar, console opens focused. Still to try:
    running code in the console, terminal mode, transfers, drag between panes, editor, sync, a Pico, the 2022 badge. Consider GUI smoke

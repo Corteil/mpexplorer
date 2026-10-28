@@ -4,7 +4,7 @@ Read `docs/HANDOFF.md` first: it is the project's memory (requirements, decision
 `docs/DESIGN.md` has the architecture. `CONTRIBUTING.md` has the test commands.
 
 ## What this is
-A Tkinter dual-pane file explorer, REPL console and terminal for MicroPython boards, running on a **Raspberry Pi 5**
+A dual-pane file explorer (GTK 3 via PyGObject, with a Tkinter fallback), REPL console and terminal for MicroPython boards, running on a **Raspberry Pi 5**
 over USB serial. Targets: Pico / Pico 2 and the EMF Camp badges (2022 TiLDA Mk6, 2024 Tildagon, 2026 = same as 2024;
 all ESP32-S3). **Default rule: nothing is ever installed on the target** - everything goes through the stock raw REPL.
 (An opt-in RAM-only "agent mode" is designed in DESIGN.md but not built.)
@@ -21,7 +21,11 @@ Python >= 3.11, line length 120, ruff rules E/F/W only, no type-annotation churn
 - Core (GUI-free, fully tested): `transport.py` (raw REPL, raw-paste, trace, input, terminal ownership), `backends.py`
   (Local + Device over snippets), `ops.py` (copy/move/delete/conflicts), `sync.py`, `jobs.py` (one worker thread owns
   the serial line), `console.py` (emulated REPL), `terminal.py` + `screen.py` (real-REPL terminal), `clipboard.py`.
-- GUI (`mpexplorer/gui/`): `app.py`, `widgets.py` (Pane, editor, dialogs), `console_window.py`, `terminal_widget.py`,
+- GUI, default (`mpexplorer/gtkui/`, GTK 3.24 via `python3-gi`, Wayland-native): `app.py`, `pane.py`, `editor.py`,
+  `console.py`, `terminal.py` (VTE, optional), `dialogs.py`, `common.py` (import GTK only through it: it pins the versions).
+  `python -m mpexplorer` runs it; `--tk` or `MPEXPLORER_UI=tk` runs the older Tk GUI, and it is the automatic fallback
+  if PyGObject is missing. Both reuse the same core. The Tk rules below (transient, WM_CLASS, double map) are Tk-only.
+- Tk GUI (`mpexplorer/gui/`): `app.py`, `widgets.py` (Pane, editor, dialogs), `console_window.py`, `terminal_widget.py`,
   `sync_dialog.py`. No automated GUI tests. It has been run by hand on a Pi 5 with a Tildagon (connect, list, toolbar,
   console opens focused); much of it is still untried on hardware, see `docs/HANDOFF.md` for exactly what.
 - Tests: `tests/fakedevice.py` (fake board: raw REPL, raw-paste, friendly REPL, input), `ptyserial.py` + `rawrepl_shim.py`
@@ -33,7 +37,7 @@ Python >= 3.11, line length 120, ruff rules E/F/W only, no type-annotation churn
   verified (tests/CI, or by hand on which board) and what was not.
 - Serial: keep DTR asserted and RTS low in `RawREPL.open()` (Tildagon corrupts long replies with DTR low). Never kill
   a connected GUI with `pkill`/SIGKILL: it leaves the badge in raw REPL with a frozen screen (Ctrl-B, Ctrl-D recovers).
-- Pop-ups: dialogs are `transient(app)` (else clicks fall through to the main window on labwc/XWayland). The editor
+- Tk only: pop-ups: dialogs are `transient(app)` (else clicks fall through to the main window on labwc/XWayland). The editor
   and console are `AppWindow`s (own taskbar entry, minimisable, listed in the Window menu); they re-map once on
   open for the same reason. Both need `lift()` + `focus_force()` on the input child after a short `after`. Don't
   open a modal `messagebox` from them (it ignored the mouse): use an in-window bar. Never compare Tk path strings
