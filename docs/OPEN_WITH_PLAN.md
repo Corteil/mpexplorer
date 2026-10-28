@@ -65,7 +65,29 @@ fall back to defaults and never block startup.
 command. 3. GTK chooser + default-for-type + context-menu entries. 4. Built-in hex and image viewers, preferences page.
 5. Tk equivalent (smaller: custom command and built-ins). 6. Hardware shakedown.
 
+## Decisions
+- **Saves upload automatically** (owner, 2026-10-28), with the conflict check above. A "paused" toggle on the status-bar
+  entry for a watched file lets the user stop auto-upload for that file.
+- Notepad++ itself is Windows-only (Wine on a Pi is not a good idea), so a Notepad++-class editor means picking one of the
+  Linux editors below and wiring it up with Open with... rather than writing our own.
+
+## Which editor? (Raspberry Pi 5, Raspberry Pi OS Bookworm, GTK3/Wayland)
+| Editor | Why | Command |
+|---|---|---|
+| **Geany** (recommended default) | Closest to Notepad++ in spirit and light: tabs, syntax highlighting, symbol list, find/replace in files, column select, plugins. Already in Raspberry Pi OS (Programming menu). Single-instance, so new files open as tabs. | `geany {file}` |
+| **VS Code** | Most capable: multi-cursor, find in files, git, MicroPython/Pylance extensions. Official arm64 build in the Raspberry Pi repo; heavier but fine on a Pi 5. | `code {file}` |
+| **Kate** | Feature-rich (split views, multi-cursor, regex search, sessions); pulls in KDE libraries. | `kate {file}` |
+| **Mousepad** | Tiny and quick, tabs and syntax highlighting, few advanced features. | `mousepad {file}` |
+| **Thonny** | Pre-installed and MicroPython-aware, but it wants to own the serial port and would fight mpexplorer. Use it only as a plain file editor, never connect its interpreter to the same board at the same time. | `thonny {file}` |
+
+Suggestion: install Geany (`sudo apt install geany`, probably already there), make it the default for `.py`, `.txt`,
+`.json`, `.md` and `.toml`; keep VS Code as a second entry for bigger projects. Note: because Geany and VS Code reuse a
+running window, the launched process may exit immediately; the watcher therefore follows the file, not the process.
+
+**The built-in editor** stays as the quick look. Cheap upgrades that are worth doing (GTK 3.24 has no GtkSourceView on
+Bookworm, so highlighting would be hand-rolled and is not worth it): line numbers, find / replace, go to line, tab size and
+word-wrap toggles, undo/redo shortcuts, and a "trailing newline" check. Anything beyond that is what Open with... is for.
+
 ## Open questions for the owner
-- Auto-upload on every save, or ask once per session? (Plan: auto, with the conflict check.)
-- Which external editor do you actually use on the Pi (so the first tests use it)?
+- Is Geany OK as the first external editor to wire up and test with?
 - Should "Run on the board" stay a separate menu item as well? (Plan: yes.)

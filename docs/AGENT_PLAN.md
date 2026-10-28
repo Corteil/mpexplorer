@@ -20,6 +20,10 @@ round trip per chunk. The agent replaces that with a small binary protocol serve
 - The user is told it runs a helper on the board while enabled (status bar indicator).
 
 ## Phase 0 - measure first (needs hardware) -> decision gate
+**Built:** `tools/bench.py` (tested on the fake board and real MicroPython in CI). Run it on each board:
+`python3 tools/bench.py --port /dev/ttyACM0` (close mpexplorer first). It works only in `/_mpx_bench` on the board, removes
+it, soft-resets the board at the end, prints a table and applies the rule below. The original spec follows.
+
 `tools/bench.py` (new): connect, then time (a) upload and download of 64 KB, 256 KB and 1 MB random files, (b) listing a
 folder of 200 files, (c) `copy_file` on device, each with raw-paste on and off; print KB/s and seconds as a table to paste
 into `docs/HARDWARE.md`. Run on the Tildagon, a Pico and the 2022 badge.
