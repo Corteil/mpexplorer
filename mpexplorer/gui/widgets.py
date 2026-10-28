@@ -22,12 +22,12 @@ class AppWindow(tk.Toplevel):
         self.app = app
         app.windows.append(self)
         self.bind("<Destroy>", self._gone)
-        # Re-mapping once after it opens stops clicks falling through to the main window on labwc/XWayland
+        # Hidden until built, then mapped once: no flash, and a late first map stops clicks falling through to the
+        # main window on labwc/XWayland
+        self.withdraw()
         self.after(50, self._appear)
 
     def _appear(self):
-        self.withdraw()
-        self.update()
         self.deiconify()
         self.after(100, self._take_focus)
 
