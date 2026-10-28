@@ -15,7 +15,7 @@
 
 ## Layers
 ```
-GUI (Tkinter) -> JobRunner (one worker thread) -> Backend
+GUI (GTK 3 / PyGObject; Tkinter fallback) -> JobRunner (one worker thread) -> Backend
                                                   |- LocalBackend   host disk
                                                   |- DeviceBackend  raw-REPL snippets   (default)
                                                   |- AgentBackend   RAM-resident helper (opt-in, planned)
