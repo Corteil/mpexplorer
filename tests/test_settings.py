@@ -152,6 +152,17 @@ def test_listeners_see_changes_and_cannot_break_saving(path):
     assert seen == [("general.last_port", "COM3")] and s.save()
 
 
+def test_unsubscribe(path):
+    s = Settings.load(path)
+    seen = []
+    cb = lambda k, v: seen.append(k)  # noqa: E731
+    s.subscribe(cb)
+    s.unsubscribe(cb)
+    s.unsubscribe(cb)                                                   # twice is harmless
+    s.set("window.width", 900)
+    assert seen == []
+
+
 def test_concurrent_sets_and_saves(path):
     s = Settings.load(path)
 

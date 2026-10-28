@@ -198,6 +198,7 @@ class Pane(ttk.LabelFrame):
         self._good = self.cwd
         self._entries = entries
         self._render()
+        self.app.folder_changed(self)
 
     def _open(self, _event=None):
         sel = self.tree.selection()
@@ -214,6 +215,7 @@ class Pane(ttk.LabelFrame):
     def sort_by(self, key):
         self._sort = (key, not self._sort[1] if self._sort[0] == key else False)
         self._render()
+        self.app.sort_changed(self)
 
     def _render(self):
         keep = set(self.tree.selection())

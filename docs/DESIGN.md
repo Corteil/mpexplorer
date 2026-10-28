@@ -165,8 +165,20 @@ directory). `Settings.load()`, `get("window.width")`, `set(...)`, `save()`, `sub
 - Forward compatible: unknown keys are preserved on save; a file with a newer `version` is read-only and never overwritten.
 - Atomic writes (temp file, fsync, replace), thread-safe, saving is a no-op when nothing changed.
 - Use `segment()` to turn a serial number or path into one safe dict key.
-**Not wired into the GUIs yet.** Next steps: remember port/folders/window/sort/hidden on exit, then a Preferences page
-(Edit > Preferences...) with General, File types and Connection tabs.
+**Wired into both GUIs** (`App(settings=None)` loads the default file; tests pass a temporary one): the shared rules live
+in GUI-free `remember.py` (`host_start`, `device_start`, `remember_folder`, `port_choice`, `remember_port`), `ports.board_id()`
+keys a board by vid:pid:serial so its last folder follows it to any /dev/ttyACMx.
+- Restored at start: show hidden, sort order per pane, window size (and maximised), last host folder, last folder per board
+  (checked with a `stat` on the board while connecting, else the root), last serial port. GTK also restores the position on
+  X11 only (Wayland never lets a window place itself); Tk restores size only. GTK never makes the window narrower than its
+  toolbar, so a remembered width below that is clamped.
+- Saved: show hidden and sort order immediately; everything else when the window closes (`save_state()`); the last port after
+  a successful connect.
+- Edit > Preferences...: General (show hidden, and a switch each for remembering the window, folders and port) and
+  Settings file (path, problems found, Reset all settings...). Changes apply and save at once; the View menu and the dialog
+  stay in sync through `Settings.subscribe`, so there is one code path for a changed setting.
+- Still to build: a File types tab (needs Open with...), a Connection tab (needs agent mode). Settings for those are declared
+  but nothing uses them yet, so the dialog does not show them.
 
 ## Folder sync
 `sync.py` builds a `Plan` (mkdir / copy / delete actions) by walking both folders, then `apply_plan` runs it.

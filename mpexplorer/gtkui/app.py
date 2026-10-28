@@ -9,22 +9,27 @@ from ..console import ConsoleSession
 from ..errors import BackendError, Cancelled
 from ..jobs import JobRunner
 from ..ops import ConflictPolicy, copy_tree, delete_tree, is_within, move_item, total_size, unique_name
-from ..ports import list_ports
+from ..ports import board_id, device_of, list_ports
+from ..remember import device_start, host_start, port_choice, remember_folder, remember_port
+from ..settings import Settings
 from ..sync import apply_plan, build_plan
 from ..transport import RawREPL
-from .common import ICON, GdkPixbuf, GLib, Gtk, ask_yes_no, button, error, fmt_time, info, prompt
+from .common import ICON, Gdk, GdkPixbuf, GLib, Gtk, ask_yes_no, button, error, fmt_time, info, prompt
 from .console import ConsoleWindow
 from .dialogs import OutputWindow, SyncDialog, ask_conflict
 from .editor import Editor
 from .pane import Pane
+from .prefs import PreferencesDialog
 
 MAX_EDIT_BYTES = 256 * 1024
 
 
 class App(Gtk.Window):
-    def __init__(self):
+    def __init__(self, settings=None):
         super().__init__(title="MicroPython Explorer %s" % __version__)
-        self.set_default_size(1180, 680)
+        self.settings = settings if settings is not None else Settings.load()
+        self._normal_size = (self.settings.get("window.width"), self.settings.get("window.height"))
+        self._restore_window()
         try:
             self.set_icon(GdkPixbuf.Pixbuf.new_from_file(str(ICON)))
         except GLib.Error:
@@ -36,7 +41,9 @@ class App(Gtk.Window):
         self.session = None
         self.console = None
         self.windows = []                           # open editors and the console
-        self.show_hidden = False
+        self.show_hidden = self.settings.get("general.show_hidden")
+        self.board = None                           # settings key of the connected board
+        self.settings.subscribe(self._setting_changed)
         self.drag_source = None
         self._asks = queue.Queue()
 
@@ -54,11 +61,17 @@ class App(Gtk.Window):
         root.pack_start(split, True, True, 2)
         root.pack_start(self._build_statusbar(), False, False, 3)
 
-        self.left.set_location(self.local, self.local.root)
+        for pane, which in ((self.left, "host"), (self.right, "device")):
+            key, reverse = self.settings.get("general.sort." + which)
+            pane._sort = (key, reverse)
+        self.left.set_location(self.local, host_start(self.settings, self.local.root))
         self.right.clear()
         self.connect("delete-event", lambda *_: self._quit() or False)
+        self.connect("configure-event", self._configured)
         self.connect("destroy", lambda _w: Gtk.main_quit())
         self.show_all()
+        if self.settings.problems:
+            self.set_status("Settings: " + self.settings.problems[0])
         GLib.timeout_add(100, self._poll)
 
     # -- ui construction ---------------------------------------------------
@@ -94,10 +107,13 @@ class App(Gtk.Window):
         add(e, "Rename    F2", self.rename)
         add(e, "Delete    Del", self.delete)
         add(e, "Properties", self.properties)
+        e.append(Gtk.SeparatorMenuItem())
+        add(e, "Preferences...", self.preferences)
         v = menu("View")
-        hidden = Gtk.CheckMenuItem(label="Show hidden files")
-        hidden.connect("toggled", lambda i: self._set_hidden(i.get_active()))
-        v.append(hidden)
+        self.hidden_item = Gtk.CheckMenuItem(label="Show hidden files")
+        self.hidden_item.set_active(self.show_hidden)
+        self.hidden_item.connect("toggled", lambda i: self._set_hidden(i.get_active()))
+        v.append(self.hidden_item)
         add(v, "Refresh    F5", lambda: [p.refresh() for p in self.panes])
         d = menu("Device")
         add(d, "REPL console...", self.open_console)
@@ -111,9 +127,66 @@ class App(Gtk.Window):
         return bar
 
     def _set_hidden(self, on):
-        self.show_hidden = on
-        for p in self.panes:
-            p._render()
+        self.settings.set("general.show_hidden", on)        # _setting_changed does the rest
+        self.settings.save()
+
+    def _setting_changed(self, key, value):
+        """The one place a changed setting reaches the window, whether the View menu or Preferences changed it."""
+        if key == "general.show_hidden":
+            self.show_hidden = bool(value)
+            if self.hidden_item.get_active() != self.show_hidden:
+                self.hidden_item.set_active(self.show_hidden)
+            for p in self.panes:
+                p._render()
+
+    def preferences(self):
+        dlg = PreferencesDialog(self)
+        dlg.run()
+        dlg.destroy()
+
+    # -- remembered state --------------------------------------------------
+    def _restore_window(self):
+        s = self.settings
+        if not s.get("general.remember_window"):
+            self.set_default_size(1180, 680)
+            return
+        self.set_default_size(*self._normal_size)
+        if s.get("window.maximized"):
+            self.maximize()
+        x, y = s.get("window.x"), s.get("window.y")
+        if x is not None and y is not None and self._is_x11():
+            self.move(x, y)                             # Wayland never lets a window place itself
+
+    @staticmethod
+    def _is_x11():
+        display = Gdk.Display.get_default()
+        return display is not None and "X11" in type(display).__name__
+
+    def _configured(self, _w, ev):
+        if not self.is_maximized():
+            self._normal_size = (ev.width, ev.height)
+        return False
+
+    def folder_changed(self, pane):
+        remember_folder(self.settings, pane is self.right, pane.cwd, self.board)
+
+    def sort_changed(self, pane):
+        which = "device" if pane is self.right else "host"
+        self.settings.set("general.sort." + which, list(pane._sort))
+        self.settings.save()
+
+    def save_state(self):
+        """Called on the way out: window geometry and everything that changed since the last save."""
+        s = self.settings
+        if s.get("general.remember_window"):
+            s.set("window.width", self._normal_size[0])
+            s.set("window.height", self._normal_size[1])
+            s.set("window.maximized", self.is_maximized())
+            if self._is_x11() and not self.is_maximized():
+                x, y = self.get_position()
+                s.set("window.x", x)
+                s.set("window.y", y)
+        s.save()
 
     def _fill_window_menu(self, menu):
         for child in menu.get_children():
@@ -224,8 +297,9 @@ class App(Gtk.Window):
         for p in ports:
             self.port_box.append_text(p)
         entry = self.port_box.get_child()
-        if ports and not entry.get_text():
-            self.port_box.set_active(0)
+        choice = port_choice(self.settings, ports)
+        if choice is not None and not entry.get_text():
+            self.port_box.set_active(choice)
 
     def toggle_connection(self):
         if self.device:
@@ -234,7 +308,7 @@ class App(Gtk.Window):
             self.connect_device()
 
     def connect_device(self):
-        port = self.port_box.get_child().get_text().split("  ")[0].strip()
+        port = device_of(self.port_box.get_child().get_text())
         if not port:
             info(self, "No port", "Pick a serial port first (Scan).")
             return
@@ -243,32 +317,43 @@ class App(Gtk.Window):
         self.connect_btn.set_label("Connecting...")
         self.connect_btn.set_sensitive(False)
 
+        board = board_id(port)
+
         def work(prog):
             repl = RawREPL.open(port)
             try:
                 repl.enter_raw()
-                return DeviceBackend(repl)
+                dev = DeviceBackend(repl)
+                return dev, device_start(self.settings, dev, board)
             except BaseException:
                 repl.close()
                 raise
 
-        def done(dev, exc):
+        def done(res, exc):
             self.connect_btn.set_sensitive(True)
             if exc:
                 self.connect_btn.set_label("Connect")
                 self.set_status("Connection failed")
                 error(self, "Connection failed", str(exc))
                 return
-            self.device = dev
-            self.session = ConsoleSession(dev.repl)
-            self.right.set_location(dev, dev.root)
-            self.connect_btn.set_label("Disconnect")
-            self.set_status("Connected to %s" % port)
+            self.connected(res[0], res[1], port, board)
         self.runner.submit(work, done, "Connecting", quiet=True)
+
+    def connected(self, dev, start, port, board):
+        """The connection is up: show the board, and remember the port (and later its folders)."""
+        self.device = dev
+        self.board = board
+        self.session = ConsoleSession(dev.repl)
+        remember_port(self.settings, port)
+        self.right.set_location(dev, start)
+        self.connect_btn.set_label("Disconnect")
+        self.connect_btn.set_sensitive(True)
+        self.set_status("Connected to %s" % port)
 
     def disconnect(self):
         if self.device:
             dev, self.device = self.device, None
+            self.board = None
             self.session = None
             if self.console:
                 self.console.close()
@@ -279,6 +364,7 @@ class App(Gtk.Window):
             self.set_status("Disconnected")
 
     def _quit(self):
+        self.save_state()
         self.runner.cancel_all()
         if self.device:
             try:
