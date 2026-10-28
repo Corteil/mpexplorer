@@ -50,9 +50,10 @@ MAKE_FILES_SNIPPET = (
 
 INFO_SNIPPET = (
     "import os,gc,sys\n"
-    "u=os.uname()\n"
+    "try:\n u=os.uname();f=[u[0],u[2],u[3],u[4]]\n"      # the unix build of MicroPython has no os.uname
+    "except AttributeError:\n i=sys.implementation;f=[i[0],'.'.join(str(n) for n in i[1]),'',sys.platform]\n"
     "gc.collect()\n"
-    "print(';'.join([u[0],u[2],u[3],u[4],sys.platform,str(getattr(gc,'mem_free',lambda:0)())]))")
+    "print(';'.join(f+[sys.platform,str(getattr(gc,'mem_free',lambda:0)())]))")
 
 
 def timed(fn):
