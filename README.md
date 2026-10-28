@@ -1,7 +1,7 @@
 # mpexplorer
 
 A dual-pane file explorer with a GUI for MicroPython boards (Raspberry Pi Pico / Pico 2, EMF Camp badges from 2022 (TiLDA Mk6), 2024
-(Tildagon) and 2026, anything that runs MicroPython). It runs on a **Raspberry Pi 5** (or any computer with Python 3 and Tkinter) and talks to the
+(Tildagon) and 2026, anything that runs MicroPython). It runs on a **Raspberry Pi 5** (or any computer with Python 3 and GTK 3 or Tkinter) and talks to the
 board over USB serial. **Nothing is installed on the board**: it works through the stock raw REPL, like `mpremote`.
 
 ## Features
@@ -27,12 +27,21 @@ board over USB serial. **Nothing is installed on the board**: it works through t
 
 ## Install (Raspberry Pi OS)
 ```
-sudo apt install python3-tk pipx
+sudo apt install python3-gi gir1.2-gtk-3.0 gir1.2-vte-2.91 pipx
 sudo usermod -aG dialout $USER      # serial access; log out and in again
-pipx install git+https://github.com/Corteil/mpexplorer
+pipx install --system-site-packages git+https://github.com/Corteil/mpexplorer
 mpexplorer
 ```
 Plug the board in, press **Scan**, pick the port, **Connect**.
+
+The interface is GTK 3 through PyGObject (`python3-gi`, already on Raspberry Pi OS); `--system-site-packages` lets
+pipx see it. `gir1.2-vte-2.91` is only needed for the console's Terminal mode. A Tkinter interface is kept as a
+fallback: `sudo apt install python3-tk`, then `mpexplorer --tk` (it is also used automatically if GTK is missing).
+
+For a desktop launcher, create `~/.local/share/applications/mpexplorer.desktop` with `Exec=mpexplorer`,
+`Icon=mpexplorer` and `Type=Application`, and copy `mpexplorer/icon.png` to
+`~/.local/share/icons/hicolor/256x256/apps/mpexplorer.png`. The window reports the app id `mpexplorer`, which is how
+the taskbar finds that file and its icon.
 
 ## Development
 ```
@@ -42,5 +51,6 @@ ruff check . && pytest
 Tests use a fake board that speaks the raw REPL, so no hardware is needed. See [docs/DESIGN.md](docs/DESIGN.md).
 
 ## Status
-Core and GUI are written; the GUI has not yet been run on real hardware. Tested boards are listed in
+Core and both GUIs are written. The GUI has been used by hand on a Raspberry Pi 5 with a Tildagon; the GTK interface
+is newer and has seen less hardware time than Tk (see [docs/HANDOFF.md](docs/HANDOFF.md) for what is verified). Tested boards are listed in
 [docs/HARDWARE.md](docs/HARDWARE.md); please add yours.
