@@ -437,6 +437,7 @@ class App(tk.Tk):
         def done(out, exc):
             win = tk.Toplevel(self)
             win.title("Output: " + path)
+            win.transient(self)     # keeps it off the taskbar and stops clicks falling through to this window
             box = scrolledtext.ScrolledText(win, width=90, height=24, font="TkFixedFont")
             box.pack(fill="both", expand=True)
             box.insert("end", exc.traceback if isinstance(exc, DeviceError) else (str(exc) if exc else out))
