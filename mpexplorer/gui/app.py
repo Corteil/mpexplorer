@@ -11,12 +11,15 @@ from ..clipboard import Clipboard
 from ..console import ConsoleSession
 from ..errors import BackendError, Cancelled
 from ..jobs import JobRunner
-from ..ports import list_ports
+from ..ports import board_id, device_of, list_ports
+from ..remember import device_start, host_start, port_choice, remember_folder, remember_port
+from ..settings import Settings
 from ..sync import apply_plan, build_plan
 from ..ops import (ConflictPolicy, copy_tree, delete_tree, is_within, move_item, total_size,
                    unique_name)
 from ..transport import DeviceError, RawREPL
 from .console_window import ConsoleWindow
+from .prefs import PreferencesDialog
 from . import wm
 from .sync_dialog import SyncDialog
 from .widgets import ConflictDialog, Editor, fmt_time, Pane
@@ -26,11 +29,12 @@ ICON = Path(__file__).resolve().parent.parent / "icon.png"
 
 
 class App(tk.Tk):
-    def __init__(self):
+    def __init__(self, settings=None):
         # WM_CLASS is how the panel finds the launcher and icon (default "tk"/"Tk" matches nothing)
         super().__init__(baseName="mpexplorer", className="mpexplorer")
         self.title("MicroPython Explorer %s" % __version__)
-        self.geometry("1180x680")
+        self.settings = settings if settings is not None else Settings.load()
+        self._restore_window()
         try:
             self.icon = tk.PhotoImage(file=str(ICON))       # kept on self: Tk drops an image that gets collected
             self.iconphoto(True, self.icon)                 # True: every pop-up window gets it too
@@ -49,8 +53,10 @@ class App(tk.Tk):
         self.session = None
         self.console = None
         self.windows = []               # open editors and the console (AppWindow adds itself)
-        self.show_hidden = tk.BooleanVar(value=False)
-        self.show_hidden.trace_add("write", lambda *_: [p._render() for p in self.panes])
+        self.board = None                   # settings key of the connected board
+        self.show_hidden = tk.BooleanVar(value=self.settings.get("general.show_hidden"))
+        self.show_hidden.trace_add("write", lambda *_: self._hidden_changed())
+        self.settings.subscribe(self._setting_changed)
         self._asks = queue.Queue()
 
         self._build_menu()
@@ -65,11 +71,18 @@ class App(tk.Tk):
         self.active = self.left
         self._build_statusbar()
 
-        self.left.set_location(self.local, self.local.root)
+        for pane, which in ((self.left, "host"), (self.right, "device")):
+            key, reverse = self.settings.get("general.sort." + which)
+            pane._sort = (key, reverse)
+        self.left.set_location(self.local, host_start(self.settings, self.local.root))
         self.right.clear()
         self.protocol("WM_DELETE_WINDOW", self._quit)
         self.update_idletasks()
         self.minsize(self.winfo_reqwidth(), 400)        # never narrower than the toolbar
+        self._normal_size = (self.winfo_width(), self.winfo_height())
+        self.bind("<Configure>", self._configured)
+        if self.settings.problems:
+            self.set_status("Settings: " + self.settings.problems[0])
         self.after(100, self._poll)
 
     # -- ui construction ---------------------------------------------------
@@ -93,6 +106,8 @@ class App(tk.Tk):
         e.add_command(label="Rename\tF2", command=self.rename)
         e.add_command(label="Delete\tDel", command=self.delete)
         e.add_command(label="Properties", command=self.properties)
+        e.add_separator()
+        e.add_command(label="Preferences...", command=self.preferences)
         m.add_cascade(label="Edit", menu=e)
         v = tk.Menu(m, tearoff=0)
         v.add_checkbutton(label="Show hidden files", variable=self.show_hidden)
@@ -110,6 +125,60 @@ class App(tk.Tk):
         wm = tk.Menu(m, tearoff=0, postcommand=lambda: self._fill_window_menu(wm))
         m.add_cascade(label="Window", menu=wm)
         self.config(menu=m)
+
+    # -- remembered state --------------------------------------------------
+    def _restore_window(self):
+        s = self.settings
+        self._normal_size = (s.get("window.width"), s.get("window.height"))
+        if not s.get("general.remember_window"):
+            self.geometry("1180x680")
+            return
+        # the position is not restored: Tk under XWayland cannot place windows reliably
+        self.geometry("%dx%d" % self._normal_size)
+        if s.get("window.maximized"):
+            try:
+                self.attributes("-zoomed", True)
+            except tk.TclError:
+                pass
+
+    def _is_maximized(self):
+        try:
+            return bool(self.attributes("-zoomed"))
+        except tk.TclError:
+            return False
+
+    def _configured(self, ev):
+        if ev.widget is self and not self._is_maximized():
+            self._normal_size = (ev.width, ev.height)
+
+    def _hidden_changed(self):
+        self.settings.set("general.show_hidden", bool(self.show_hidden.get()))
+        self.settings.save()
+        for p in self.panes:
+            p._render()
+
+    def _setting_changed(self, key, value):
+        if key == "general.show_hidden" and bool(self.show_hidden.get()) != bool(value):
+            self.show_hidden.set(bool(value))
+
+    def preferences(self):
+        PreferencesDialog(self)
+
+    def folder_changed(self, pane):
+        remember_folder(self.settings, pane is self.right, pane.cwd, self.board)
+
+    def sort_changed(self, pane):
+        which = "device" if pane is self.right else "host"
+        self.settings.set("general.sort." + which, list(pane._sort))
+        self.settings.save()
+
+    def save_state(self):
+        s = self.settings
+        if s.get("general.remember_window"):
+            s.set("window.width", self._normal_size[0])
+            s.set("window.height", self._normal_size[1])
+            s.set("window.maximized", self._is_maximized())
+        s.save()
 
     def _fill_window_menu(self, menu):
         menu.delete(0, "end")
@@ -217,8 +286,9 @@ class App(tk.Tk):
     def scan_ports(self):
         ports = list_ports()
         self.port_box["values"] = ports
-        if ports and not self.port_var.get():
-            self.port_var.set(ports[0])
+        choice = port_choice(self.settings, ports)
+        if choice is not None and not self.port_var.get():
+            self.port_var.set(ports[choice])
 
     def toggle_connection(self):
         if self.device:
@@ -227,7 +297,7 @@ class App(tk.Tk):
             self.connect()
 
     def connect(self):
-        port = self.port_var.get().split("  ")[0].strip()
+        port = device_of(self.port_var.get())
         if not port:
             messagebox.showinfo("No port", "Pick a serial port first (Scan).")
             return
@@ -235,31 +305,41 @@ class App(tk.Tk):
         self.set_status("Connecting to %s ..." % port)
         self.connect_btn.config(text="Connecting...", state="disabled")
 
+        board = board_id(port)
+
         def work(prog):
             repl = RawREPL.open(port)
             try:
                 repl.enter_raw()
-                return DeviceBackend(repl)
+                dev = DeviceBackend(repl)
+                return dev, device_start(self.settings, dev, board)
             except BaseException:
                 repl.close()
                 raise
 
-        def done(dev, exc):
+        def done(res, exc):
             if exc:
                 self.connect_btn.config(text="Connect", state="normal")
                 self.set_status("Connection failed")
                 messagebox.showerror("Connection failed", str(exc))
                 return
-            self.device = dev
-            self.session = ConsoleSession(dev.repl)
-            self.right.set_location(dev, dev.root)
-            self.connect_btn.config(text="Disconnect", state="normal")
-            self.set_status("Connected to %s" % port)
+            self.connected(res[0], res[1], port, board)
         self.runner.submit(work, done, "Connecting", quiet=True)
+
+    def connected(self, dev, start, port, board):
+        """The connection is up: show the board, and remember the port (and later its folders)."""
+        self.device = dev
+        self.board = board
+        self.session = ConsoleSession(dev.repl)
+        remember_port(self.settings, port)
+        self.right.set_location(dev, start)
+        self.connect_btn.config(text="Disconnect", state="normal")
+        self.set_status("Connected to %s" % port)
 
     def disconnect(self):
         if self.device:
             dev, self.device = self.device, None
+            self.board = None
             self.session = None
             if self.console:
                 self.console.close()
@@ -269,6 +349,7 @@ class App(tk.Tk):
             self.set_status("Disconnected")
 
     def _quit(self):
+        self.save_state()
         self.runner.cancel_all()
         if self.device:
             try:

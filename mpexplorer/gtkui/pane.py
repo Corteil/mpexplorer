@@ -142,6 +142,7 @@ class Pane(Gtk.Frame):
         self._good = self.cwd
         self._entries = entries
         self._render()
+        self.app.folder_changed(self)
 
     def _open(self):
         sel = self.selected()
@@ -156,6 +157,12 @@ class Pane(Gtk.Frame):
     # -- display -----------------------------------------------------------
     def sort_by(self, key):
         self._sort = (key, not self._sort[1] if self._sort[0] == key else False)
+        self._render()
+        self.app.sort_changed(self)
+
+    def set_sort(self, key, reverse):
+        """Used at start-up to restore the remembered order (no notification, no re-save)."""
+        self._sort = (key, reverse)
         self._render()
 
     def _render(self):

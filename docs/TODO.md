@@ -44,10 +44,10 @@ label if one is missing on another theme.
 
 ## 2a. Settings (module built; see "Settings" in `docs/DESIGN.md`)
 - [x] `settings.py` + 22 tests: validated keys, atomic writes, damaged-file recovery, forward compatibility.
-- [ ] GTK: load at start, remember last port / folders / window size / sort / hidden, save on exit (and on change for
-      the cheap ones). Same for Tk if it is kept.
-- [ ] Edit > Preferences... page: General, File types (Open with...), Connection (fast mode, reset on disconnect).
-- [ ] Show `settings.problems` once in the status bar if the file was damaged.
+- [x] GTK and Tk: remember last port / folders (per board) / window size / sort / hidden; saved on exit and on change.
+- [x] Edit > Preferences... (General, Settings file) in both GUIs; a damaged file is reported in the status bar.
+- [ ] Preferences tabs for File types (with Open with...) and Connection (fast mode, once agent mode exists).
+- [ ] Check on the Pi: window size/position restore under Wayland, the remembered device folder on the badge.
 
 ## 2b. Open with... (plan: `docs/OPEN_WITH_PLAN.md`)
 - [ ] (Decided: saves upload automatically; Geany first.) Phase 1: `openwith.py` (settings, associations, `{file}` commands, upload watcher) with tests, no GUI.

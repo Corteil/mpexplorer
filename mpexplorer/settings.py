@@ -65,6 +65,9 @@ def sort_order(v):
 SPEC = {
     "general.last_port": ("", string),
     "general.show_hidden": (False, boolean),
+    "general.remember_window": (True, boolean),     # Preferences: restore window size/position at start
+    "general.remember_folders": (True, boolean),    # ... the last host folder and the last folder per board
+    "general.remember_port": (True, boolean),       # ... the last serial port
     "general.sort.host": (["name", False], sort_order),
     "general.sort.device": (["name", False], sort_order),
     "window.width": (1180, integer(300, 10000)),
@@ -215,9 +218,35 @@ class Settings:
                 self._remove(key)
                 self._dirty = True
 
+    def reset_all(self):
+        """Back to the defaults for every declared setting (unknown keys from newer versions are kept).
+        Listeners hear about each setting that changed. Returns the list of those keys."""
+        changed = []
+        with self._lock:
+            for key, (default, _check) in SPEC.items():
+                if self._lookup(key) is not _MISSING:
+                    if self.get(key) != default:
+                        changed.append(key)
+                    self._remove(key)
+                    self._dirty = True
+            listeners = list(self._listeners)
+        for key in changed:
+            for cb in listeners:
+                try:
+                    cb(key, copy.deepcopy(SPEC[key][0]))
+                except Exception:
+                    pass
+        return changed
+
     def subscribe(self, callback):
         """callback(key, value) after each change that alters a setting."""
         self._listeners.append(callback)
+
+    def unsubscribe(self, callback):
+        try:
+            self._listeners.remove(callback)
+        except ValueError:
+            pass
 
     @property
     def dirty(self):
