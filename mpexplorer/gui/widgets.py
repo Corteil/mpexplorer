@@ -22,14 +22,20 @@ class AppWindow(tk.Toplevel):
         self.app = app
         app.windows.append(self)
         self.bind("<Destroy>", self._gone)
-        # Hidden until built, then mapped once: no flash, and a late first map stops clicks falling through to the
-        # main window on labwc/XWayland
+        # Hidden until built, then mapped once, so it doesn't flash
         self.withdraw()
         self.after(50, self._appear)
 
     def _appear(self):
         self.deiconify()
-        self.after(100, self._take_focus)
+        self.after(100, self._nudge)
+
+    def _nudge(self):
+        """Move by 1 px: labwc then re-checks which window is under the pointer (else it keeps sending clicks to the
+        main window until the pointer or stacking changes)."""
+        self.update_idletasks()
+        self.geometry("+%d+%d" % (self.winfo_x() + 1, self.winfo_y()))
+        self.after(50, self._take_focus)
 
     def _take_focus(self):
         self.lift()
