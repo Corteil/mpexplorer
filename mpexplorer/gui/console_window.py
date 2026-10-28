@@ -4,14 +4,14 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from .terminal_widget import TerminalWidget
+from .widgets import AppWindow
 
 
-class ConsoleWindow(tk.Toplevel):
+class ConsoleWindow(AppWindow):
     def __init__(self, app, session):
         super().__init__(app)
-        self.app, self.session = app, session
+        self.session = session
         self.title("REPL console")
-        self.transient(app)         # tell the WM the console belongs to the main window (else clicks fall through)
         self.geometry("780x500")
         self.busy = False
         self._q = queue.Queue()
@@ -64,7 +64,6 @@ class ConsoleWindow(tk.Toplevel):
         self.inp.bind("<Control-d>", self._ctrl_d)
         self.bind("<Escape>", lambda _e: self.interrupt() if self.term is None else None)
         self.protocol("WM_DELETE_WINDOW", self.close)
-        self.after(50, self._take_focus)
         self._drain()
 
     def _take_focus(self):

@@ -16,6 +16,7 @@ from ..ops import (ConflictPolicy, copy_tree, delete_tree, is_within, move_item,
                    unique_name)
 from ..transport import DeviceError, RawREPL
 from .console_window import ConsoleWindow
+from . import wm
 from .sync_dialog import SyncDialog
 from .widgets import ConflictDialog, Editor, fmt_time, Pane
 
@@ -55,6 +56,7 @@ class App(tk.Tk):
         self.device = None
         self.session = None
         self.console = None
+        self.windows = []               # open editors and the console (AppWindow adds itself)
         self.show_hidden = tk.BooleanVar(value=False)
         self.show_hidden.trace_add("write", lambda *_: [p._render() for p in self.panes])
         self._asks = queue.Queue()
@@ -113,7 +115,34 @@ class App(tk.Tk):
         t = tk.Menu(m, tearoff=0)
         t.add_command(label="Sync this folder to the other pane...", command=self.sync_folders)
         m.add_cascade(label="Tools", menu=t)
+        wm = tk.Menu(m, tearoff=0, postcommand=lambda: self._fill_window_menu(wm))
+        m.add_cascade(label="Window", menu=wm)
         self.config(menu=m)
+
+    def _fill_window_menu(self, menu):
+        menu.delete(0, "end")
+        menu.add_command(label="Main window", command=lambda: self.show_window(self))
+        for win in self.windows:
+            menu.add_command(label=win.title(), command=lambda w=win: self.show_window(w))
+        menu.add_separator()
+        menu.add_command(label="Minimise all", command=self.minimise_all)
+        menu.add_command(label="Restore all", command=self.restore_all)
+
+    def show_window(self, win):
+        """Bring a window back from the taskbar (or from behind others) and give it the keyboard."""
+        # Tk can't tell a minimised window from a visible one here, and deiconify() does nothing for it under labwc
+        if not wm.activate(win.winfo_id()):
+            win.deiconify()
+        win.lift()
+        win.focus_force()
+
+    def minimise_all(self):
+        for win in self.windows + [self]:
+            win.iconify()
+
+    def restore_all(self):
+        for win in [self] + self.windows:
+            self.show_window(win)
 
     def _build_toolbar(self):
         bar = ttk.Frame(self)
@@ -455,7 +484,7 @@ class App(tk.Tk):
         if not self.session:
             messagebox.showinfo("Not connected", "Connect to a device first.")
         elif self.console:
-            self.console.lift()
+            self.show_window(self.console)
         else:
             self.console = ConsoleWindow(self, self.session)
 
