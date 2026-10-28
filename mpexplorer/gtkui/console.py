@@ -1,11 +1,12 @@
 """REPL console window: type Python, run it on the board, see the output as it arrives.
 
-Emulated mode (raw REPL) only. The real-REPL terminal mode of the Tk version needs a terminal widget; GTK 3 has none
-installed here (no VTE), so that radio button is disabled.
+Two modes: emulated (raw REPL, lines run one at a time) and terminal (real REPL in a VTE widget, needs
+gir1.2-vte-2.91).
 """
 import queue
 
-from .common import Gdk, GLib, Gtk, button, monospace_view, scrolled
+from . import terminal
+from .common import Gdk, GLib, Gtk, button, info, monospace_view, scrolled
 
 
 class ConsoleWindow(Gtk.Window):
@@ -33,26 +34,34 @@ class ConsoleWindow(Gtk.Window):
 
         mode = Gtk.Box(spacing=8)
         mode.pack_start(Gtk.Label(label="Mode:"), False, False, 0)
-        emu = Gtk.RadioButton.new_with_label(None, "Emulated (raw REPL)")
-        term = Gtk.RadioButton.new_with_label_from_widget(emu, "Terminal (real REPL)")
-        term.set_sensitive(False)
-        term.set_tooltip_text("Not available in the GTK interface yet (needs a terminal widget); use --tk")
-        mode.pack_start(emu, False, False, 0)
-        mode.pack_start(term, False, False, 0)
+        self.emu_radio = Gtk.RadioButton.new_with_label(None, "Emulated (raw REPL)")
+        self.term_radio = Gtk.RadioButton.new_with_label_from_widget(self.emu_radio, "Terminal (real REPL)")
+        if not terminal.available():
+            self.term_radio.set_sensitive(False)
+            self.term_radio.set_tooltip_text("Install gir1.2-vte-2.91 to enable the terminal")
+        self._mode_guard = False
+        self.term_radio.connect("toggled", lambda _r: self._mode_changed())
+        mode.pack_start(self.emu_radio, False, False, 0)
+        mode.pack_start(self.term_radio, False, False, 0)
         box.pack_start(mode, False, False, 0)
+        self.box = box
+        self.term = None
+
+        self.emu = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
+        box.pack_start(self.emu, True, True, 0)
 
         self.out = monospace_view(wrap=Gtk.WrapMode.WORD_CHAR)
         tags = self.out.get_buffer()
         tags.create_tag("err", foreground="#c0392b")
         tags.create_tag("echo", foreground="#2060c0")
         tags.create_tag("trace", foreground="#808080")
-        box.pack_start(scrolled(self.out), True, True, 0)
+        self.emu.pack_start(scrolled(self.out), True, True, 0)
 
         self.prompt = Gtk.Label(xalign=0)
-        box.pack_start(self.prompt, False, False, 0)
+        self.emu.pack_start(self.prompt, False, False, 0)
         self.inp = monospace_view(editable=True)
         self.inp.set_size_request(-1, 80)
-        box.pack_start(scrolled(self.inp), False, False, 0)
+        self.emu.pack_start(scrolled(self.inp), False, False, 0)
         self._set_prompt()
         self.inp.connect("key-press-event", self._key)
         self.connect("key-press-event", self._window_key)
@@ -61,6 +70,56 @@ class ConsoleWindow(Gtk.Window):
         self.show_all()
         self.inp.grab_focus()
         self._drain_id = GLib.timeout_add(50, self._drain)
+
+    # -- emulated <-> terminal --------------------------------------------
+    def _mode_changed(self):
+        if self._mode_guard:
+            return
+        if self.term_radio.get_active():
+            self._enter_terminal()
+        else:
+            self._leave_terminal()
+
+    def _set_mode(self, radio):
+        self._mode_guard = True
+        radio.set_active(True)
+        self._mode_guard = False
+
+    def _enter_terminal(self):
+        if self.busy or self.app.runner.busy:
+            info(self, "Busy", "Wait for the running command or file operation to finish first.")
+            self._set_mode(self.emu_radio)
+            return
+        self.emu.hide()
+        self.term = terminal.TerminalWidget(self.session.repl, on_error=lambda _e: None)
+        self.box.pack_start(self.term, True, True, 0)
+        self.term.show_all()
+        try:
+            self.term.start()
+        except Exception as e:
+            self.box.remove(self.term)
+            self.term = None
+            self.emu.show()
+            self._set_mode(self.emu_radio)
+            info(self, "Terminal", str(e))
+            return
+        for w in (self.activity, self.run_btn, self.stop_btn):
+            w.set_sensitive(False)
+        self.app.set_device_paused(True)
+        self.set_title("REPL console - terminal (real REPL)")
+
+    def _leave_terminal(self):
+        if self.term is None:
+            return
+        self.term.stop()
+        self.box.remove(self.term)
+        self.term = None
+        self.emu.show()
+        for w in (self.activity, self.run_btn, self.stop_btn):
+            w.set_sensitive(True)
+        self.app.set_device_paused(False)
+        self.set_title("REPL console")
+        self.inp.grab_focus()
 
     # -- output ------------------------------------------------------------
     def write(self, text, tag=None):
@@ -126,7 +185,7 @@ class ConsoleWindow(Gtk.Window):
         return False
 
     def _window_key(self, _w, ev):
-        if Gdk.keyval_name(ev.keyval) == "Escape":
+        if Gdk.keyval_name(ev.keyval) == "Escape" and self.term is None:
             self.interrupt()
             return True
         return False
@@ -178,6 +237,7 @@ class ConsoleWindow(Gtk.Window):
                 self.write("Interrupt failed: %s\n" % e, "err")
 
     def close(self):
+        self._leave_terminal()
         GLib.source_remove(self._drain_id)
         self.session.repl.trace = None
         self.interrupt()
