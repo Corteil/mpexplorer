@@ -5,9 +5,7 @@ installed here (no VTE), so that radio button is disabled.
 """
 import queue
 
-from gi.repository import Gdk, GLib, Gtk
-
-from .common import button, monospace_view, scrolled
+from .common import Gdk, GLib, Gtk, button, monospace_view, scrolled
 
 
 class ConsoleWindow(Gtk.Window):

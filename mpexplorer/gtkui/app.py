@@ -2,8 +2,6 @@
 import queue
 import threading
 
-from gi.repository import GdkPixbuf, GLib, Gtk
-
 from .. import __version__
 from ..backends import CHUNK, DeviceBackend, LocalBackend, human
 from ..clipboard import Clipboard
@@ -14,7 +12,7 @@ from ..ops import ConflictPolicy, copy_tree, delete_tree, is_within, move_item, 
 from ..ports import list_ports
 from ..sync import apply_plan, build_plan
 from ..transport import RawREPL
-from .common import ICON, ask_yes_no, button, error, fmt_time, info, prompt
+from .common import ICON, GdkPixbuf, GLib, Gtk, ask_yes_no, button, error, fmt_time, info, prompt
 from .console import ConsoleWindow
 from .dialogs import OutputWindow, SyncDialog, ask_conflict
 from .editor import Editor

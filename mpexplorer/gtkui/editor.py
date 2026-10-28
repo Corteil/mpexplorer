@@ -1,8 +1,6 @@
 """Minimal text editor that saves straight back to the file's backend."""
-from gi.repository import Gdk, Gtk
-
 from ..backends import human
-from .common import button, monospace_view, scrolled
+from .common import Gdk, Gtk, button, monospace_view, scrolled
 
 
 class Editor(Gtk.Window):

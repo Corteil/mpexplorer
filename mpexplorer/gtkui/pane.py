@@ -1,8 +1,6 @@
 """One directory listing bound to a backend (host or device)."""
-from gi.repository import Gdk, GLib, Gtk
-
 from ..backends import human
-from .common import button, error, fmt_time, scrolled
+from .common import Gdk, GLib, Gtk, button, error, fmt_time, scrolled
 
 DND_TARGET = [Gtk.TargetEntry.new("application/x-mpexplorer-items", Gtk.TargetFlags.SAME_APP, 0)]
 

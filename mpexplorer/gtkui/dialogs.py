@@ -1,9 +1,7 @@
 """Conflict prompt, sync preview and script output windows."""
-from gi.repository import Gtk
-
 from ..backends import human
 from ..transport import DeviceError
-from .common import monospace_view, scrolled
+from .common import Gtk, monospace_view, scrolled
 
 LABELS = {"mkdir": "Create folder", "copy": "Copy", "delete": "Delete"}
 
