@@ -34,7 +34,8 @@ def list_ports():
 
 class App(tk.Tk):
     def __init__(self):
-        super().__init__()
+        # WM_CLASS is how the panel finds the launcher and icon (default "tk"/"Tk" matches nothing)
+        super().__init__(baseName="mpexplorer", className="mpexplorer")
         self.title("MicroPython Explorer %s" % __version__)
         self.geometry("1180x680")
         try:
