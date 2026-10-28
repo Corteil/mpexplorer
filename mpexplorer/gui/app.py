@@ -1,6 +1,7 @@
 """Main window: two panes, toolbar, job progress."""
 import queue
 import threading
+from pathlib import Path
 import tkinter as tk
 from tkinter import messagebox, scrolledtext, simpledialog, ttk
 
@@ -19,6 +20,7 @@ from .sync_dialog import SyncDialog
 from .widgets import ConflictDialog, Editor, fmt_time, Pane
 
 MAX_EDIT_BYTES = 256 * 1024
+ICON = Path(__file__).resolve().parent.parent / "icon.png"
 
 
 def list_ports():
@@ -35,6 +37,11 @@ class App(tk.Tk):
         super().__init__()
         self.title("MicroPython Explorer %s" % __version__)
         self.geometry("1180x680")
+        try:
+            self.icon = tk.PhotoImage(file=str(ICON))       # kept on self: Tk drops an image that gets collected
+            self.iconphoto(True, self.icon)                 # True: every pop-up window gets it too
+        except tk.TclError:
+            pass                                            # missing icon is cosmetic only
         style = ttk.Style()
         try:
             style.theme_use("clam")
