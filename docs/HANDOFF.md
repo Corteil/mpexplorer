@@ -1,9 +1,50 @@
 # Handoff / project memory
 
 Written so a new Claude session can take over with no other context. Update it as you work. Last updated at
-`main` = `ae7a1ef` (2026-10-28, end of day); CI green (Python 3.11/3.12/3.13 + real MicroPython v1.26.0 and v1.28.0).
+`main` = `c87f1ba` plus this hand-over commit (2026-10-28); CI green (Python 3.11/3.12/3.13, real MicroPython v1.26.0 and
+v1.28.0, and the `gui` job: GTK and Tk windows under xvfb).
 
-## Where we stopped (2026-10-28) - read this first
+## START HERE: hand-over to the Claude running on the Raspberry Pi (2026-10-28)
+The earlier work was done in a cloud sandbox with no hardware. You are on the owner's **Pi 5 with a real display and the
+boards plugged in**, which is the thing everything below is waiting for. Read `CLAUDE.md`, then do this in order:
+
+1. **Update and run.** `cd` to the clone, `git checkout main && git pull`, `python3 -m mpexplorer`. Keep the clone on
+   `main`: the desktop shortcut runs whichever branch is checked out. The first run creates
+   `~/.config/mpexplorer/settings.json` (new this week; see Edit > Preferences...).
+2. **Check the new settings on real Wayland** (not yet seen on the Pi): resize the window, change sort order and
+   "Show hidden files", navigate both panes, quit, start again: do size, sort, hidden and the host folder come back?
+   Connect the Tildagon, go into a subfolder, quit and restart: does it reopen in that folder? Open Edit > Preferences...
+   (toggle things, try "Reset all settings...", look at the Settings file tab). Record what you see in `docs/HARDWARE.md`.
+3. **Run the benchmark** (decides whether agent mode is built): close mpexplorer, then
+   `python3 tools/bench.py --port /dev/ttyACM0` for the Tildagon, and again for a Pico and the 2022 badge if available.
+   It only touches `/_mpx_bench` on the board, removes it, and soft-resets the board when done (the raw REPL freezes a
+   badge's screen). Paste the tables and the "Decision" lines into `docs/HARDWARE.md`. If any decision says SLOW, the
+   agent-mode plan (`docs/AGENT_PLAN.md`) is worth building; if not, drop it.
+4. **Go through the GTK hardware checklist** in `docs/TODO.md` section 1 (upload, download, rename, delete, editor save,
+   console `input()`, terminal mode, Disconnect behaviour, drag and drop, dialogs) and fix what breaks. Get `os.uname()`
+   from every board (especially the 2022 TiLDA Mk6: its MicroPython version is unconfirmed) and put it in `docs/HARDWARE.md`.
+5. **Then pick the next feature** with the owner: (a) toolbar icons with hover hints (`docs/TODO.md` section 2), or
+   (b) Open with... (`docs/OPEN_WITH_PLAN.md`; decided: saves upload automatically with a conflict check, Geany is the first
+   external editor; check `which geany`). Settings keys for it already exist (`open_with.*`); the Preferences File types
+   tab is added together with it. Agent mode only if step 3 says so.
+
+Things that behave differently on the Pi than in the sandbox:
+- **GUI tests open real windows** on your desktop if `WAYLAND_DISPLAY`/`DISPLAY` is set. They use a temporary settings
+  file and the fake board, so the real config and boards are safe, but the windows flash on screen. For quiet runs use
+  `sudo apt install xvfb` and `xvfb-run -a -s "-screen 0 1800x900x24" python3 -m pytest tests/test_gui_gtk.py tests/test_gui_tk.py`.
+  The Pi's own Python 3.11 already sees the system PyGObject (no venv needed there). On a bare Python they skip.
+- **Never kill the GUI with `pkill`/SIGKILL while a board is connected** (frozen badge screen; Ctrl-B then Ctrl-D, or the
+  reset button, recovers). **Never put DTR low** (Tildagon corrupts long replies). Close the GUI before `tools/bench.py`.
+- The sandbox could `apt-get install` and run GTK/Tk under xvfb; the Pi has the real thing, so prefer looking at real
+  screenshots (`grim`) and the virtual-mouse rig (`tools/vmouse*.py`, below) over guessing.
+- Git: work on a short branch off `main`, merge only when the owner says so (`gh pr merge N --rebase` or
+  `git push origin <branch>:main`), then check CI with `gh run list/watch/view --repo Corteil/mpexplorer`. There are two
+  merged leftovers on the remote (`claude/micropython-file-explorer-gui-7tsgfy`, `wire-settings`): safe to delete once the
+  owner agrees. Dependabot PR #2 (`action-gh-release` v3) is held until the first release tag `v0.1.0`.
+- Not a priority but open: GUI smoke tests for the dialogs with the mouse, deleting the Tk GUI once GTK is proven,
+  saved connection profiles, README screenshots, release tag.
+
+## Earlier notes from the Pi session (2026-10-28)
 - `main` has everything: GTK 3 interface is the default (`python -m mpexplorer`), Tk is `--tk` and the automatic
   fallback. All feature branches are merged and deleted. Only open PR: Dependabot #2 (`softprops/action-gh-release`
   v2 -> v3), deliberately held until the first release tag.
@@ -26,9 +67,8 @@ Written so a new Claude session can take over with no other context. Update it a
   `gh pr merge` were each blocked once by the permission system and worked after the owner repeated the request; the
   virtual mouse clicks whatever is on screen, including the terminal Claude runs in (at x >= 960 on this layout), so
   close real GUIs and keep dialogs away from the terminal; never leave the rig running.
-- Settings are wired into both GUIs with an Edit > Preferences... page (2026-10-28, branch `wire-settings`); see "Settings" in
-  `docs/DESIGN.md`. **The GUIs can now be tested in the sandbox**: `apt-get install` works there, GTK/Tk run under xvfb
-  (details in CLAUDE.md), and there are GUI tests plus a `gui` CI job. Still untested on the Pi: position restore on Wayland.
+- Settings are wired into both GUIs with an Edit > Preferences... page (merged 2026-10-28); see "Settings" in
+  `docs/DESIGN.md`. GUI tests and a `gui` CI job exist. Still untested on the Pi: position restore on Wayland.
 - Plans written 2026-10-28 (not started): `docs/AGENT_PLAN.md` (agent mode, with a measure-first decision gate) and
   `docs/OPEN_WITH_PLAN.md` (choose the program that opens a file, edit device files in external programs).
 - The ordered to-do list is `docs/TODO.md` (first item: GTK on real hardware; second: replace toolbar buttons with
@@ -65,12 +105,15 @@ EMF badges. Upload/download files, copy/paste, all standard explorer features." 
 - To learn a board's version: `import os; print(os.uname())`.
 
 ## Repo and branches
-- `Corteil/mpexplorer` (this repo). `main` is protected only by convention. Feature branch:
-  `claude/micropython-file-explorer-gui-7tsgfy`. The other two repos in the original session are unrelated here.
+- `Corteil/mpexplorer` (this repo). `main` is protected only by convention. Leftover merged branches on the remote:
+  `claude/micropython-file-explorer-gui-7tsgfy`, `wire-settings` (safe to delete). The other two repos in the original session are unrelated here.
 - CI: `.github/workflows/ci.yml` (`test` matrix 3.11-3.13; `micropython` matrix v1.26.0, v1.28.0 builds the unix port,
   cached), `release.yml` (wheel on `v*` tags, never exercised), Dependabot is on (it opened PRs to bump actions).
 
 ## What is built (all in main)
+`mpexplorer/settings.py` (validated JSON settings, atomic saves) + `remember.py` + Edit > Preferences... in both GUIs;
+`tools/bench.py` (transfer benchmark for the agent-mode decision); GUI tests (`tests/test_gui_*.py`) and a `gui` CI job.
+Earlier:
 File explorer core + GUI, upload/download/copy/cut/paste/rename/delete, conflicts, progress/cancel, editor, run script,
 raw-paste with fallback, REPL console (emulated: `_`, Ctrl-D reset, `input()`, interrupt, activity trace), folder sync
 (size + on-device SHA-256, preview, optional mirror delete, atomic writes), terminal mode (real REPL: keystrokes pass
@@ -97,9 +140,11 @@ clients do not know their own screen position, so the virtual-mouse rig (below, 
 with `winfo_rootx()`-style calls: find the window by differencing `grim` screenshots instead.
 
 ## Verified vs not verified
-- Verified in tests: core logic against the fake board (77 tests) and against real MicroPython unix port
-  v1.26.0 / v1.28.0 (16 tests, through `rawrepl_shim.py` for file/console/sync and the unix REPL for terminal tests).
-  There are **no automated GUI tests**.
+- Verified in tests (about 130 tests, all in CI): core logic against the fake board; the real MicroPython unix port
+  v1.26.0 / v1.28.0 (16 tests, through `rawrepl_shim.py` for file/console/sync and the unix REPL for terminal tests, and
+  `tools/bench.py` end to end); the settings module (23 tests); and the GTK and Tk windows' settings wiring and Preferences
+  dialogs (17 GUI tests under xvfb, the `gui` CI job). The GUI tests do not cover transfers, the editor or the console on
+  real boards, and no test touches real hardware or the real raw-REPL framing.
 - Verified by hand on a Tildagon (Pi 5, 2026-10-27): the GUI launches and renders; Scan, Connect and Disconnect work
   (the button toggles); the device pane lists `/`; the toolbar fits the window; the REPL console opens with a visible
   input box that has keyboard focus (confirmed by the owner after the fix; it used to be hidden and unfocused); the
