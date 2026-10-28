@@ -98,9 +98,18 @@ through, `AnsiScreen`, key/paste mapping, device pane paused while active), thre
   starts with focus on the window itself, not a child widget, so call `lift()` and `inp.focus_force()` after it maps.
   Debug with `root.tk.call("focus")`, `winfo_viewable()` and `winfo_width()/height()`.
   The same focus fix is on the `Editor`. Other pop-ups (conflict and sync dialogs) have not been checked for it.
+  `ConsoleWindow` and the script Output window were missing `transient` too (the owner reported the console losing the
+  mouse; `xprop` showed no `WM_TRANSIENT_FOR`) and now have it. Not yet confirmed by hand on the console.
 - Tk on labwc/XWayland: a `Toplevel` without `transient(app)` let mouse clicks fall through to the main window
   underneath (the editor looked focused but the main app reacted). `transient(app)` fixes it; `lift()` alone does not.
   `ConflictDialog` already uses `transient`.
+- Taskbar icon (wf-panel-pi on labwc): the panel matches a window to a launcher by its `WM_CLASS` *instance* name
+  (first field), not by `_NET_WM_ICON`/`iconphoto`. `App` sets `baseName="mpexplorer"`, `className="Mpexplorer"`; the
+  launcher is `~/.local/share/applications/mpexplorer.desktop` (`Icon=mpexplorer`, `StartupWMClass=Mpexplorer`) plus
+  `~/.local/share/icons/hicolor/256x256/apps/mpexplorer.png`. Those files live outside the repo. Tk names a pop-up's
+  instance after its widget (`!consolewindow`) and sibling names must be unique, so pop-ups cannot share it; they
+  don't need to, because `transient` windows get no taskbar entry. The desktop icon needs `quick_exec=1` in
+  `~/.config/libfm/libfm.conf` or pcmanfm asks "Execute?" on every double-click.
 - Tk widget paths are not containment: `'.!pane2'.startswith('.!pane')` is True, so `Pane._release` treated a
   double-click on a selected row as a drop on the other pane and downloaded a copy to the Host folder. Use
   `_inside(widget, ancestor)` (walks `.master`).
