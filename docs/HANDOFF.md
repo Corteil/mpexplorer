@@ -1,7 +1,34 @@
 # Handoff / project memory
 
 Written so a new Claude session can take over with no other context. Update it as you work. Last updated at
-`main` = `1b32266` (2026-10-27); CI green (Python 3.11/3.12/3.13 + real MicroPython v1.26.0 and v1.28.0).
+`main` = `ae7a1ef` (2026-10-28, end of day); CI green (Python 3.11/3.12/3.13 + real MicroPython v1.26.0 and v1.28.0).
+
+## Where we stopped (2026-10-28) - read this first
+- `main` has everything: GTK 3 interface is the default (`python -m mpexplorer`), Tk is `--tk` and the automatic
+  fallback. All feature branches are merged and deleted. Only open PR: Dependabot #2 (`softprops/action-gh-release`
+  v2 -> v3), deliberately held until the first release tag.
+- The owner has tried the GTK build on the Pi 5 with the Tildagon plugged in ("looking good"). Not yet done on
+  hardware: the full flow (connect, transfer, edit, console, terminal) in GTK, a Pico, the 2022 badge. First thing to do
+  tomorrow: run `python -m mpexplorer`, connect the badge, go through that list, fix what breaks, update HARDWARE.md.
+- Outside the repo, on the owner's Pi (so a fresh machine will not have them): `sudo apt install gir1.2-vte-2.91`
+  (done), `~/.local/share/applications/mpexplorer.desktop` + `~/.local/share/icons/hicolor/256x256/apps/mpexplorer.png`
+  (the taskbar icon), `~/Desktop/mpexplorer.desktop` (runs `python3 -m mpexplorer` from this clone), `quick_exec=1` in
+  `~/.config/libfm/libfm.conf` (no "Execute?" prompt). The clone is used directly (no pip install), so the shortcut
+  runs whichever branch is checked out: keep it on `main`.
+- Test rig (committed in `tools/`, excluded from ruff): `vmouse.py` + `vmouse_ctl.py` create a virtual mouse and
+  keyboard through `/dev/uinput` so a session can click and type. Needs `sudo` (passwordless here) and
+  `pip install evdev` in a scratch venv. `python3 tools/vmouse_ctl.py start <venv-python> /tmp/vm.fifo`, send lines like
+  `click 400 300` to the FIFO, `... stop` when done (and always stop it: it keeps a root process and two input devices).
+  `gtk_smoke.py` / `gtk_term_smoke.py` run the GTK app against the fake board in-process (need a display);
+  `tk_click_probe.py` is the click-through probe used on the Tk GUI.
+- Things Claude tripped on this session, avoid them: `pkill -f` / `pgrep -f` with a pattern that also appears in the
+  shell command kills or matches the shell itself (scan `/proc` or use `[x]pattern`); a hard `git reset` and a
+  `gh pr merge` were each blocked once by the permission system and worked after the owner repeated the request; the
+  virtual mouse clicks whatever is on screen, including the terminal Claude runs in (at x >= 960 on this layout), so
+  close real GUIs and keep dialogs away from the terminal; never leave the rig running.
+- Possible next features, none started: saved connection profiles, a release tag `v0.1.0` (exercises `release.yml`,
+  then merge Dependabot #2), screenshots in the README, GUI smoke tests in CI (needs a display: weston or xvfb),
+  deleting the Tk GUI once GTK is proven.
 
 ## The user and how they work
 - Owner: Corteil (GitHub), builds EMF Camp badge hardware (see their repos `rp2350-hdmi-hexpansion`,
