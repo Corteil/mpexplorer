@@ -32,7 +32,7 @@ Python >= 3.11, line length 120, ruff rules E/F/W only, no type-annotation churn
   works in the Claude sandbox). CI runs them in the `gui` job with `GUI_TESTS_REQUIRED=1`. Screenshots: render with
   `Gdk.pixbuf_get_from_window` under xvfb. Never let a test or smoke script use the real `~/.config`: pass `Settings(path)`.
 - Tk GUI (`mpexplorer/gui/`): `app.py`, `widgets.py` (Pane, editor, dialogs), `console_window.py`, `terminal_widget.py`,
-  `sync_dialog.py`. No automated GUI tests. It has been run by hand on a Pi 5 with a Tildagon (connect, list, toolbar,
+  `sync_dialog.py`, `prefs.py`. Covered by `tests/test_gui_tk.py` (settings wiring only). It has been run by hand on a Pi 5 with a Tildagon (connect, list, toolbar,
   console opens focused); much of it is still untried on hardware, see `docs/HANDOFF.md` for exactly what.
 - Tests: `tests/fakedevice.py` (fake board: raw REPL, raw-paste, friendly REPL, input), `ptyserial.py` + `rawrepl_shim.py`
   + `test_real_micropython.py` (real MicroPython unix port), `test_*.py`.
