@@ -28,6 +28,7 @@ pythonpath = ["tests", "."]
 
 [tool.ruff]
 line-length = 120
+extend-exclude = ["tools"]    # hand-run test rigs and probes (virtual mouse, GTK smoke), not shipped code
 
 [tool.ruff.lint]
 select = ["E", "F", "W"]
