@@ -35,7 +35,8 @@ Python >= 3.11, line length 120, ruff rules E/F/W only, no type-annotation churn
   a connected GUI with `pkill`/SIGKILL: it leaves the badge in raw REPL with a frozen screen (Ctrl-B, Ctrl-D recovers).
 - New `Toplevel`s need `transient(app)` (else clicks fall through to the main window on labwc/XWayland) and
   `lift()` + `focus_force()` on the input child after `after(50, ...)`. Never compare Tk path strings for containment;
-  walk `widget.master` (`_inside` in `widgets.py`).
+  walk `widget.master` (`_inside` in `widgets.py`). Every pop-up must be transient, so it stays off the taskbar and
+  the taskbar icon (matched by `WM_CLASS` instance, set in `App`) only applies to the main window.
 - Tk layout bugs: measure (`winfo_reqwidth`, `winfo_viewable`, `tk.call("focus")`) instead of guessing.
 - Behaviour that differs between the fake board and real MicroPython: fix the code, or the fake if the fake is wrong.
 - Git: develop on a feature branch (the original was `claude/micropython-file-explorer-gui-7tsgfy`; recent fixes used
