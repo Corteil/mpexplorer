@@ -38,7 +38,7 @@ class RawREPL:
         self.lock = threading.RLock()
 
     @classmethod
-    def open(cls, port, baud=115200):
+    def open(cls, port, baud=115200, paste=None):
         import serial
         ser = serial.serial_for_url(port, baudrate=baud, timeout=0.1, do_not_open=True)
         # RTS asserted can reset ESP32-S3 boards. DTR must be asserted: the Tildagon's USB CDC corrupts
@@ -46,7 +46,7 @@ class RawREPL:
         ser.dtr = True
         ser.rts = False
         ser.open()
-        return cls(ser)
+        return cls(ser, paste=paste)
 
     def _trace(self, kind, text):
         if self.trace:

@@ -43,14 +43,15 @@ label if one is missing on another theme.
 - [ ] Leave the Tk GUI alone (it is the fallback). Update README screenshots later.
 
 ## 2b. Open with... (plan: `docs/OPEN_WITH_PLAN.md`)
-- [ ] Phase 1: `openwith.py` (settings, associations, `{file}` commands, upload watcher) with tests, no GUI.
+- [ ] (Decided: saves upload automatically; Geany first.) Phase 1: `openwith.py` (settings, associations, `{file}` commands, upload watcher) with tests, no GUI.
 - [ ] Device files: download to a private cache, launch the program, upload saves back with a conflict check.
 - [ ] GTK: Open with... chooser (`Gtk.AppChooserDialog`), "remember for this type", context menu and Shift+Enter.
 - [ ] Hex and image viewers, File types preferences page, Tk fallback.
 
 ## 2c. Agent mode (plan: `docs/AGENT_PLAN.md`)
-- [ ] Phase 0 first: `tools/bench.py` on the Tildagon, a Pico and the 2022 badge; build the agent only if the numbers
-      show a problem (the board's flash write speed may be the real ceiling).
+- [x] `tools/bench.py` written and tested (fake board + real MicroPython).
+- [ ] Run `python3 tools/bench.py` on the Tildagon, a Pico and the 2022 badge; paste the tables into `docs/HARDWARE.md`.
+      Build the agent only if it says a threshold is exceeded (the board's flash write speed may be the real ceiling).
 - [ ] Then: `agent_src.py` + `AgentLink` (CPython tests), `AgentBackend` with fallback, GUI "Fast mode" toggle, pipelining.
 
 ## 3. Release and housekeeping

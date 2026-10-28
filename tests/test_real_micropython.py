@@ -249,3 +249,31 @@ def test_terminal_history_and_ctrl_c(term):
 def test_terminal_paste_mode(term):
     term.type(paste_bytes("def f(x):\n    return x * 2\nprint(f(21))\n"))
     term.wait("42\n>>> ")
+
+
+def test_benchmark_script_runs_on_real_micropython(tmp_path):
+    """tools/bench.py end to end (small sizes) on the real interpreter: ticks_ms, os.uname, gc.mem_free, file I/O."""
+    import importlib.util
+    from pathlib import Path
+
+    from conftest import SHIM, micropython_binary
+    from ptyserial import PtySerial
+
+    spec = importlib.util.spec_from_file_location("bench", Path(__file__).parent.parent / "tools" / "bench.py")
+    bench = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(bench)
+    exe, sers = micropython_binary(), []
+
+    def make(paste):
+        ser = PtySerial([exe, SHIM], cwd=str(tmp_path), banner=b"READY\r\n")
+        sers.append(ser)
+        return RawREPL(ser, paste=paste)
+    try:
+        info, rows = bench.run_benchmark(make, [4, 8], 10, root=str(tmp_path / "bench"), log=lambda s: None,
+                                         reset=False)
+    finally:
+        for ser in sers:
+            ser.close()
+    assert info["system"] and {r["mode"] for r in rows} == {"plain"}      # the shim has no raw-paste
+    assert {"upload 4 KB", "download 8 KB", "list 10 files"} <= {r["test"] for r in rows}
+    assert not (tmp_path / "bench").exists()
