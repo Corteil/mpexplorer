@@ -48,9 +48,11 @@ through, `AnsiScreen`, key/paste mapping, device pane paused while active), thre
   There are **no automated GUI tests**.
 - Verified by hand on a Tildagon (Pi 5, 2026-10-27): the GUI launches and renders; Scan, Connect and Disconnect work
   (the button toggles); the device pane lists `/`; the toolbar fits the window; the REPL console opens with a visible
-  input box that has keyboard focus (confirmed by the owner after the fix; it used to be hidden and unfocused).
+  input box that has keyboard focus (confirmed by the owner after the fix; it used to be hidden and unfocused); the
+  text editor opens focused and clicks stay in it; double-clicking a selected device file no longer downloads a copy.
+  The editor and drop fixes were seen working, but a save from the editor was not traced.
   What was typed into the console and what came back was not recorded, so running code through it is not confirmed.
-- NOT verified: running code in the REPL console, terminal mode, upload/download, editor, run script, sync and soft reset on a real
+- NOT verified: running code in the REPL console, terminal mode, upload/download, saving from the editor, run script, sync and soft reset on a real
   board; whether raw-paste is negotiated on the badge (not traced); Pico / RP2 and the 2022 badge (the DTR change
   below could behave differently there); transfer speed; whether a clean Disconnect restores the badge's own app
   (see lessons). Add rows to `docs/HARDWARE.md` once tested.
@@ -95,6 +97,13 @@ through, `AnsiScreen`, key/paste mapping, device pane paused while active), thre
   so it can never take focus). Give the output Text a small `height` and let `expand` fill. A new `Toplevel` also
   starts with focus on the window itself, not a child widget, so call `lift()` and `inp.focus_force()` after it maps.
   Debug with `root.tk.call("focus")`, `winfo_viewable()` and `winfo_width()/height()`.
+  The same focus fix is on the `Editor`. Other pop-ups (conflict and sync dialogs) have not been checked for it.
+- Tk on labwc/XWayland: a `Toplevel` without `transient(app)` let mouse clicks fall through to the main window
+  underneath (the editor looked focused but the main app reacted). `transient(app)` fixes it; `lift()` alone does not.
+  `ConflictDialog` already uses `transient`.
+- Tk widget paths are not containment: `'.!pane2'.startswith('.!pane')` is True, so `Pane._release` treated a
+  double-click on a selected row as a drop on the other pane and downloaded a copy to the Host folder. Use
+  `_inside(widget, ancestor)` (walks `.master`).
 - Shell gotcha: `pkill -f 'python3 -m mpexplorer'` also matches the shell command that contains that text and kills
   it (exit 144). Use `pgrep -fa '[p]ython3 -m mpexplorer'` or kill by pid. `gh pr edit` can fail on a GraphQL
   "Projects (classic)" warning; use `gh api -X PATCH repos/Corteil/mpexplorer/pulls/N` instead.
