@@ -66,6 +66,7 @@ command. 3. GTK chooser + default-for-type + context-menu entries. 4. Built-in h
 5. Tk equivalent (smaller: custom command and built-ins). 6. Hardware shakedown.
 
 ## Decisions
+- **Geany is the first external editor** to wire up and test with (owner, 2026-10-28).
 - **Saves upload automatically** (owner, 2026-10-28), with the conflict check above. A "paused" toggle on the status-bar
   entry for a watched file lets the user stop auto-upload for that file.
 - Notepad++ itself is Windows-only (Wine on a Pi is not a good idea), so a Notepad++-class editor means picking one of the
@@ -89,5 +90,5 @@ Bookworm, so highlighting would be hand-rolled and is not worth it): line number
 word-wrap toggles, undo/redo shortcuts, and a "trailing newline" check. Anything beyond that is what Open with... is for.
 
 ## Open questions for the owner
-- Is Geany OK as the first external editor to wire up and test with?
+- (Answered 2026-10-28: Geany is fine as the first external editor to wire up and test with.)
 - Should "Run on the board" stay a separate menu item as well? (Plan: yes.)
