@@ -42,6 +42,13 @@ label if one is missing on another theme.
 - [ ] Check it still fits the 1180 px window and the minimum width; look at it with `grim` before and after.
 - [ ] Leave the Tk GUI alone (it is the fallback). Update README screenshots later.
 
+## 2a. Settings (module built; see "Settings" in `docs/DESIGN.md`)
+- [x] `settings.py` + 22 tests: validated keys, atomic writes, damaged-file recovery, forward compatibility.
+- [ ] GTK: load at start, remember last port / folders / window size / sort / hidden, save on exit (and on change for
+      the cheap ones). Same for Tk if it is kept.
+- [ ] Edit > Preferences... page: General, File types (Open with...), Connection (fast mode, reset on disconnect).
+- [ ] Show `settings.problems` once in the status bar if the file was damaged.
+
 ## 2b. Open with... (plan: `docs/OPEN_WITH_PLAN.md`)
 - [ ] (Decided: saves upload automatically; Geany first.) Phase 1: `openwith.py` (settings, associations, `{file}` commands, upload watcher) with tests, no GUI.
 - [ ] Device files: download to a private cache, launch the program, upload saves back with a conflict check.
