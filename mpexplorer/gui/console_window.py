@@ -11,6 +11,7 @@ class ConsoleWindow(tk.Toplevel):
         super().__init__(app)
         self.app, self.session = app, session
         self.title("REPL console")
+        self.transient(app)         # tell the WM the console belongs to the main window (else clicks fall through)
         self.geometry("780x500")
         self.busy = False
         self._q = queue.Queue()
