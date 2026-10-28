@@ -26,6 +26,8 @@ Written so a new Claude session can take over with no other context. Update it a
   `gh pr merge` were each blocked once by the permission system and worked after the owner repeated the request; the
   virtual mouse clicks whatever is on screen, including the terminal Claude runs in (at x >= 960 on this layout), so
   close real GUIs and keep dialogs away from the terminal; never leave the rig running.
+- Plans written 2026-10-28 (not started): `docs/AGENT_PLAN.md` (agent mode, with a measure-first decision gate) and
+  `docs/OPEN_WITH_PLAN.md` (choose the program that opens a file, edit device files in external programs).
 - The ordered to-do list is `docs/TODO.md` (first item: GTK on real hardware; second: replace toolbar buttons with
   icons that have hover hints).
 - Possible next features, none started: saved connection profiles, a release tag `v0.1.0` (exercises `release.yml`,

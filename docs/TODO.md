@@ -42,6 +42,17 @@ label if one is missing on another theme.
 - [ ] Check it still fits the 1180 px window and the minimum width; look at it with `grim` before and after.
 - [ ] Leave the Tk GUI alone (it is the fallback). Update README screenshots later.
 
+## 2b. Open with... (plan: `docs/OPEN_WITH_PLAN.md`)
+- [ ] Phase 1: `openwith.py` (settings, associations, `{file}` commands, upload watcher) with tests, no GUI.
+- [ ] Device files: download to a private cache, launch the program, upload saves back with a conflict check.
+- [ ] GTK: Open with... chooser (`Gtk.AppChooserDialog`), "remember for this type", context menu and Shift+Enter.
+- [ ] Hex and image viewers, File types preferences page, Tk fallback.
+
+## 2c. Agent mode (plan: `docs/AGENT_PLAN.md`)
+- [ ] Phase 0 first: `tools/bench.py` on the Tildagon, a Pico and the 2022 badge; build the agent only if the numbers
+      show a problem (the board's flash write speed may be the real ceiling).
+- [ ] Then: `agent_src.py` + `AgentLink` (CPython tests), `AgentBackend` with fallback, GUI "Fast mode" toggle, pipelining.
+
 ## 3. Release and housekeeping
 - [ ] Merge the `handoff-2026-10-28` branch (docs and `tools/`) when the owner says so.
 - [ ] Tag `v0.1.0` to exercise `release.yml`, then merge Dependabot PR #2 (`softprops/action-gh-release` v3).
