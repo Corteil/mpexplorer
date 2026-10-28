@@ -304,7 +304,15 @@ class Editor(AppWindow):
         self.text.insert("1.0", text)
         self.text.edit_reset()
         self.text.edit_modified(False)
+        # Unsaved-changes prompt: a bar inside this window, not a dialog. Clicks inside the window itself are reliable;
+        # a new modal pop-up over it was seen ignoring the mouse on labwc/XWayland.
+        self.confirm = ttk.Frame(self)
+        ttk.Label(self.confirm, text="This file has unsaved changes.").pack(side="left", padx=8, pady=3)
+        ttk.Button(self.confirm, text="Save and close", command=lambda: self.save(close=True)).pack(side="left")
+        ttk.Button(self.confirm, text="Discard changes", command=self.destroy).pack(side="left", padx=4)
+        ttk.Button(self.confirm, text="Keep editing", command=self._keep_editing).pack(side="left")
         self.bind("<Control-s>", lambda _e: self.save() or "break")
+        self.bind("<Escape>", lambda _e: self._keep_editing())
         self.protocol("WM_DELETE_WINDOW", self._close)
 
     def _take_focus(self):
@@ -312,21 +320,29 @@ class Editor(AppWindow):
         self.lift()
         self.text.focus_force()
 
-    def save(self):
+    def save(self, close=False):
         data = self.text.get("1.0", "end-1c").encode("utf-8")
         self.status.config(text="Saving...")
 
         def done(_res, exc):
+            if not self.winfo_exists():
+                return
             if exc:
-                messagebox.showerror("Save failed", str(exc), parent=self)
-                self.status.config(text="Save failed")
+                self.status.config(text="Save failed: %s" % exc)
             else:
                 self.text.edit_modified(False)
                 self.status.config(text="Saved %s" % human(len(data)))
+                if close:
+                    self.destroy()
         self.app.write_file(self.backend, self.path, data, done)
 
     def _close(self):
-        if self.text.edit_modified() and not messagebox.askyesno(
-                "Discard changes?", "This file has unsaved changes. Close anyway?", parent=self):
-            return
-        self.destroy()
+        if self.text.edit_modified():
+            self.confirm.pack(side="bottom", fill="x", before=self.winfo_children()[0])
+            self.confirm.lift()
+        else:
+            self.destroy()
+
+    def _keep_editing(self):
+        self.confirm.pack_forget()
+        self.text.focus_set()
