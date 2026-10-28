@@ -152,6 +152,22 @@ compiled with the runner's GCC 15, so they need an older-toolchain container bef
   Releases that old do not build cleanly with the runner's GCC 15, so adding one to CI needs an older-toolchain
   container (ubuntu:22.04).
 
+## Settings
+`mpexplorer/settings.py` (GUI-free, `tests/test_settings.py`) is the one place anything the user chose is stored:
+`~/.config/mpexplorer/settings.json` (`$XDG_CONFIG_HOME` honoured, `$MPEXPLORER_CONFIG` overrides, mode 0600 in a 0700
+directory). `Settings.load()`, `get("window.width")`, `set(...)`, `save()`, `subscribe(callback)`.
+- Every key is declared in `SPEC` with a default and a validator; a typo raises `KeyError`, an invalid value passed to
+  `set()` raises `ValueError`. Declared so far: last port, show hidden, sort per pane, window size/position/maximised,
+  last folders (host, and per board), Open with... associations and custom commands, auto-upload of external edits,
+  fast mode (agent). Adding a setting = one line in `SPEC`.
+- Never fatal: a missing, empty or damaged file gives defaults (a damaged one is kept as `settings.json.bad`); a single
+  bad value falls back to its default and is listed in `settings.problems`; save errors return False instead of raising.
+- Forward compatible: unknown keys are preserved on save; a file with a newer `version` is read-only and never overwritten.
+- Atomic writes (temp file, fsync, replace), thread-safe, saving is a no-op when nothing changed.
+- Use `segment()` to turn a serial number or path into one safe dict key.
+**Not wired into the GUIs yet.** Next steps: remember port/folders/window/sort/hidden on exit, then a Preferences page
+(Edit > Preferences...) with General, File types and Connection tabs.
+
 ## Folder sync
 `sync.py` builds a `Plan` (mkdir / copy / delete actions) by walking both folders, then `apply_plan` runs it.
 Size differs -> changed; same size -> compare SHA-256 (`Backend.checksum`, computed on the board with `hashlib`).
