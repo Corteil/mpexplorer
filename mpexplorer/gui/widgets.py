@@ -5,6 +5,44 @@ from tkinter import messagebox, ttk
 
 from ..backends import human
 
+# WM_CLASS of the editor and console: the taskbar matches its instance name to the launcher icon
+APP_CLASS = "Mpexplorer"
+
+
+class AppWindow(tk.Toplevel):
+    """Editor/console base: a normal window with its own taskbar entry and the app icon, listed in app.windows.
+
+    Not transient: a transient window can't be minimised or listed on its own. Tk gives a pop-up the WM_CLASS instance
+    "!name", which the taskbar can't match, so it is named "mpexplorer" under a throwaway parent (names must be unique).
+    """
+
+    def __init__(self, app):
+        self._holder = tk.Frame(app)
+        super().__init__(self._holder, class_=APP_CLASS, name="mpexplorer")
+        self.app = app
+        app.windows.append(self)
+        self.bind("<Destroy>", self._gone)
+        # Re-mapping once after it opens stops clicks falling through to the main window on labwc/XWayland
+        self.after(50, self._appear)
+
+    def _appear(self):
+        self.withdraw()
+        self.update()
+        self.deiconify()
+        self.after(100, self._take_focus)
+
+    def _take_focus(self):
+        self.lift()
+
+    def _gone(self, event):
+        if event.widget is self:
+            if self in self.app.windows:
+                self.app.windows.remove(self)
+            try:
+                self._holder.destroy()
+            except tk.TclError:
+                pass                    # the whole application is closing
+
 
 def fmt_time(t):
     try:
@@ -237,14 +275,13 @@ class ConflictDialog(tk.Toplevel):
         self.destroy()
 
 
-class Editor(tk.Toplevel):
+class Editor(AppWindow):
     """Minimal text editor that saves straight back to the file's backend."""
 
     def __init__(self, app, backend, path, text):
         super().__init__(app)
-        self.app, self.backend, self.path = app, backend, path
+        self.backend, self.path = backend, path
         self.title("%s: %s" % (backend.label, path))
-        self.transient(app)         # tell the WM the editor belongs to the main window (else clicks fall through to it)
         self.geometry("720x520")
         bar = ttk.Frame(self)
         bar.pack(fill="x")
@@ -263,7 +300,6 @@ class Editor(tk.Toplevel):
         self.text.edit_modified(False)
         self.bind("<Control-s>", lambda _e: self.save() or "break")
         self.protocol("WM_DELETE_WINDOW", self._close)
-        self.after(50, self._take_focus)
 
     def _take_focus(self):
         """A new Toplevel starts with focus on the window itself, not the text box, so typing goes nowhere."""
