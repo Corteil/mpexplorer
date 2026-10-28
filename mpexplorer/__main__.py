@@ -1,5 +1,17 @@
+import os
+import sys
+
+
 def main():
-    from .gui.app import run
+    ui = os.environ.get("MPEXPLORER_UI", "tk")
+    if "--gtk" in sys.argv:
+        ui = "gtk"
+    elif "--tk" in sys.argv:
+        ui = "tk"
+    if ui == "gtk":
+        from .gtkui.app import run
+    else:
+        from .gui.app import run
     run()
 
 

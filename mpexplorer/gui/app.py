@@ -11,6 +11,7 @@ from ..clipboard import Clipboard
 from ..console import ConsoleSession
 from ..errors import BackendError, Cancelled
 from ..jobs import JobRunner
+from ..ports import list_ports
 from ..sync import apply_plan, build_plan
 from ..ops import (ConflictPolicy, copy_tree, delete_tree, is_within, move_item, total_size,
                    unique_name)
@@ -22,15 +23,6 @@ from .widgets import ConflictDialog, Editor, fmt_time, Pane
 
 MAX_EDIT_BYTES = 256 * 1024
 ICON = Path(__file__).resolve().parent.parent / "icon.png"
-
-
-def list_ports():
-    try:
-        from serial.tools import list_ports as lp
-    except ImportError:
-        return []
-    ports = sorted(lp.comports(), key=lambda p: (p.vid != 0x2E8A, p.device))   # RP2 boards first
-    return ["%s  %s" % (p.device, p.description) for p in ports]
 
 
 class App(tk.Tk):
