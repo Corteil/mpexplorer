@@ -11,6 +11,9 @@ from .errors import BackendError
 
 WRITE_BLOCK = 256       # bytes per serial write; the REPL has a small input buffer
 WRITE_PAUSE = 0.005     # seconds between blocks
+PROBE_MIN = 1024        # payloads at least this big are timed to choose between raw-paste and plain sending
+PROBE_SAMPLES = 2       # timed sends per mode before one is chosen
+PLAIN_GAIN = 1.25       # plain sending must be this much faster than raw-paste to be chosen
 
 
 class TransportError(BackendError):
@@ -27,9 +30,17 @@ class DeviceError(TransportError):
 
 
 class RawREPL:
-    def __init__(self, ser, paste=None):
-        """paste: None = use raw-paste if the firmware supports it, False = never, True = same as None."""
+    def __init__(self, ser, paste=None, adaptive=True):
+        """paste: None = use raw-paste if the firmware supports it, False = never, True = same as None.
+
+        adaptive: raw-paste stops to wait for the device every `window` bytes (128 on a Tildagon), and over USB that
+        round trip can make it slower than plain sending. The first few big sends are timed in each mode and the
+        faster one is kept for this connection. False = always raw-paste when the firmware has it.
+        """
         self.ser = ser
+        self.adaptive = adaptive
+        self.prefer_plain = None        # None = still measuring, then True/False
+        self._rates = {True: [], False: []}     # bytes/s of timed sends, keyed by "used raw-paste"
         self.raw = False
         self.paste = None if paste in (None, True) else False     # None = not yet probed
         self._rx = bytearray()
@@ -38,7 +49,7 @@ class RawREPL:
         self.lock = threading.RLock()
 
     @classmethod
-    def open(cls, port, baud=115200, paste=None):
+    def open(cls, port, baud=115200, paste=None, adaptive=True):
         import serial
         ser = serial.serial_for_url(port, baudrate=baud, timeout=0.1, do_not_open=True)
         # RTS asserted can reset ESP32-S3 boards. DTR must be asserted: the Tildagon's USB CDC corrupts
@@ -46,7 +57,7 @@ class RawREPL:
         ser.dtr = True
         ser.rts = False
         ser.open()
-        return cls(ser, paste=paste)
+        return cls(ser, paste=paste, adaptive=adaptive)
 
     def _trace(self, kind, text):
         if self.trace:
@@ -141,13 +152,16 @@ class RawREPL:
             data = code.encode()
             self._trace("send", code)
             ctl = 10.0 if timeout is None else timeout      # handshake steps always have a time limit
+            want_paste = self._want_paste(len(data))
             try:
-                if not (self.paste is not False and self._send_paste(data, ctl)):
+                started = time.monotonic()
+                if not (want_paste and self._send_paste(data, ctl)):
                     for i in range(0, len(data), WRITE_BLOCK):
                         self.ser.write(data[i:i + WRITE_BLOCK])
                         time.sleep(WRITE_PAUSE)
                     self.ser.write(b"\x04")
                     self._read_until(b"OK", ctl)
+                self._note_rate(want_paste and self.paste, len(data), time.monotonic() - started)
                 out = self._read_stream(timeout, on_output)
                 err = self._read_until(b"\x04", ctl)[:-1]
                 try:
@@ -156,6 +170,8 @@ class RawREPL:
                     pass
             except TransportError as e:
                 self._trace("error", str(e))
+                if self.paste and not want_paste:
+                    self.prefer_plain = False   # plain sending failed on this board: back to flow control
                 self.raw = False                # resync on next call
                 self.ser.write(b"\x03\x03")
                 raise
@@ -165,6 +181,27 @@ class RawREPL:
                 self._trace("error", err.decode(errors="replace"))
                 raise DeviceError(err.decode(errors="replace"))
             return out
+
+    def _want_paste(self, size):
+        """Use raw-paste for this send? Always when forced, when the firmware lacks plain-speed evidence or the
+        payload is too small to time; otherwise alternate while measuring, then follow the result."""
+        if self.paste is False:
+            return False                        # not available (or switched off)
+        if self.paste is None or not self.adaptive or size < PROBE_MIN:
+            return True                         # the first send negotiates raw-paste
+        if self.prefer_plain is not None:
+            return not self.prefer_plain
+        return len(self._rates[True]) <= len(self._rates[False])
+
+    def _note_rate(self, used_paste, size, seconds):
+        if self.prefer_plain is not None or not self.adaptive or not self.paste or size < PROBE_MIN or seconds <= 0:
+            return
+        self._rates[bool(used_paste)].append(size / seconds)
+        if min(len(r) for r in self._rates.values()) >= PROBE_SAMPLES:
+            fast, slow = (sum(self._rates[k]) / len(self._rates[k]) for k in (False, True))
+            self.prefer_plain = fast > slow * PLAIN_GAIN
+            self._trace("info", "sending: plain %.0f B/s, raw-paste %.0f B/s -> %s" % (
+                fast, slow, "plain" if self.prefer_plain else "raw-paste"))
 
     def _read_stream(self, timeout, on_output):
         """Read stdout up to the 0x04 terminator, handing chunks to on_output as they arrive."""

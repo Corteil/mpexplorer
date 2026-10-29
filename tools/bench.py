@@ -226,7 +226,7 @@ def main():
         port = ports[0].split("  ")[0]
     print("Host: %s, Python %s; port %s" % (platform.platform(), platform.python_version(), port))
     try:
-        info, rows = run_benchmark(lambda paste: RawREPL.open(port, paste=paste), sizes, args.files,
+        info, rows = run_benchmark(lambda paste: RawREPL.open(port, paste=paste, adaptive=False), sizes, args.files,
                                    force=args.force, reset=not args.no_reset)
     except BackendError as e:
         sys.exit("Benchmark stopped: %s" % e)
