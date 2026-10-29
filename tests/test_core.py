@@ -1,4 +1,7 @@
 import os
+import sys
+import time
+import types
 
 import pytest
 
@@ -186,3 +189,47 @@ def test_paste_reports_device_errors():
     with pytest.raises(DeviceError):
         repl.exec("1/0")
     assert repl.exec("print('ok')").strip() == b"ok"
+
+
+def _download(d, root, local, tmp_path, name):
+    out = tmp_path / "out"
+    out.mkdir(exist_ok=True)
+    policy = ConflictPolicy(lambda n: ("overwrite", True))
+    copy_tree(d, root + "/" + name, local, str(out / name), Progress(), policy)
+    return os.stat(out / name).st_mtime
+
+
+def test_download_keeps_the_board_file_time(dev, local, tmp_path):
+    d, root = dev
+    f = tmp_path / "a.txt"
+    f.write_bytes(b"hello")
+    os.utime(f, (1_700_000_000, 1_700_000_000))
+    # the fake board reports real epoch seconds; the host reads a board's times as its own local wall clock
+    assert _download(d, root, local, tmp_path, "a.txt") == pytest.approx(time.mktime(time.gmtime(1_700_000_000)), abs=2)
+
+
+def test_download_ignores_a_clock_that_was_never_set(dev, local, tmp_path):
+    d, root = dev
+    f = tmp_path / "old.txt"
+    f.write_bytes(b"hello")
+    os.utime(f, (946_684_800 + 3600, 946_684_800 + 3600))           # 2000-01-01 01:00: the badge default
+    assert _download(d, root, local, tmp_path, "old.txt") > time.time() - 60
+
+
+@pytest.fixture
+def fake_rtc(monkeypatch):
+    calls = []
+    machine = types.ModuleType("machine")
+    machine.RTC = lambda: types.SimpleNamespace(datetime=lambda *a: calls.append(a[0]))
+    monkeypatch.setitem(sys.modules, "machine", machine)
+    return calls
+
+
+def test_set_clock_writes_the_host_local_time(dev, fake_rtc):
+    d, _root = dev
+    before = time.localtime()
+    back = d.set_clock()
+    (y, mo, day, wd, h, mi, s, sub), = fake_rtc
+    assert (y, mo, day) == before[:3] and wd == before.tm_wday and sub == 0
+    assert abs((h * 3600 + mi * 60 + s) - (before.tm_hour * 3600 + before.tm_min * 60 + before.tm_sec)) < 5
+    assert len(back) == 6 and back[0] == time.localtime().tm_year        # the read-back

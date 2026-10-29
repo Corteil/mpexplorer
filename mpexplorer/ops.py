@@ -2,7 +2,7 @@
 import threading
 import time
 
-from .backends import CHUNK
+from .backends import CHUNK, MIN_VALID_MTIME
 from .errors import BackendError, Cancelled
 
 
@@ -94,7 +94,7 @@ def total_size(be, path):
                for e in be.listdir(path))
 
 
-def _copy_file(src_be, src, dst_be, dst, prog):
+def _copy_file(src_be, src, dst_be, dst, prog, mtime=None):
     prog.label = src_be.basename(src)
     if src_be is dst_be and hasattr(src_be, "copy_file"):
         src_be.copy_file(src, dst, prog.add)
@@ -116,6 +116,11 @@ def _copy_file(src_be, src, dst_be, dst, prog):
                 dst_be.remove(dst)      # never leave a truncated file behind
             except Exception:
                 pass
+    if ok and mtime and hasattr(dst_be, "set_mtime"):
+        try:
+            dst_be.set_mtime(dst, mtime)      # a file off a board keeps the time it was written
+        except OSError:
+            pass
 
 
 def copy_tree(src_be, src, dst_be, dst, prog, policy):
@@ -136,7 +141,8 @@ def copy_tree(src_be, src, dst_be, dst, prog, policy):
     if target is None:
         prog.add(st.size)
         return
-    _copy_file(src_be, src, dst_be, target, prog)
+    keep = st.mtime if getattr(src_be, "key", None) == "device" and st.mtime >= MIN_VALID_MTIME else None
+    _copy_file(src_be, src, dst_be, target, prog, keep)
 
 
 def delete_tree(be, path, prog):

@@ -4,12 +4,14 @@ import hashlib
 import json
 import os
 import posixpath
+import time
 from dataclasses import dataclass
 
 from .errors import BackendError
 
 CHUNK = 2048
 RP_EPOCH_OFFSET = 946684800     # seconds between 1970 and 2000 (MicroPython rp2 epoch)
+MIN_VALID_MTIME = 978307200     # 2001-01-01: an earlier time means the board's clock was never set
 
 
 @dataclass
@@ -47,6 +49,9 @@ class LocalBackend:
                 except OSError:
                     out.append(Entry(e.name, False))
         return out
+
+    def set_mtime(self, p, t):
+        os.utime(p, (t, t))
 
     def stat(self, p):
         try:
@@ -148,6 +153,28 @@ class DeviceBackend:
     def _run(self, code, timeout=10.0):
         return self.repl.exec(self.HEADER + code, timeout)
 
+    def _host_time(self, t):
+        """A file time from the board as a host timestamp. The board has no time zones: its clock is a wall-clock
+        time (set_clock writes the host's local time), so read it as the host's local time."""
+        if not t:
+            return 0            # 0 = not fetched (listdir without mtimes)
+        t += self.epoch_offset
+        try:
+            return time.mktime(time.gmtime(t))
+        except (OverflowError, OSError, ValueError):
+            return t
+
+    def clock(self):
+        """The board's clock as (year, month, day, hour, minute, second)."""
+        return tuple(self._json("import time\nprint(json.dumps(list(time.localtime())[:6]))"))
+
+    def set_clock(self, now=None):
+        """Set the board's RTC to the host's local time (or the timestamp `now`); returns the time read back."""
+        t = time.localtime(now)
+        self._run("import machine\nmachine.RTC().datetime((%d,%d,%d,%d,%d,%d,%d,0))" % (
+            t.tm_year, t.tm_mon, t.tm_mday, t.tm_wday, t.tm_hour, t.tm_min, t.tm_sec))
+        return self.clock()
+
     def _json(self, code):
         return json.loads(self._run(code))
 
@@ -168,7 +195,7 @@ class DeviceBackend:
             " if not m and len(e)>3 and e[3]>=0:\n  s=e[3]\n else:\n  try:\n   st=os.stat(p.rstrip('/')+'/'+n)\n"
             "   s=st[6];t=st[8]\n  except OSError:\n   pass\n r.append([n,1 if d else 0,0 if d else s,t])\n"
             "print(json.dumps(r))" % (p, bool(mtimes)))
-        return [Entry(n, bool(d), s, t + self.epoch_offset) for n, d, s, t in rows]
+        return [Entry(n, bool(d), s, self._host_time(t)) for n, d, s, t in rows]
 
     def stat(self, p):
         r = self._json(
@@ -177,7 +204,7 @@ class DeviceBackend:
         if r is None:
             return None
         d, size, t = r
-        return Entry(self.basename(p) or "/", bool(d), 0 if d else size, t + self.epoch_offset)
+        return Entry(self.basename(p) or "/", bool(d), 0 if d else size, self._host_time(t))
 
     def mkdir(self, p):
         self._run("os.mkdir(%r)" % p)

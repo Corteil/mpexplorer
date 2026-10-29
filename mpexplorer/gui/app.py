@@ -117,6 +117,7 @@ class App(tk.Tk):
         d.add_command(label="REPL console...", command=self.open_console)
         d.add_command(label="Run selected script", command=self.run_script)
         d.add_command(label="Free space", command=self.free_space)
+        d.add_command(label="Set board time now", command=self.set_board_clock)
         d.add_command(label="Soft reset", command=self.soft_reset)
         m.add_cascade(label="Device", menu=d)
         t = tk.Menu(m, tearoff=0)
@@ -337,6 +338,8 @@ class App(tk.Tk):
         self.right.set_location(dev, start)
         self.connect_btn.config(text="Disconnect", state="normal")
         self.set_status("Connected to %s" % port)
+        if self.settings.get("general.set_board_clock"):
+            self._set_clock(dev, "Connected to %s; " % port)
 
     def disconnect(self):
         if self.device:
@@ -604,6 +607,16 @@ class App(tk.Tk):
                                lambda res, exc: messagebox.showinfo(
                                    "Free space", str(exc) if exc else "Device: %s free" % human(res)),
                                "Checking space", quiet=True)
+
+    def set_board_clock(self):
+        if self.device and self._need_backend(self.right):
+            self._set_clock(self.device)
+
+    def _set_clock(self, dev, prefix=""):
+        def done(res, exc):
+            self.set_status(prefix + ("could not set the board clock: %s" % exc if exc
+                                      else "board clock set to %04d-%02d-%02d %02d:%02d:%02d" % tuple(res)))
+        self.runner.submit(lambda prog: dev.set_clock(), done, "Setting the clock", quiet=True)
 
     def soft_reset(self):
         if not (self.device and self._need_backend(self.right)):
