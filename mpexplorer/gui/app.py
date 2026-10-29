@@ -160,6 +160,8 @@ class App(tk.Tk):
     def _setting_changed(self, key, value):
         if key == "general.show_hidden" and bool(self.show_hidden.get()) != bool(value):
             self.show_hidden.set(bool(value))
+        elif key == "general.device_mtimes":
+            self.right.refresh()
 
     def preferences(self):
         PreferencesDialog(self)

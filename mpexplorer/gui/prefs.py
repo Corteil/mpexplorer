@@ -7,6 +7,7 @@ GENERAL = [
     ("general.remember_window", "Remember the window size"),
     ("general.remember_folders", "Remember the last folders (host, and one per board)"),
     ("general.remember_port", "Remember the last serial port"),
+    ("general.device_mtimes", "Show modified times for device files (slow: about 40 ms per file on a Tildagon)"),
 ]
 
 

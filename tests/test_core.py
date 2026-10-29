@@ -32,6 +32,16 @@ def test_listdir_and_stat(dev, tmp_path):
     assert d.stat(root + "/sub").is_dir
 
 
+def test_listdir_mtimes_only_when_asked(dev, tmp_path):
+    d, root = dev
+    (tmp_path / "a.txt").write_bytes(b"hello")
+    (tmp_path / "sub").mkdir()
+    fast = {e.name: e for e in d.listdir(root)}
+    assert fast["a.txt"].size == 5 and fast["a.txt"].mtime == 0 and fast["sub"].is_dir
+    full = {e.name: e for e in d.listdir(root, mtimes=True)}
+    assert full["a.txt"].size == 5 and full["a.txt"].mtime > 1_000_000_000 and full["sub"].mtime > 1_000_000_000
+
+
 def test_roundtrip_odd_sizes(dev, local, tmp_path):
     d, root = dev
     for size in (0, 1, CHUNK - 1, CHUNK, CHUNK * 3 + 7):

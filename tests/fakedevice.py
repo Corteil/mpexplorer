@@ -14,7 +14,8 @@ if not hasattr(os, "ilistdir"):             # MicroPython-only API used by the s
     def _ilistdir(p):
         for n in os.listdir(p):
             d = os.path.isdir(os.path.join(p, n))
-            yield (n, 0x4000 if d else 0x8000, 0)
+            full = os.path.join(p, n)       # like FAT: a 4th item with the size, no modified time
+            yield (n, 0x4000 if d else 0x8000, 0, 0 if d else os.path.getsize(full))
     os.ilistdir = _ilistdir
 
 
