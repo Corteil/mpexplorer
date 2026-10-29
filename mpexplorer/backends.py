@@ -154,23 +154,17 @@ class DeviceBackend:
         return self.repl.exec(self.HEADER + code, timeout)
 
     def _host_time(self, t):
-        """A file time from the board as a host timestamp. The board has no time zones: its clock is a wall-clock
-        time (set_clock writes the host's local time), so read it as the host's local time."""
-        if not t:
-            return 0            # 0 = not fetched (listdir without mtimes)
-        t += self.epoch_offset
-        try:
-            return time.mktime(time.gmtime(t))
-        except (OverflowError, OSError, ValueError):
-            return t
+        """A file time from the board as a host timestamp. Badge clocks hold UTC (the GPS clock and NTP both write
+        UTC to the RTC and apps add their own offset), so no time zone conversion is done here."""
+        return t + self.epoch_offset if t else 0        # 0 = not fetched (listdir without mtimes)
 
     def clock(self):
         """The board's clock as (year, month, day, hour, minute, second)."""
         return tuple(self._json("import time\nprint(json.dumps(list(time.localtime())[:6]))"))
 
     def set_clock(self, now=None):
-        """Set the board's RTC to the host's local time (or the timestamp `now`); returns the time read back."""
-        t = time.localtime(now)
+        """Set the board's RTC to the host's UTC time (or the timestamp `now`); returns the time read back."""
+        t = time.gmtime(now)
         self._run("import machine\nmachine.RTC().datetime((%d,%d,%d,%d,%d,%d,%d,0))" % (
             t.tm_year, t.tm_mon, t.tm_mday, t.tm_wday, t.tm_hour, t.tm_min, t.tm_sec))
         return self.clock()

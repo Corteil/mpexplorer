@@ -623,7 +623,7 @@ class App(Gtk.Window):
     def _set_clock(self, dev, prefix=""):
         def done(res, exc):
             self.set_status(prefix + ("could not set the board clock: %s" % exc if exc
-                                      else "board clock set to %04d-%02d-%02d %02d:%02d:%02d" % tuple(res)))
+                                      else "board clock set to %04d-%02d-%02d %02d:%02d:%02d UTC" % tuple(res)))
         self.runner.submit(lambda prog: dev.set_clock(), done, "Setting the clock", quiet=True)
 
     def soft_reset(self):
