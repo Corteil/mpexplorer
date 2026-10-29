@@ -168,3 +168,18 @@ def test_clock_is_set_on_connect_only_when_asked(make_app, tmp_path, monkeypatch
     app.connected(DeviceBackend(RawREPL(FakeSerial())), str(tmp_path), "/dev/ttyACM0", "303a:4001:AAA")
     pump(app)
     assert len(calls) == 1 and calls[0][0] == time.gmtime().tm_year
+
+
+def test_send_time_button_sets_the_board_clock(make_app, tmp_path, monkeypatch):
+    calls = []
+    machine = types.ModuleType("machine")
+    machine.RTC = lambda: types.SimpleNamespace(datetime=lambda *a: calls.append(a[0]))
+    monkeypatch.setitem(sys.modules, "machine", machine)
+    app = make_app()
+    app.connected(DeviceBackend(RawREPL(FakeSerial())), str(tmp_path), "/dev/ttyACM0", "303a:4001:AAA")
+    pump(app)
+    assert calls == []                                          # connecting alone does not touch the clock
+    app.send_time_btn.invoke()
+    pump(app)
+    assert len(calls) == 1 and calls[0][0] == time.gmtime().tm_year
+    assert "board clock set to" in app.status.cget('text')
