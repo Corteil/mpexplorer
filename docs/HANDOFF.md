@@ -1,10 +1,51 @@
 # Handoff / project memory
 
 Written so a new Claude session can take over with no other context. Update it as you work. Last updated at
-`main` = `c87f1ba` plus this hand-over commit (2026-10-28); CI green (Python 3.11/3.12/3.13, real MicroPython v1.26.0 and
-v1.28.0, and the `gui` job: GTK and Tk windows under xvfb).
+`main` = `9524f1e` plus the docs commit that follows it (2026-10-29); CI green (Python 3.11/3.12/3.13, real MicroPython
+v1.26.0 and v1.28.0, and the `gui` job: GTK and Tk windows under xvfb).
+
+## Status after the 2026-10-29 Pi session (read this first)
+Done from a Claude Code session on the Pi 5 with the Tildagon (MicroPython 1.28.0) on `/dev/ttyACM0`. Everything below is
+merged to `main` and CI was green at `9524f1e`. It was done through scripts, the fake board and GUI tests on a private
+Xvfb display; **no GUI session with the owner**, so the GUI items under "Not yet done" are untried by hand.
+
+What was done:
+- **Benchmark run** (START HERE step 3): verdict SLOW. Tables and the causes are in `docs/HARDWARE.md`; what it means for
+  agent mode is in `docs/AGENT_PLAN.md` ("Phase 0 results"). Short version: host -> board can be about 10x faster with an
+  agent (a program reading `sys.stdin.buffer` took in about 118 KB/s); board -> host is capped near 11 KB/s by the board
+  itself, for text and binary alike, so an agent cannot fix downloads.
+- `tools/bench.py`: the 1024 KB copy step skips itself when the board lacks room (it crashed with `OSError: 28`), and the
+  soft reset now also runs after an error (it used to leave the badge frozen in raw REPL).
+- **Listing**: `os.stat` costs about 40 ms per file on the Tildagon's FAT, so `DeviceBackend.listdir(path, mtimes=False)`
+  takes sizes from `ilistdir` and leaves the modified time 0. Preferences > "Show modified times for device files"
+  (`general.device_mtimes`, off by default) turns the times back on; the device pane hides its Modified column when off.
+  Copy, delete and sync use the cheap listing too.
+- **Board clock**: `DeviceBackend.set_clock()` writes the host's **UTC** time to `machine.RTC()` and reads it back (Device >
+  "Set board time now"; Preferences > "Set the board's clock (UTC)... when connecting", `general.set_board_clock`, off by
+  default). UTC because badge apps hold the RTC in UTC (the owner's GPS clock app disciplines it from GPS/NTP and adds its
+  own offset); an earlier version wrote local time and was corrected before merge. Verified on the Tildagon: set, read back,
+  kept ticking, survived a soft reset. The board's clock was 2000-01-01 before.
+- **Download keeps the board file's time** (`ops.copy_tree` -> `LocalBackend.set_mtime`), unless the board's clock was never
+  set (before 2001, `MIN_VALID_MTIME`). Uploads cannot set a time: MicroPython here has no `os.utime`.
+- **Adaptive upload mode** (`transport.py`): raw-paste's 128-byte window makes it slower than plain sending on the Tildagon,
+  so the first big sends are timed in each mode and plain is kept if 1.25x faster (about 1.6x on uploads, measured with
+  interleaved runs); a failed plain send reverts to raw-paste; `tools/bench.py` turns it off (`adaptive=False`).
+
+Not yet done (the owner or the next session): START HERE steps 1, 2 and 4 by hand (settings on Wayland, the GTK hardware
+checklist); try the three new GUI items above on the real badge, and that a downloaded file really keeps its time; the
+benchmark on a Pico and the 2022 badge, and `os.uname()` from them; decide on an upload-focused agent (check integrity at
+100+ KB/s first); find why the Tildagon's stdout is capped.
+
+Practical notes from this session:
+- The system Python has no pytest or ruff: `python3 -m venv --system-site-packages <scratch>/venv && <scratch>/venv/bin/pip
+  install -e '.[dev]'` (no sudo).
+- `xvfb-run` is not installed but `Xvfb` is: `Xvfb :97 -screen 0 1800x900x24 &`, then `env -u WAYLAND_DISPLAY DISPLAY=:97 python
+  -m pytest tests/test_gui_gtk.py tests/test_gui_tk.py`, then stop it by its PID. No windows appear on the owner's screen.
+- Every script that talks to the board must soft-reset it in a `finally` (raw REPL freezes the badge screen), and use
+  `mark_dirty(); enter_raw()` first if an earlier script died. Never leave test files on the board (use `/_mpx_*` and remove).
 
 ## START HERE: hand-over to the Claude running on the Raspberry Pi (2026-10-28)
+(Step 3 was done on 2026-10-29: see the status section above. Steps 1, 2 and 4 are still open.)
 The earlier work was done in a cloud sandbox with no hardware. You are on the owner's **Pi 5 with a real display and the
 boards plugged in**, which is the thing everything below is waiting for. Read `CLAUDE.md`, then do this in order:
 
@@ -157,6 +198,10 @@ with `winfo_rootx()`-style calls: find the window by differencing `grim` screens
   with a Tildagon plugged in: the window renders with its taskbar icon and the owner said it "looks good" (2026-10-28).
   NOT verified for GTK: clicks with the virtual mouse, real typing into the terminal, anything on the actual badge
   beyond the above, drag between panes, the conflict/sync dialogs with the mouse, the Window menu.
+- Added 2026-10-29: the Tildagon's clock set and read back (UTC); an upload through the adaptive path (128 KB, SHA-256
+  checked on the board); the fast listing compared with the full one on `/` and `/apps` (same names, kinds, sizes); the
+  benchmark; 21 GUI tests under Xvfb including the Modified column and the clock setting. NOT verified by hand: the new GUI
+  controls, a downloaded file's time on a real board, the clock setting on a Pico or the 2022 badge.
 - NOT verified (Tk, and mostly GTK too): running code in the REPL console, terminal mode, upload/download, saving from the editor, run script, sync and soft reset on a real
   board; whether raw-paste is negotiated on the badge (not traced); Pico / RP2 and the 2022 badge (the DTR change
   below could behave differently there); transfer speed; whether a clean Disconnect restores the badge's own app
@@ -172,8 +217,10 @@ with `winfo_rootx()`-style calls: find the window by differencing `grim` screens
    tests (build `App` against the fake board; CI would need `xvfb`).
 2. Get `os.uname()` from the 2022 badge; if old, add an older-toolchain CI leg (container `ubuntu:22.04`; GCC 15 breaks
    releases <= ~1.22: they abort with "stack smashing detected" on the first exception).
-3. Measure transfer speed with raw-paste on/off on hardware; tune `CHUNK` (2 KB) / `WRITE_BLOCK`.
-4. Agent mode (opt-in, RAM-only; design in DESIGN.md) only if measured speed demands it.
+3. Transfer speed is measured on the Tildagon (done, see HARDWARE.md); still to do on a Pico and the 2022 badge; tune `CHUNK`
+   (2 KB) / `WRITE_BLOCK` if wanted.
+4. Agent mode (opt-in, RAM-only): the gate said yes, but only uploads can gain much (see `docs/AGENT_PLAN.md`, "Phase 0
+   results"). Needs the owner's decision.
 5. Nice-to-haves: saved connection profiles, release tag `v0.1.0` (exercise `release.yml`), merge/handle Dependabot PRs,
    screenshots in README, hardware matrix rows.
 
@@ -240,4 +287,16 @@ with `winfo_rootx()`-style calls: find the window by differencing `grim` screens
 - Shell gotcha: `pkill -f 'python3 -m mpexplorer'` also matches the shell command that contains that text and kills
   it (exit 144). Use `pgrep -fa '[p]ython3 -m mpexplorer'` or kill by pid. `gh pr edit` can fail on a GraphQL
   "Projects (classic)" warning; use `gh api -X PATCH repos/Corteil/mpexplorer/pulls/N` instead.
+- **Raw-paste window is 128 bytes on the Tildagon** (it stops and waits for the device every 128 bytes, about 8.7 ms per window
+  over USB, about 15 KB/s of code text); plain sending (256-byte blocks, 5 ms apart) is about 35 KB/s. Hence the adaptive mode.
+- **Board output to the host is capped near 10.7 KB/s** whatever is printed or how (`print`, `sys.stdout.write`,
+  `sys.stdout.buffer.write`, any chunk size), also with a bare blocking pyserial read. Not our code; cause unknown.
+  Host -> board has no such cap: `sys.stdin.buffer.read` with no pauses took in about 118 KB/s.
+- **`os.stat` is about 40 ms per file on the Tildagon's FAT**; `os.ilistdir` is 8-18 ms per entry and includes the size (mount
+  points such as `/sdcard` come back as 3-item tuples without one, so those still fall back to `stat`).
+- **Badge RTC is UTC by convention** and holds time across a soft reset, but not power loss (no battery): it reads 2000-01-01
+  until something sets it (GPS, NTP, or `set_clock`). 0 is used as "time not fetched" in listings; do not run it through
+  a time zone conversion (London was UTC+1 all of 1970, which turned 0 into -3600).
+- The default benchmark size of 1024 KB cannot run its on-board copy step on a Tildagon (about 2 MB free, needs 2x).
+- Run GUI tests under Xvfb on the Pi (see the status section), not on the real display.
 - No persistent memory store exists outside the repo, so this file and CLAUDE.md are the memory. Keep them current.

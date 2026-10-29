@@ -1,16 +1,37 @@
 # Plan: agent mode (opt-in, RAM-only)
 
-Status: **planned, not started.** The short design in `docs/DESIGN.md` ("Planned: agent mode") is the summary; this is the
-detailed plan. Decision rule: build it only if hardware numbers say the snippet approach is too slow (phase 0).
+Status: **planned, not started. Phase 0 is done for the Tildagon (2026-10-29): the gate says build it, but the numbers
+narrow what it can win. Read "Phase 0 results" below before building.** The short design in `docs/DESIGN.md`
+("Planned: agent mode") is the summary; this is the detailed plan.
+
+## Phase 0 results (Tildagon, MicroPython 1.28.0, Pi 5; full tables in `docs/HARDWARE.md`)
+`tools/bench.py` verdict: **SLOW** (256 KB upload 23.7 s at best, download 43.7 s, list 200 files 9.6 s; thresholds 10 s,
+10 s, 2 s). Then the causes were measured one by one. This changes what an agent can promise:
+
+| Direction / operation | Measured | Cause | Can an agent help? |
+|---|---|---|---|
+| Host -> board, today | 7-12 KB/s (raw-paste 7.7, plain 12.3 after the adaptive change) | each 2 KB chunk is a base64 snippet; raw-paste waits every 128 bytes | **Yes, a lot.** A running program reading `sys.stdin.buffer.read(512)` with no host pauses took in 16 KB at **about 118 KB/s** (device-timed 152 KB/s). The board's flash write (about 100 KB/s) becomes the limit: expect roughly 5-10x on uploads. Data integrity at that rate was not checked (the test sent a constant byte and only counted bytes) |
+| Board -> host | **10.7 KB/s**, identical for `print`, `sys.stdout.write` and **`sys.stdout.buffer.write`**, any chunk size; a plain blocking `pyserial` read gave the same number | the board's stdout path (cause not investigated, looks like about 64 bytes per 6 ms in the firmware's USB serial) | **Only a little.** Dropping base64 and per-chunk calls gives at most about 1.8x (5.9 -> 10.7 KB/s). The cap itself is not ours. Compressing on the board (a `deflate` module exists from MicroPython 1.21) might help compressible files but costs CPU and is unmeasured |
+| Listing | 200 files 9.6 s | `os.stat` costs about 40 ms per file on the board's FAT; `ilistdir` is 8-18 ms per entry and already returns the size | Not much: the cost is on the board, not the link. The snippet backend now skips `stat` (sizes from `ilistdir`; modified times only if "Show modified times for device files" is on), so an agent's `L` should do the same, and `S` can fetch one time lazily |
+
+Consequences for the design:
+- The "Ceiling" paragraph below (USB CDC 0.5-1 MB/s) is **wrong for output from this board**: that direction is about 11 KB/s.
+  Input to the board is not capped like that, which is where the agent pays off.
+- Success criteria are split: uploads 3x or better is realistic; downloads are limited to about 1.8x by the board; listing
+  is already improved without an agent.
+- A download-only agent would be a poor trade; an upload-focused or "fast writes" mode is the justified part. Consider building
+  `W` (write) and the stdin-streaming loop first, and keeping reads on snippets until someone finds why stdout is slow.
+- Not yet measured: a Pico (USB CDC on RP2 is different hardware) and the 2022 badge, so none of this is established for them.
+- Interim wins already in `main`: adaptive raw-paste/plain sending (`transport.py`, about 1.6x on uploads) and the cheaper listing.
 
 ## Why, and the honest ceiling
 Today every operation is a Python snippet sent through the raw REPL; file data travels as base64 in 2 KB chunks, one
 round trip per chunk. The agent replaces that with a small binary protocol served by a loop running on the board.
 - Expected gain: fewer bytes (no base64, no per-chunk source), no per-chunk compile, pipelining hides USB latency, and one
   round trip per folder listing instead of one per directory plus a `stat` per entry.
-- **Ceiling:** USB full-speed CDC is roughly 0.5-1 MB/s, but on these boards the flash filesystem write speed
-  (often 50-300 KB/s) is usually the limit, so uploads may only improve a few times over. Downloads and listings gain more.
-  Measure before promising numbers.
+- **Ceiling (original guess, superseded by "Phase 0 results"):** USB full-speed CDC is roughly 0.5-1 MB/s, but on these
+  boards the flash filesystem write speed (often 50-300 KB/s) is usually the limit, so uploads may only improve a few times
+  over. On the Tildagon, uploads can improve that way, but downloads cannot: its output to the host is capped near 11 KB/s.
 
 ## Non-negotiables
 - **Nothing is written to the board.** The host sends the agent source over the raw REPL (`exec`); it lives in RAM and is
@@ -20,7 +41,9 @@ round trip per chunk. The agent replaces that with a small binary protocol serve
 - The user is told it runs a helper on the board while enabled (status bar indicator).
 
 ## Phase 0 - measure first (needs hardware) -> decision gate
-**Built:** `tools/bench.py` (tested on the fake board and real MicroPython in CI). Run it on each board:
+**Built and run on the Tildagon (2026-10-29):** `tools/bench.py` (tested on the fake board and real MicroPython in CI). Still
+to run on a Pico and the 2022 badge. Use `--sizes 64,256` on boards with under about 2 MB free (the 1024 KB copy step now
+skips itself when there is no room). Run it on each board:
 `python3 tools/bench.py --port /dev/ttyACM0` (close mpexplorer first). It works only in `/_mpx_bench` on the board, removes
 it, soft-resets the board at the end, prints a table and applies the rule below. The original spec follows.
 
@@ -117,6 +140,7 @@ not change. Errors map to the exceptions the GUI already shows (`BackendError`).
 - Complexity budget: keep the agent under ~150 lines; if it grows past that, simplify the protocol instead.
 
 ## Success criteria
-At least 3x on 256 KB transfers and under 1 s to list 200 files on a target where phase 0 showed a problem; no data
+(Revised after phase 0: uploads at least 3x; downloads as fast as the board's output allows, about 11 KB/s on a Tildagon;
+listing is handled outside the agent.) Originally: at least 3x on 256 KB transfers and under 1 s to list 200 files on a target where phase 0 showed a problem; no data
 corruption in the soak test; recovery after cable pull without restarting the GUI; all existing tests pass unchanged for
 the plain backend.
