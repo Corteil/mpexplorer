@@ -204,8 +204,7 @@ def test_download_keeps_the_board_file_time(dev, local, tmp_path):
     f = tmp_path / "a.txt"
     f.write_bytes(b"hello")
     os.utime(f, (1_700_000_000, 1_700_000_000))
-    # the fake board reports real epoch seconds; the host reads a board's times as its own local wall clock
-    assert _download(d, root, local, tmp_path, "a.txt") == pytest.approx(time.mktime(time.gmtime(1_700_000_000)), abs=2)
+    assert _download(d, root, local, tmp_path, "a.txt") == pytest.approx(1_700_000_000, abs=2)   # board times are UTC
 
 
 def test_download_ignores_a_clock_that_was_never_set(dev, local, tmp_path):
@@ -225,11 +224,11 @@ def fake_rtc(monkeypatch):
     return calls
 
 
-def test_set_clock_writes_the_host_local_time(dev, fake_rtc):
+def test_set_clock_writes_utc(dev, fake_rtc):
     d, _root = dev
-    before = time.localtime()
+    before = time.gmtime()
     back = d.set_clock()
     (y, mo, day, wd, h, mi, s, sub), = fake_rtc
     assert (y, mo, day) == before[:3] and wd == before.tm_wday and sub == 0
     assert abs((h * 3600 + mi * 60 + s) - (before.tm_hour * 3600 + before.tm_min * 60 + before.tm_sec)) < 5
-    assert len(back) == 6 and back[0] == time.localtime().tm_year        # the read-back
+    assert len(back) == 6 and back[0] == time.gmtime().tm_year        # the read-back

@@ -167,4 +167,4 @@ def test_clock_is_set_on_connect_only_when_asked(make_app, tmp_path, monkeypatch
     app.settings.set("general.set_board_clock", True)
     app.connected(DeviceBackend(RawREPL(FakeSerial())), str(tmp_path), "/dev/ttyACM0", "303a:4001:AAA")
     pump(app)
-    assert len(calls) == 1 and calls[0][0] == time.localtime().tm_year
+    assert len(calls) == 1 and calls[0][0] == time.gmtime().tm_year
