@@ -373,7 +373,8 @@ class App(Gtk.Window):
             if self.console:
                 self.console.close()
             self.right.clear()
-            self.runner.submit(lambda prog: dev.close(), label="Disconnecting", quiet=True)
+            reset = self.settings.get("general.reset_on_disconnect")
+            self.runner.submit(lambda prog: dev.close(reset), label="Disconnecting", quiet=True)
             self.connect_btn.set_label("Connect")
             self.connect_btn.set_sensitive(True)
             self.set_status("Disconnected")
@@ -383,7 +384,7 @@ class App(Gtk.Window):
         self.runner.cancel_all()
         if self.device:
             try:
-                self.device.close()
+                self.device.close(self.settings.get("general.reset_on_disconnect"))
             except Exception:
                 pass
 

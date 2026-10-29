@@ -68,6 +68,7 @@ SPEC = {
     "general.remember_window": (True, boolean),     # Preferences: restore window size/position at start
     "general.remember_folders": (True, boolean),    # ... the last host folder and the last folder per board
     "general.remember_port": (True, boolean),       # ... the last serial port
+    "general.reset_on_disconnect": (False, boolean),   # soft-reset the board when disconnecting or quitting
     "general.set_board_clock": (False, boolean),    # set the board's clock (UTC) to the host's time at every connect
     "general.device_mtimes": (False, boolean),      # device pane: fetch modified times (one slow stat per file)
     "general.sort.host": (["name", False], sort_order),

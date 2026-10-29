@@ -371,7 +371,8 @@ class App(tk.Tk):
             if self.console:
                 self.console.close()
             self.right.clear()
-            self.runner.submit(lambda prog: dev.close(), label="Disconnecting", quiet=True)
+            reset = self.settings.get("general.reset_on_disconnect")
+            self.runner.submit(lambda prog: dev.close(reset), label="Disconnecting", quiet=True)
             self.connect_btn.config(text="Connect", state="normal")
             self.set_status("Disconnected")
 
@@ -380,7 +381,7 @@ class App(tk.Tk):
         self.runner.cancel_all()
         if self.device:
             try:
-                self.device.close()
+                self.device.close(self.settings.get("general.reset_on_disconnect"))
             except Exception:
                 pass
         self.destroy()

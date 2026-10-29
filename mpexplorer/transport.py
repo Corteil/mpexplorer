@@ -285,10 +285,18 @@ class RawREPL:
             self.raw = False
             time.sleep(0.5)
 
-    def close(self):
+    def close(self, reset=False):
+        """Leave raw mode and close the port. reset=True also soft-resets the board first, which brings a badge's
+        screen back (connecting interrupts the badge OS; plain Ctrl-B leaves it stopped)."""
         with self.lock:
             try:
-                self.ser.write(b"\x02")
+                if reset:
+                    self._trace("info", "soft reset on close")
+                    self.ser.write(b"\x02\x04")
+                    self.ser.flush()
+                    time.sleep(0.3)             # let the board take the Ctrl-D before the port closes
+                else:
+                    self.ser.write(b"\x02")
             except Exception:
                 pass
             self.ser.close()
