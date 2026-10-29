@@ -1,7 +1,7 @@
 # Handoff / project memory
 
 Written so a new Claude session can take over with no other context. Update it as you work. Last updated at
-`main` = `9524f1e` plus the docs commit that follows it (2026-10-29); CI green (Python 3.11/3.12/3.13, real MicroPython
+`main` = `878f52d` (2026-10-29); CI green (Python 3.11/3.12/3.13, real MicroPython
 v1.26.0 and v1.28.0, and the `gui` job: GTK and Tk windows under xvfb).
 
 ## Status after the 2026-10-29 Pi session (read this first)
@@ -27,12 +27,16 @@ What was done:
   kept ticking, survived a soft reset. The board's clock was 2000-01-01 before.
 - **Download keeps the board file's time** (`ops.copy_tree` -> `LocalBackend.set_mtime`), unless the board's clock was never
   set (before 2001, `MIN_VALID_MTIME`). Uploads cannot set a time: MicroPython here has no `os.utime`.
+- **Send time button** (toolbar, next to Connect, both GUIs): same action as Device > "Set board time now". The toolbar now
+  wraps onto a second row when the window is narrow (GTK `FlowBox` of two groups, Port..Send time and Upload..Delete; Tk
+  re-lays out on `<Configure>`), so the window's minimum width is set by the panes (about 995 px in GTK), and at the 1180 px
+  default the toolbar shows two rows (one row needs about 1460 px). Tested under Xvfb only: not yet seen on the real display.
 - **Adaptive upload mode** (`transport.py`): raw-paste's 128-byte window makes it slower than plain sending on the Tildagon,
   so the first big sends are timed in each mode and plain is kept if 1.25x faster (about 1.6x on uploads, measured with
   interleaved runs); a failed plain send reverts to raw-paste; `tools/bench.py` turns it off (`adaptive=False`).
 
 Not yet done (the owner or the next session): START HERE steps 1, 2 and 4 by hand (settings on Wayland, the GTK hardware
-checklist); try the three new GUI items above on the real badge, and that a downloaded file really keeps its time; the
+checklist); try the new GUI items above (Send time, the two Preferences options, the wrapped toolbar) on the real display and badge, and that a downloaded file really keeps its time; the
 benchmark on a Pico and the 2022 badge, and `os.uname()` from them; decide on an upload-focused agent (check integrity at
 100+ KB/s first); find why the Tildagon's stdout is capped.
 
