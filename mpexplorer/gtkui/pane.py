@@ -125,7 +125,7 @@ class Pane(Gtk.Frame):
             except Exception as e:
                 self._loaded(token, None, e)
         else:
-            self.app.runner.submit(lambda prog: be.listdir(path),
+            self.app.runner.submit(lambda prog: be.listdir(path, mtimes=self.app.settings.get("general.device_mtimes")),
                                    on_done=lambda res, exc: self._loaded(token, res, exc),
                                    label="Listing " + path, quiet=True)
 

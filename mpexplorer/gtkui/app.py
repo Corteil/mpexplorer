@@ -138,6 +138,8 @@ class App(Gtk.Window):
                 self.hidden_item.set_active(self.show_hidden)
             for p in self.panes:
                 p._render()
+        elif key == "general.device_mtimes":
+            self.right.refresh()
 
     def preferences(self):
         dlg = PreferencesDialog(self)

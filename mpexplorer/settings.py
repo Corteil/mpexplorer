@@ -68,6 +68,7 @@ SPEC = {
     "general.remember_window": (True, boolean),     # Preferences: restore window size/position at start
     "general.remember_folders": (True, boolean),    # ... the last host folder and the last folder per board
     "general.remember_port": (True, boolean),       # ... the last serial port
+    "general.device_mtimes": (False, boolean),      # device pane: fetch modified times (one slow stat per file)
     "general.sort.host": (["name", False], sort_order),
     "general.sort.device": (["name", False], sort_order),
     "window.width": (1180, integer(300, 10000)),

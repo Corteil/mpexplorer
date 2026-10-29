@@ -79,7 +79,7 @@ def test_listdir_stat_and_errors(dev, tmp_path):
     d, root = dev
     (tmp_path / "a.txt").write_bytes(b"hello")
     (tmp_path / "sub").mkdir()
-    entries = {e.name: e for e in d.listdir(root)}
+    entries = {e.name: e for e in d.listdir(root, mtimes=True)}
     assert set(entries) == {"a.txt", "sub"}
     assert entries["a.txt"].size == 5 and entries["sub"].is_dir and entries["a.txt"].mtime > 1_000_000_000
     assert d.stat(root + "/nope") is None and d.stat(root + "/sub").is_dir

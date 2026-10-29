@@ -36,7 +36,7 @@ class LocalBackend:
     def basename(self, p):
         return os.path.basename(p.rstrip(os.sep))
 
-    def listdir(self, p):
+    def listdir(self, p, mtimes=True):
         out = []
         with os.scandir(p) as it:
             for e in it:
@@ -160,12 +160,14 @@ class DeviceBackend:
     def basename(self, p):
         return posixpath.basename(p.rstrip("/"))
 
-    def listdir(self, p):
+    def listdir(self, p, mtimes=False):
+        """List a folder. os.stat costs tens of ms per file on some boards (FAT on a Tildagon), so unless
+        mtimes is set the size comes from ilistdir's own tuple and the modified time is left 0."""
         rows = self._json(
-            "p=%r\nr=[]\nfor e in os.ilistdir(p):\n n=e[0]\n d=e[1]&0x4000\n s=t=0\n"
-            " try:\n  st=os.stat(p.rstrip('/')+'/'+n)\n  s=st[6];t=st[8]\n"
-            " except OSError:\n  pass\n r.append([n,1 if d else 0,0 if d else s,t])\n"
-            "print(json.dumps(r))" % p)
+            "p=%r\nm=%r\nr=[]\nfor e in os.ilistdir(p):\n n=e[0]\n d=e[1]&0x4000\n s=t=0\n"
+            " if not m and len(e)>3 and e[3]>=0:\n  s=e[3]\n else:\n  try:\n   st=os.stat(p.rstrip('/')+'/'+n)\n"
+            "   s=st[6];t=st[8]\n  except OSError:\n   pass\n r.append([n,1 if d else 0,0 if d else s,t])\n"
+            "print(json.dumps(r))" % (p, bool(mtimes)))
         return [Entry(n, bool(d), s, t + self.epoch_offset) for n, d, s, t in rows]
 
     def stat(self, p):
