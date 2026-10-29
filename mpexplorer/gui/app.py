@@ -78,7 +78,7 @@ class App(tk.Tk):
         self.right.clear()
         self.protocol("WM_DELETE_WINDOW", self._quit)
         self.update_idletasks()
-        self.minsize(self.winfo_reqwidth(), 400)        # never narrower than the toolbar
+        self.minsize(max(self._tb_conn.winfo_reqwidth(), self._tb_files.winfo_reqwidth()) + 8, 400)   # one toolbar row
         self._normal_size = (self.winfo_width(), self.winfo_height())
         self.bind("<Configure>", self._configured)
         if self.settings.problems:
@@ -209,28 +209,48 @@ class App(tk.Tk):
             self.show_window(win)
 
     def _build_toolbar(self):
-        bar = ttk.Frame(self)
+        """Two groups that share one row when the window is wide enough and stack when it is not."""
+        self._toolbar = bar = ttk.Frame(self)
         bar.pack(fill="x", padx=4, pady=4)
-        ttk.Label(bar, text="Port").pack(side="left")
+        self._tb_conn = conn = ttk.Frame(bar)
+        self._tb_files = files = ttk.Frame(bar)
+        ttk.Label(conn, text="Port").pack(side="left")
         self.port_var = tk.StringVar()
-        self.port_box = ttk.Combobox(bar, textvariable=self.port_var, width=38)
+        self.port_box = ttk.Combobox(conn, textvariable=self.port_var, width=38)
         self.port_box.pack(side="left", padx=4)
-        ttk.Button(bar, text="Scan", command=self.scan_ports).pack(side="left")
-        self.connect_btn = ttk.Button(bar, text="Connect", command=self.toggle_connection)
+        ttk.Button(conn, text="Scan", command=self.scan_ports).pack(side="left")
+        self.connect_btn = ttk.Button(conn, text="Connect", command=self.toggle_connection)
         self.connect_btn.pack(side="left", padx=4)
-        self.send_time_btn = ttk.Button(bar, text="Send time", command=self.set_board_clock)
+        self.send_time_btn = ttk.Button(conn, text="Send time", command=self.set_board_clock)
         self.send_time_btn.pack(side="left")
-        ttk.Separator(bar, orient="vertical").pack(side="left", fill="y", padx=6)
-        ttk.Button(bar, text="Upload >>", command=lambda: self.transfer(self.left, self.right)).pack(side="left")
-        ttk.Button(bar, text="<< Download",
+        ttk.Button(files, text="Upload >>", command=lambda: self.transfer(self.left, self.right)).pack(side="left")
+        ttk.Button(files, text="<< Download",
                    command=lambda: self.transfer(self.right, self.left)).pack(side="left", padx=4)
-        ttk.Button(bar, text="Copy", command=lambda: self.copy("copy")).pack(side="left", padx=(12, 0))
-        ttk.Button(bar, text="Cut", command=lambda: self.copy("cut")).pack(side="left")
-        ttk.Button(bar, text="Paste", command=self.paste).pack(side="left")
-        ttk.Button(bar, text="New folder", command=self.new_folder).pack(side="left", padx=(12, 0))
-        ttk.Button(bar, text="Rename", command=self.rename).pack(side="left")
-        ttk.Button(bar, text="Delete", command=self.delete).pack(side="left")
+        ttk.Button(files, text="Copy", command=lambda: self.copy("copy")).pack(side="left", padx=(12, 0))
+        ttk.Button(files, text="Cut", command=lambda: self.copy("cut")).pack(side="left")
+        ttk.Button(files, text="Paste", command=self.paste).pack(side="left")
+        ttk.Button(files, text="New folder", command=self.new_folder).pack(side="left", padx=(12, 0))
+        ttk.Button(files, text="Rename", command=self.rename).pack(side="left")
+        ttk.Button(files, text="Delete", command=self.delete).pack(side="left")
+        self._tb_wide = None
+        bar.bind("<Configure>", lambda _e: self._layout_toolbar())
+        self._layout_toolbar()
         self.scan_ports()
+
+    def _layout_toolbar(self):
+        bar, conn, files = self._toolbar, self._tb_conn, self._tb_files
+        wide = bar.winfo_width() >= conn.winfo_reqwidth() + files.winfo_reqwidth() + 16
+        if wide == self._tb_wide:
+            return
+        self._tb_wide = wide
+        conn.pack_forget()
+        files.pack_forget()
+        if wide:
+            conn.pack(side="left")
+            files.pack(side="left", padx=(16, 0))
+        else:
+            conn.pack(side="top", anchor="w")
+            files.pack(side="top", anchor="w", pady=(4, 0))
 
     def _build_statusbar(self):
         bar = ttk.Frame(self)

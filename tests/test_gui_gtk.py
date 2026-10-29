@@ -223,3 +223,14 @@ def test_send_time_button_sets_the_board_clock(make_app, tmp_path, monkeypatch):
     pump()
     assert len(calls) == 1 and calls[0][0] == time.gmtime().tm_year
     assert "board clock set to" in app.status.get_text()
+
+
+def test_toolbar_wraps_onto_a_second_row_when_narrow(make_app):
+    app = make_app()
+    bar = app.send_time_btn.get_parent().get_parent().get_parent()          # button > group > FlowBoxChild > FlowBox
+    app.resize(1800, 600)
+    pump(600)
+    one_row = bar.get_allocated_height()
+    app.resize(width_for(app, 900), 600)                                     # below the width of both groups together
+    pump(600)
+    assert bar.get_allocated_height() > one_row * 1.5

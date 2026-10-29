@@ -208,26 +208,33 @@ class App(Gtk.Window):
         menu.show_all()
 
     def _build_toolbar(self):
-        bar = Gtk.Box(spacing=4, margin_start=4, margin_end=4)
-        bar.pack_start(Gtk.Label(label="Port"), False, False, 0)
+        """Two groups that share one row when the window is wide enough and wrap onto a second row when it is not."""
+        conn = Gtk.Box(spacing=4)
+        conn.pack_start(Gtk.Label(label="Port"), False, False, 0)
         self.port_box = Gtk.ComboBoxText.new_with_entry()
         self.port_box.set_size_request(340, -1)
-        bar.pack_start(self.port_box, False, False, 4)
-        bar.pack_start(button("Scan", self.scan_ports), False, False, 0)
+        conn.pack_start(self.port_box, False, False, 4)
+        conn.pack_start(button("Scan", self.scan_ports), False, False, 0)
         self.connect_btn = button("Connect", self.toggle_connection)
-        bar.pack_start(self.connect_btn, False, False, 4)
+        conn.pack_start(self.connect_btn, False, False, 4)
         self.send_time_btn = button("Send time", self.set_board_clock)
         self.send_time_btn.set_tooltip_text("Set the board's clock to this computer's time (UTC)")
-        bar.pack_start(self.send_time_btn, False, False, 0)
-        bar.pack_start(Gtk.Separator(orientation=Gtk.Orientation.VERTICAL), False, False, 6)
-        bar.pack_start(button("Upload >>", lambda: self.transfer(self.left, self.right)), False, False, 0)
-        bar.pack_start(button("<< Download", lambda: self.transfer(self.right, self.left)), False, False, 4)
-        bar.pack_start(button("Copy", lambda: self.copy("copy")), False, False, 0)
-        bar.pack_start(button("Cut", lambda: self.copy("cut")), False, False, 0)
-        bar.pack_start(button("Paste", self.paste), False, False, 0)
-        bar.pack_start(button("New folder", self.new_folder), False, False, 6)
-        bar.pack_start(button("Rename", self.rename), False, False, 0)
-        bar.pack_start(button("Delete", self.delete), False, False, 0)
+        conn.pack_start(self.send_time_btn, False, False, 0)
+        files = Gtk.Box(spacing=4)
+        files.pack_start(button("Upload >>", lambda: self.transfer(self.left, self.right)), False, False, 0)
+        files.pack_start(button("<< Download", lambda: self.transfer(self.right, self.left)), False, False, 4)
+        files.pack_start(button("Copy", lambda: self.copy("copy")), False, False, 0)
+        files.pack_start(button("Cut", lambda: self.copy("cut")), False, False, 0)
+        files.pack_start(button("Paste", self.paste), False, False, 0)
+        files.pack_start(button("New folder", self.new_folder), False, False, 6)
+        files.pack_start(button("Rename", self.rename), False, False, 0)
+        files.pack_start(button("Delete", self.delete), False, False, 0)
+        bar = Gtk.FlowBox(selection_mode=Gtk.SelectionMode.NONE, max_children_per_line=2, homogeneous=False,
+                          column_spacing=16, row_spacing=4, margin_start=4, margin_end=4, valign=Gtk.Align.START)
+        bar.add(conn)
+        bar.add(files)
+        for child in bar.get_children():
+            child.set_can_focus(False)          # the buttons take focus, not the row wrappers
         self.scan_ports()
         return bar
 

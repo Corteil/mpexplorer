@@ -183,3 +183,14 @@ def test_send_time_button_sets_the_board_clock(make_app, tmp_path, monkeypatch):
     pump(app)
     assert len(calls) == 1 and calls[0][0] == time.gmtime().tm_year
     assert "board clock set to" in app.status.cget('text')
+
+
+def test_toolbar_wraps_onto_a_second_row_when_narrow(make_app):
+    app = make_app()
+    app.geometry("1700x600+0+0")
+    pump(app)
+    one_row = app._toolbar.winfo_height()
+    assert app._tb_wide is True
+    app.geometry("1000x600+0+0")
+    pump(app)
+    assert app._tb_wide is False and app._toolbar.winfo_height() > one_row * 1.5
