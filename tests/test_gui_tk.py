@@ -8,6 +8,7 @@ import types
 
 import pytest
 
+import fakedisplay
 from fakedevice import FakeSerial
 from guiskip import unavailable
 from mpexplorer.backends import DeviceBackend
@@ -205,3 +206,33 @@ def test_disconnect_resets_the_board_only_when_the_setting_is_on(make_app, tmp_p
         app.disconnect()
         pump(app)
         assert serial.closed and serial.resets == resets
+
+
+def test_badge_screen_follows_the_connection(make_app, tmp_path, monkeypatch):
+    rec = fakedisplay.install(monkeypatch)
+    app = make_app(general__reset_on_disconnect=False)
+    app.connected(DeviceBackend(RawREPL(FakeSerial())), str(tmp_path), "/dev/ttyACM0", "303a:4001:AAA")
+    pump(app)
+    assert "CONNECTED" in rec.all_text() and "Ready" in rec.all_text()
+    app.runner.submit(lambda prog: None, label="Uploading main.py ...")            # a non-quiet job shows what it is
+    pump(app)
+    assert "Uploading main.py" in rec.all_text() and rec.last[-2] == "Done"
+    app.disconnect()
+    pump(app)
+    assert "DISCONNECTED" in rec.last
+
+
+def test_badge_screen_is_not_drawn_when_switched_off_or_when_the_board_restarts(make_app, tmp_path, monkeypatch):
+    rec = fakedisplay.install(monkeypatch)
+    app = make_app(general__badge_screen=False)
+    app.connected(DeviceBackend(RawREPL(FakeSerial())), str(tmp_path), "/dev/ttyACM0", "303a:4001:AAA")
+    pump(app)
+    app.disconnect()
+    pump(app)
+    assert rec.frames == []
+    app = make_app(general__reset_on_disconnect=True)
+    app.connected(DeviceBackend(RawREPL(FakeSerial())), str(tmp_path), "/dev/ttyACM0", "303a:4001:AAA")
+    pump(app)
+    app.disconnect()                                                               # the badge restarts: no goodbye page
+    pump(app)
+    assert rec.frames and "DISCONNECTED" not in rec.all_text()

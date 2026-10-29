@@ -9,7 +9,8 @@ something. State of the project: see "Where we stopped" in `docs/HANDOFF.md`.
 - [ ] Editor on a device file: open, edit, Ctrl+S, close with unsaved changes (info bar), save and close.
 - [ ] REPL console (emulated): run code, `input()`, Ctrl+D reset, Esc interrupt, Show activity. Then Terminal mode
       (real REPL, tab completion, paste), switch back, device pane resumes.
-- [ ] Does Disconnect bring the badge's own app back? (it only leaves raw REPL today, no soft reset)
+- [x] Does Disconnect bring the badge's own app back? No: the badge stays frozen after a plain disconnect. Preferences >
+      "Restart the board when disconnecting or quitting" (off by default) fixes it; confirmed on the Tildagon 2026-10-29.
 - [ ] Same run on a Pico / Pico 2, and the 2022 badge (DTR change may behave differently). Add rows to `docs/HARDWARE.md`.
 - [ ] Mouse in GTK windows: drag between panes, context menu, conflict dialog, sync dialog, Window menu. (The old
       virtual-mouse rig can't aim at Wayland-native windows yet: locate them by differencing `grim` screenshots.)
@@ -20,8 +21,9 @@ icons through `Gtk.Image.new_from_icon_name`, `Gtk.IconSize.LARGE_TOOLBAR`, flat
 All icon names below exist in the Pi's current theme (PiXflat); check `Gtk.IconTheme.has_icon` and fall back to the text
 label if one is missing on another theme.
 
-- [ ] Add a helper in `gtkui/common.py`: `icon_button(icon_name, tooltip, callback, fallback_label)`.
-- [ ] Toolbar (`gtkui/app.py` `_build_toolbar`), keep Port box and keep Connect as an icon that swaps:
+- [x] (Done 2026-10-29, `main` after `8fd57f2`; rendered under Xvfb with the PiXflat theme, not yet seen on the real display.)
+- [x] Add a helper in `gtkui/common.py`: `icon_button(icon_name, tooltip, callback, fallback_label)` (and `set_icon`).
+- [x] Toolbar (`gtkui/app.py` `_build_toolbar`), keep Port box and keep Connect as an icon that swaps:
 
   | Button | Icon | Hover hint |
   |---|---|---|
@@ -35,12 +37,19 @@ label if one is missing on another theme.
   | Delete | `user-trash` (or `edit-delete`) | Delete (Del) |
   | Cancel (status bar) | `process-stop` | Cancel the running job |
 
-- [ ] Pane bar (`gtkui/pane.py`): Up -> `go-up` ("Parent folder, Backspace"), Refresh -> `view-refresh` ("Refresh, F5").
-- [ ] Editor Save -> `document-save` ("Save, Ctrl+S"); console Run / Interrupt / Clear -> `media-playback-start` /
+- [x] Pane bar (`gtkui/pane.py`): Up -> `go-up` ("Parent folder, Backspace"), Refresh -> `view-refresh` ("Refresh, F5").
+- [x] Editor Save -> `document-save` ("Save, Ctrl+S"); console Run / Interrupt / Clear -> `media-playback-start` /
       `process-stop` / `edit-clear` with hints ("Run, Enter", "Interrupt, Esc", "Clear output").
-- [ ] Show the shortcut in each hint, and keep the menus as they are (text) so nothing is lost.
+- [x] Show the shortcut in each hint, and keep the menus as they are (text) so nothing is lost.
 - [ ] Check it still fits the 1180 px window and the minimum width; look at it with `grim` before and after.
-- [ ] Leave the Tk GUI alone (it is the fallback). Update README screenshots later.
+- [x] Leave the Tk GUI alone (it is the fallback). Still to do: update README screenshots.
+
+## 2d. Badge status screen (`mpexplorer/badgescreen.py`)
+- [x] While connected, a Tildagon's frozen screen shows a status page: CONNECTED, this computer's name, the device folder, free
+      space, what is happening (Uploading x, Done, Failed) and the connect time; DISCONNECTED when the badge is not restarted.
+      Preferences > "Show a status screen on the badge while connected" (`general.badge_screen`, on by default, from the next
+      connect). Boards without `display.get_ctx()` are detected on the first draw and left alone. Seen on the real badge.
+- [ ] Not tried through the GUI with real transfers; each redraw costs about 0.2-0.6 s on the serial line.
 
 ## 2a. Settings (module built; see "Settings" in `docs/DESIGN.md`)
 - [x] `settings.py` + 22 tests: validated keys, atomic writes, damaged-file recovery, forward compatibility.

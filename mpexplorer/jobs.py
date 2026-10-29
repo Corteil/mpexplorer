@@ -6,8 +6,9 @@ from .ops import Progress
 
 
 class Job:
-    def __init__(self, fn, on_done, label, quiet):
+    def __init__(self, fn, on_done, label, quiet, status=None):
         self.fn, self.on_done, self.label, self.quiet = fn, on_done, label, quiet
+        self.status = status or label.rstrip(" .")      # short text for the badge's screen
         self.prog = Progress()
         self.prog.label = label
 
@@ -18,10 +19,11 @@ class JobRunner(threading.Thread):
         self.q = queue.Queue()
         self.finished = queue.Queue()
         self.current = None
+        self.hook = None        # optional hook(job, "start"|"end", exc), called on the worker thread around each job
         self.start()
 
-    def submit(self, fn, on_done=None, label="", quiet=False):
-        job = Job(fn, on_done, label, quiet)
+    def submit(self, fn, on_done=None, label="", quiet=False, status=None):
+        job = Job(fn, on_done, label, quiet, status)
         self.q.put(job)
         return job
 
@@ -29,12 +31,21 @@ class JobRunner(threading.Thread):
         while True:
             job = self.q.get()
             self.current = job
+            self._hook(job, "start", None)
             try:
                 res, exc = job.fn(job.prog), None
             except BaseException as e:      # reported to the GUI thread, never lost
                 res, exc = None, e
+            self._hook(job, "end", exc)
             self.current = None
             self.finished.put((job, res, exc))
+
+    def _hook(self, job, phase, exc):
+        if self.hook:
+            try:
+                self.hook(job, phase, exc)
+            except Exception:
+                pass            # a broken observer must never break the worker
 
     def drain(self):
         out = []

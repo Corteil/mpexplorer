@@ -1,7 +1,7 @@
 # Handoff / project memory
 
 Written so a new Claude session can take over with no other context. Update it as you work. Last updated at
-`main` = `6bce1fa` (2026-10-29); CI green (Python 3.11/3.12/3.13, real MicroPython
+`main` = `8fd57f2` plus the toolbar-icons and badge-screen branches (2026-10-29); CI green (Python 3.11/3.12/3.13, real MicroPython
 v1.26.0 and v1.28.0, and the `gui` job: GTK and Tk windows under xvfb).
 
 ## Status after the 2026-10-29 Pi session (read this first)
@@ -36,6 +36,16 @@ What was done:
   the option on, `RawREPL.close(reset=True)` sends Ctrl-B Ctrl-D so the badge restarts. **Confirmed by the owner on the
   Tildagon** (the badge reset after a connect and disconnect). The screen still stays frozen while connected: unavoidable.
   Note: the badge re-enumerated as `/dev/ttyACM1` after a reset; Scan finds it.
+- **Toolbar icons** (GTK only; Tk unchanged): toolbar, pane bars, editor, console and status bar use theme icons (PiXflat) with
+  hover hints that carry the shortcut; `icon_button`/`set_icon` in `gtkui/common.py` fall back to the old text label if the theme
+  lacks an icon. Connect swaps its icon with the state. At 1180 px the toolbar now fits on one row. Rendered under Xvfb with
+  `gtk-icon-theme-name=PiXflat` (Xvfb has no settings daemon, so set it in the script); not yet seen on the real display.
+- **Badge status screen** (`mpexplorer/badgescreen.py`, `docs/TODO.md` 2d): while connected, the Tildagon's frozen screen shows a
+  status page (CONNECTED, this computer's name, device folder, free space, current activity, connect time). Drawn through the raw
+  REPL with `display.get_ctx()`/`display.end_frame(ctx)` (RAM only), by a `JobRunner.hook` that runs on the worker thread around
+  every non-quiet job and by `folder_changed`. Preferences > "Show a status screen on the badge..." (`general.badge_screen`, on
+  by default). Verified on the real Tildagon (idle and busy pages, screenshots with `badge-screengrab/grab.py`); not driven by
+  real transfers through the GUI yet. Boards without the display API are detected on the first draw and skipped.
 - **Adaptive upload mode** (`transport.py`): raw-paste's 128-byte window makes it slower than plain sending on the Tildagon,
   so the first big sends are timed in each mode and plain is kept if 1.25x faster (about 1.6x on uploads, measured with
   interleaved runs); a failed plain send reverts to raw-paste; `tools/bench.py` turns it off (`adaptive=False`).
@@ -306,6 +316,9 @@ with `winfo_rootx()`-style calls: find the window by differencing `grim` screens
 - **Badge RTC is UTC by convention** and holds time across a soft reset, but not power loss (no battery): it reads 2000-01-01
   until something sets it (GPS, NTP, or `set_clock`). 0 is used as "time not fetched" in listings; do not run it through
   a time zone conversion (London was UTC+1 all of 1970, which turned 0 into -3600).
+- **A hook on the job runner must not keep the window alive**: the worker thread never exits, so `runner.hook = self._badge_hook`
+  kept every old app (and its Tk interpreter) alive and made the Tk GUI tests flaky (about 1 run in 3, plus "main thread is not
+  in main loop" warnings). The hook now holds the app through a `weakref`; six clean runs after that.
 - The default benchmark size of 1024 KB cannot run its on-board copy step on a Tildagon (about 2 MB free, needs 2x).
 - Run GUI tests under Xvfb on the Pi (see the status section), not on the real display.
 - No persistent memory store exists outside the repo, so this file and CLAUDE.md are the memory. Keep them current.

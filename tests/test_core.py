@@ -5,8 +5,10 @@ import types
 
 import pytest
 
+import fakedisplay
 from fakedevice import FakeSerial
 from mpexplorer.backends import CHUNK, DeviceBackend, LocalBackend
+from mpexplorer.badgescreen import BadgeScreen, fit
 from mpexplorer.errors import BackendError, Cancelled
 from mpexplorer.jobs import JobRunner
 from mpexplorer.ops import (ConflictPolicy, Progress, copy_tree, delete_tree, is_within,
@@ -294,3 +296,50 @@ def test_close_resets_the_board_only_when_asked(reset, resets):
     repl.exec("print(1)")
     repl.close(reset)
     assert ser.closed and ser.resets == resets
+
+
+def test_fit_shortens_text_and_keeps_the_end_of_a_path():
+    assert fit("short") == "short" and fit("a" * 30) == "a" * 18 + ".."
+    assert fit("/apps/Corteil_tildagon_gps_clock", tail=True).startswith("..")
+    assert fit("/apps/Corteil_tildagon_gps_clock", tail=True).endswith("gps_clock") and len(fit("x" * 99, 10)) == 10
+    assert fit("tab\there\n") == "tabhere"                      # control characters never reach the board
+
+
+def test_badge_screen_draws_the_status_page_and_skips_repeats(monkeypatch, tmp_path):
+    rec = fakedisplay.install(monkeypatch)
+    screen = BadgeScreen(RawREPL(FakeSerial(paste="on")), host="raspberrypi")
+    assert screen.show("Ready", folder=str(tmp_path)) is True
+    text = " ".join(rec.last)
+    assert all(w in text for w in ("mpexplorer", "CONNECTED", "raspberrypi", "Ready", "MB free", "since"))
+    assert screen.show() is False and len(rec.frames) == 1                 # nothing changed: no second exec
+    assert screen.show("Uploading main.py", kind="busy") is True and "Uploading main.py" in " ".join(rec.last)
+    assert screen.show("press reset button", kind="gone") is True
+    assert "DISCONNECTED" in rec.last and "MB free" not in " ".join(rec.last)
+
+
+def test_badge_screen_leaves_a_board_without_a_display_alone(monkeypatch):
+    monkeypatch.setitem(sys.modules, "display", None)                       # `import display` raises ImportError
+    repl = RawREPL(FakeSerial(paste="on"))
+    calls = []
+    real = repl.exec
+    repl.exec = lambda *a, **k: (calls.append(1), real(*a, **k))[1]
+    screen = BadgeScreen(repl)
+    assert screen.show("Ready") is False and screen.available is False and len(calls) == 1
+    assert screen.show("Done") is False and len(calls) == 1               # not tried again
+
+
+def test_job_runner_hook_sees_start_and_end_and_cannot_break_the_worker():
+    seen = []
+    runner = JobRunner()
+    runner.hook = lambda job, phase, exc: (seen.append((job.status, phase, type(exc).__name__ if exc else None)),
+                                           1 / 0)[0]                        # the hook itself fails every time
+    runner.submit(lambda prog: 1, label="Copying ...")
+    runner.submit(lambda prog: 1 / 0, label="Deleting ...", status="Deleting x")
+    deadline = time.time() + 5
+    done = []
+    while len(done) < 2 and time.time() < deadline:
+        done += runner.drain()
+        time.sleep(0.01)
+    assert [d[2] for d in done] == [None, done[1][2]] and isinstance(done[1][2], ZeroDivisionError)
+    assert seen == [("Copying", "start", None), ("Copying", "end", None),
+                    ("Deleting x", "start", None), ("Deleting x", "end", "ZeroDivisionError")]
