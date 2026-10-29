@@ -109,8 +109,12 @@ def run_mode(repl, label, sizes_kb, nfiles, root, workdir, log):
         row("download %d KB" % size, secs, size)
         if sha(src) != sha(back):
             raise BackendError("%d KB round trip came back different: data corruption" % size)
-        secs, _ = timed(lambda: dev.copy_file(remote, remote + ".copy"))
-        row("copy on board %d KB" % size, secs, size)
+        free_kb = int(repl.exec("import os;s=os.statvfs('/');print(s[0]*s[3]//1024)").decode().strip())
+        if free_kb > size + 64:
+            secs, _ = timed(lambda: dev.copy_file(remote, remote + ".copy"))
+            row("copy on board %d KB" % size, secs, size)
+        else:
+            log("  copy on board %d KB skipped: only %d KB free on the board" % (size, free_kb))
         secs, digest = timed(lambda: dev.checksum(remote))
         row("sha-256 on board %d KB" % size, secs, size, "" if digest else "no hashlib")
 
@@ -154,8 +158,11 @@ def run_benchmark(make_repl, sizes_kb, nfiles, root=BENCH_DIR, log=print, force=
                         delete_tree(dev, root, Progress())
                     except Exception as e:              # never hide the real error, but say the cleanup failed
                         log("WARNING: could not remove %s on the board: %s" % (root, e))
-                if reset:
-                    dev.soft_reset()
+                    if reset:                           # also after an error: raw REPL freezes a badge's screen
+                        try:
+                            dev.soft_reset()
+                        except Exception as e:
+                            log("WARNING: could not soft-reset the board: %s" % e)
             finally:
                 try:
                     repl.close()
