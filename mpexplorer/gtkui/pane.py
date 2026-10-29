@@ -1,6 +1,6 @@
 """One directory listing bound to a backend (host or device)."""
 from ..backends import human
-from .common import Gdk, GLib, Gtk, button, error, fmt_time, scrolled
+from .common import Gdk, GLib, Gtk, error, fmt_time, icon_button, scrolled
 
 DND_TARGET = [Gtk.TargetEntry.new("application/x-mpexplorer-items", Gtk.TargetFlags.SAME_APP, 0)]
 
@@ -21,8 +21,8 @@ class Pane(Gtk.Frame):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2, margin=2)
         self.add(box)
         bar = Gtk.Box(spacing=4)
-        bar.pack_start(button("Up", self.up), False, False, 0)
-        bar.pack_start(button("Refresh", self.refresh), False, False, 0)
+        bar.pack_start(icon_button("go-up", "Parent folder (Backspace)", self.up, "Up"), False, False, 0)
+        bar.pack_start(icon_button("view-refresh", "Refresh (F5)", self.refresh, "Refresh"), False, False, 0)
         self.path_entry = Gtk.Entry()
         self.path_entry.connect("activate", lambda e: self.go(e.get_text()))
         bar.pack_start(self.path_entry, True, True, 0)
