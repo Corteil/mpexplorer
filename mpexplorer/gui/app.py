@@ -218,6 +218,8 @@ class App(tk.Tk):
         ttk.Button(bar, text="Scan", command=self.scan_ports).pack(side="left")
         self.connect_btn = ttk.Button(bar, text="Connect", command=self.toggle_connection)
         self.connect_btn.pack(side="left", padx=4)
+        self.send_time_btn = ttk.Button(bar, text="Send time", command=self.set_board_clock)
+        self.send_time_btn.pack(side="left")
         ttk.Separator(bar, orient="vertical").pack(side="left", fill="y", padx=6)
         ttk.Button(bar, text="Upload >>", command=lambda: self.transfer(self.left, self.right)).pack(side="left")
         ttk.Button(bar, text="<< Download",
