@@ -234,3 +234,14 @@ def test_toolbar_wraps_onto_a_second_row_when_narrow(make_app):
     app.resize(width_for(app, 900), 600)                                     # below the width of both groups together
     pump(600)
     assert bar.get_allocated_height() > one_row * 1.5
+
+
+def test_disconnect_resets_the_board_only_when_the_setting_is_on(make_app, tmp_path):
+    for on, resets in ((False, 0), (True, 1)):
+        serial = FakeSerial()
+        app = make_app(general__reset_on_disconnect=on)
+        app.connected(DeviceBackend(RawREPL(serial)), str(tmp_path), "/dev/ttyACM0", "303a:4001:AAA")
+        pump()
+        app.disconnect()
+        pump()
+        assert serial.closed and serial.resets == resets

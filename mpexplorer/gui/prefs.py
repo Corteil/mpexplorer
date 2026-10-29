@@ -7,6 +7,7 @@ GENERAL = [
     ("general.remember_window", "Remember the window size"),
     ("general.remember_folders", "Remember the last folders (host, and one per board)"),
     ("general.remember_port", "Remember the last serial port"),
+    ("general.reset_on_disconnect", "Restart the board when disconnecting or quitting (brings a badge's screen back)"),
     ("general.set_board_clock", "Set the board's clock (UTC) to this computer's time when connecting"),
     ("general.device_mtimes", "Show modified times for device files (slow: about 40 ms per file on a Tildagon)"),
 ]

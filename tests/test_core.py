@@ -285,3 +285,12 @@ def test_set_clock_writes_utc(dev, fake_rtc):
     assert (y, mo, day) == before[:3] and wd == before.tm_wday and sub == 0
     assert abs((h * 3600 + mi * 60 + s) - (before.tm_hour * 3600 + before.tm_min * 60 + before.tm_sec)) < 5
     assert len(back) == 6 and back[0] == time.gmtime().tm_year        # the read-back
+
+
+@pytest.mark.parametrize("reset,resets", [(False, 0), (True, 1)])
+def test_close_resets_the_board_only_when_asked(reset, resets):
+    ser = FakeSerial(paste="on")
+    repl = RawREPL(ser)
+    repl.exec("print(1)")
+    repl.close(reset)
+    assert ser.closed and ser.resets == resets

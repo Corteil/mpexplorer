@@ -247,8 +247,8 @@ class DeviceBackend:
     def soft_reset(self):
         self.repl.soft_reset()
 
-    def close(self):
-        self.repl.close()
+    def close(self, reset=False):
+        self.repl.close(reset)
 
 
 def human(n):
