@@ -1,6 +1,6 @@
 """Minimal text editor that saves straight back to the file's backend."""
 from ..backends import human
-from .common import Gdk, Gtk, button, monospace_view, scrolled
+from .common import Gdk, Gtk, icon_button, monospace_view, scrolled
 
 
 class Editor(Gtk.Window):
@@ -12,7 +12,7 @@ class Editor(Gtk.Window):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         self.add(box)
         bar = Gtk.Box(spacing=8, margin=2)
-        bar.pack_start(button("Save (Ctrl+S)", self.save), False, False, 0)
+        bar.pack_start(icon_button("document-save", "Save (Ctrl+S)", self.save, "Save (Ctrl+S)"), False, False, 0)
         self.status = Gtk.Label(label="", xalign=0)
         bar.pack_start(self.status, True, True, 0)
         box.pack_start(bar, False, False, 0)

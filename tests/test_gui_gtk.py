@@ -245,3 +245,35 @@ def test_disconnect_resets_the_board_only_when_the_setting_is_on(make_app, tmp_p
         app.disconnect()
         pump()
         assert serial.closed and serial.resets == resets
+
+
+def _buttons(widget):
+    found = []
+    if isinstance(widget, Gtk.Button):
+        found.append(widget)
+    if isinstance(widget, Gtk.Container):
+        for child in widget.get_children():
+            found += _buttons(child)
+    return found
+
+
+def test_icon_buttons_all_have_hover_hints(make_app):
+    app = make_app()
+    for b in _buttons(app.get_children()[0]):
+        assert b.get_tooltip_text(), "a button has no hover hint: label=%r" % b.get_label()
+
+
+def test_icon_button_falls_back_to_text_when_the_theme_lacks_the_icon():
+    b = common.icon_button("no-such-icon-name", "Do the thing", lambda: None, "Thing")
+    assert b.get_label() == "Thing" and b.get_tooltip_text() == "Do the thing"
+
+
+def test_connect_button_swaps_its_hint_with_the_state(make_app, tmp_path):
+    app = make_app()
+    assert app.connect_btn.get_tooltip_text() == "Connect to the board"
+    app.connected(DeviceBackend(RawREPL(FakeSerial())), str(tmp_path), "/dev/ttyACM0", "303a:4001:AAA")
+    pump()
+    assert app.connect_btn.get_tooltip_text() == "Disconnect from the board"
+    app.disconnect()
+    pump()
+    assert app.connect_btn.get_tooltip_text() == "Connect to the board"

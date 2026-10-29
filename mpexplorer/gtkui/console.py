@@ -6,7 +6,7 @@ gir1.2-vte-2.91).
 import queue
 
 from . import terminal
-from .common import Gdk, GLib, Gtk, button, info, monospace_view, scrolled
+from .common import Gdk, GLib, Gtk, icon_button, info, monospace_view, scrolled, set_icon
 
 
 class ConsoleWindow(Gtk.Window):
@@ -22,11 +22,11 @@ class ConsoleWindow(Gtk.Window):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3, margin=4)
         self.add(box)
         bar = Gtk.Box(spacing=4)
-        self.run_btn = button("Run (Enter)", self.run)
-        self.stop_btn = button("Interrupt (Esc)", self.interrupt)
+        self.run_btn = icon_button("media-playback-start", "Run (Enter)", self.run, "Run (Enter)")
+        self.stop_btn = icon_button("process-stop", "Interrupt (Esc)", self.interrupt, "Interrupt (Esc)")
         bar.pack_start(self.run_btn, False, False, 0)
         bar.pack_start(self.stop_btn, False, False, 0)
-        bar.pack_start(button("Clear", self.clear), False, False, 0)
+        bar.pack_start(icon_button("edit-clear", "Clear output", self.clear, "Clear"), False, False, 0)
         self.activity = Gtk.CheckButton(label="Show activity")
         self.activity.connect("toggled", lambda _c: self._toggle_activity())
         bar.pack_start(self.activity, False, False, 10)
@@ -218,13 +218,13 @@ class ConsoleWindow(Gtk.Window):
     def _start(self, action):
         self.busy = True
         self._set_prompt()
-        self.run_btn.set_label("Send input (Enter)")
+        set_icon(self.run_btn, "media-playback-start", "Send input (Enter)", "Send input (Enter)")
 
         def done(_res, exc):
             self.busy = False
             if self.get_window() is not None:
                 self._set_prompt()
-                self.run_btn.set_label("Run (Enter)")
+                set_icon(self.run_btn, "media-playback-start", "Run (Enter)", "Run (Enter)")
                 if exc:
                     self.write("%s\n" % exc, "err")
         self.app.runner.submit(lambda _prog: action(), done, "Console", quiet=True)

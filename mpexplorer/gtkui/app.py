@@ -14,7 +14,7 @@ from ..remember import device_start, host_start, port_choice, remember_folder, r
 from ..settings import Settings
 from ..sync import apply_plan, build_plan
 from ..transport import RawREPL
-from .common import ICON, Gdk, GdkPixbuf, GLib, Gtk, ask_yes_no, button, error, fmt_time, info, prompt
+from .common import ICON, Gdk, GdkPixbuf, GLib, Gtk, ask_yes_no, error, fmt_time, icon_button, info, prompt, set_icon
 from .console import ConsoleWindow
 from .dialogs import OutputWindow, SyncDialog, ask_conflict
 from .editor import Editor
@@ -214,21 +214,26 @@ class App(Gtk.Window):
         self.port_box = Gtk.ComboBoxText.new_with_entry()
         self.port_box.set_size_request(340, -1)
         conn.pack_start(self.port_box, False, False, 4)
-        conn.pack_start(button("Scan", self.scan_ports), False, False, 0)
-        self.connect_btn = button("Connect", self.toggle_connection)
+        conn.pack_start(icon_button("view-refresh", "Scan for serial ports", self.scan_ports, "Scan"), False, False, 0)
+        self.connect_btn = icon_button("network-offline", "Connect to the board", self.toggle_connection, "Connect")
         conn.pack_start(self.connect_btn, False, False, 4)
-        self.send_time_btn = button("Send time", self.set_board_clock)
-        self.send_time_btn.set_tooltip_text("Set the board's clock to this computer's time (UTC)")
+        self.send_time_btn = icon_button(("appointment-soon", "appointment-new", "x-office-calendar"),
+                                         "Set the board's clock to this computer's time (UTC)",
+                                         self.set_board_clock, "Send time")
         conn.pack_start(self.send_time_btn, False, False, 0)
         files = Gtk.Box(spacing=4)
-        files.pack_start(button("Upload >>", lambda: self.transfer(self.left, self.right)), False, False, 0)
-        files.pack_start(button("<< Download", lambda: self.transfer(self.right, self.left)), False, False, 4)
-        files.pack_start(button("Copy", lambda: self.copy("copy")), False, False, 0)
-        files.pack_start(button("Cut", lambda: self.copy("cut")), False, False, 0)
-        files.pack_start(button("Paste", self.paste), False, False, 0)
-        files.pack_start(button("New folder", self.new_folder), False, False, 6)
-        files.pack_start(button("Rename", self.rename), False, False, 0)
-        files.pack_start(button("Delete", self.delete), False, False, 0)
+        for icon, tip, cb, label, pad in (
+                ("go-next", "Upload selected to the device", lambda: self.transfer(self.left, self.right),
+                 "Upload >>", 0),
+                ("go-previous", "Download selected to the host", lambda: self.transfer(self.right, self.left),
+                 "<< Download", 4),
+                ("edit-copy", "Copy (Ctrl+C)", lambda: self.copy("copy"), "Copy", 0),
+                ("edit-cut", "Cut (Ctrl+X)", lambda: self.copy("cut"), "Cut", 0),
+                ("edit-paste", "Paste (Ctrl+V)", self.paste, "Paste", 0),
+                ("folder-new", "New folder (F7)", self.new_folder, "New folder", 6),
+                ("accessories-text-editor", "Rename (F2)", self.rename, "Rename", 0),
+                (("user-trash", "edit-delete"), "Delete (Del)", self.delete, "Delete", 0)):
+            files.pack_start(icon_button(icon, tip, cb, label), False, False, pad)
         bar = Gtk.FlowBox(selection_mode=Gtk.SelectionMode.NONE, max_children_per_line=2, homogeneous=False,
                           column_spacing=16, row_spacing=4, margin_start=4, margin_end=4, valign=Gtk.Align.START)
         bar.add(conn)
@@ -245,7 +250,8 @@ class App(Gtk.Window):
         self.bar = Gtk.ProgressBar()
         self.bar.set_size_request(260, -1)
         bar.pack_start(self.bar, False, False, 0)
-        bar.pack_start(button("Cancel", self.runner.cancel_all), False, False, 0)
+        bar.pack_start(icon_button("process-stop", "Cancel the running job", self.runner.cancel_all, "Cancel"),
+                       False, False, 0)
         return bar
 
     def context_menu(self):
@@ -327,7 +333,7 @@ class App(Gtk.Window):
             return
         self.disconnect()
         self.set_status("Connecting to %s ..." % port)
-        self.connect_btn.set_label("Connecting...")
+        self._connect_state("connecting")
         self.connect_btn.set_sensitive(False)
 
         board = board_id(port)
@@ -345,7 +351,7 @@ class App(Gtk.Window):
         def done(res, exc):
             self.connect_btn.set_sensitive(True)
             if exc:
-                self.connect_btn.set_label("Connect")
+                self._connect_state("connect")
                 self.set_status("Connection failed")
                 error(self, "Connection failed", str(exc))
                 return
@@ -359,11 +365,18 @@ class App(Gtk.Window):
         self.session = ConsoleSession(dev.repl)
         remember_port(self.settings, port)
         self.right.set_location(dev, start)
-        self.connect_btn.set_label("Disconnect")
+        self._connect_state("disconnect")
         self.connect_btn.set_sensitive(True)
         self.set_status("Connected to %s" % port)
         if self.settings.get("general.set_board_clock"):
             self._set_clock(dev, "Connected to %s; " % port)
+
+    def _connect_state(self, state):
+        """The Connect button shows what a click would do: plug in, unplug, or wait."""
+        icon, tip, label = {"connect": ("network-offline", "Connect to the board", "Connect"),
+                            "connecting": ("emblem-synchronizing", "Connecting...", "Connecting..."),
+                            "disconnect": ("network-wired", "Disconnect from the board", "Disconnect")}[state]
+        set_icon(self.connect_btn, icon, tip, label)
 
     def disconnect(self):
         if self.device:
@@ -375,7 +388,7 @@ class App(Gtk.Window):
             self.right.clear()
             reset = self.settings.get("general.reset_on_disconnect")
             self.runner.submit(lambda prog: dev.close(reset), label="Disconnecting", quiet=True)
-            self.connect_btn.set_label("Connect")
+            self._connect_state("connect")
             self.connect_btn.set_sensitive(True)
             self.set_status("Disconnected")
 

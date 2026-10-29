@@ -66,6 +66,35 @@ def button(label, callback, tooltip=None):
     return b
 
 
+def _icon_name(icon):
+    """The first icon of `icon` (a name or a tuple of alternatives) that the current theme has, else None."""
+    theme = Gtk.IconTheme.get_default()
+    for name in (icon,) if isinstance(icon, str) else icon:
+        if theme.has_icon(name):
+            return name
+    return None
+
+
+def set_icon(b, icon, tooltip, label):
+    """Show `icon` on button b with a hover hint; a text button (`label`) when the theme lacks the icon."""
+    name = _icon_name(icon)
+    if name:
+        b.set_label("")
+        b.set_image(Gtk.Image.new_from_icon_name(name, Gtk.IconSize.LARGE_TOOLBAR))
+        b.set_always_show_image(True)
+    else:
+        b.set_image(None)
+        b.set_label(label)
+    b.set_tooltip_text(tooltip)
+
+
+def icon_button(icon, tooltip, callback, label):
+    b = Gtk.Button()
+    set_icon(b, icon, tooltip, label)
+    b.connect("clicked", lambda _b: callback())
+    return b
+
+
 def scrolled(child, shadow=Gtk.ShadowType.IN):
     sw = Gtk.ScrolledWindow(shadow_type=shadow)
     sw.add(child)
