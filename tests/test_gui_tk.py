@@ -136,3 +136,17 @@ def test_preferences_dialog_changes_settings_live(make_app, cfg, monkeypatch):
     dlg.destroy()
     app.update()
     assert app.settings._listeners == [app._setting_changed]
+
+
+def test_device_pane_hides_modified_column_until_asked(make_app, tmp_path):
+    (tmp_path / "a.txt").write_bytes(b"hello")
+    app = make_app()
+    app.connected(DeviceBackend(RawREPL(FakeSerial())), str(tmp_path), "/dev/ttyACM0", "303a:4001:AAA")
+    pump(app)
+    assert tuple(app.right.tree["displaycolumns"]) == ("size",)
+    assert tuple(app.left.tree["displaycolumns"]) == ("size", "modified")
+    assert app.right.entry("a.txt").size == 5 and app.right.entry("a.txt").mtime == 0
+    app.settings.set("general.device_mtimes", True)
+    pump(app)
+    assert tuple(app.right.tree["displaycolumns"]) == ("size", "modified")
+    assert app.right.entry("a.txt").mtime > 1_000_000_000

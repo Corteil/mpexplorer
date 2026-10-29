@@ -171,10 +171,13 @@ class Pane(Gtk.Frame):
         show_hidden = self.app.show_hidden
         rows = [e for e in self._entries
                 if (show_hidden or not e.name.startswith(".")) and flt in e.name.lower()]
+        show_mtime = self.title != "Device" or self.app.settings.get("general.device_mtimes")
+        order = self._sort[0] if show_mtime or self._sort[0] != "modified" else "name"     # no times: sort by name
         key = {"name": lambda e: e.name.lower(), "size": lambda e: e.size,
-               "modified": lambda e: e.mtime}[self._sort[0]]
+               "modified": lambda e: e.mtime}[order]
         rows.sort(key=key, reverse=self._sort[1])
         rows.sort(key=lambda e: not e.is_dir)       # folders always first
+        self._cols["modified"].set_visible(show_mtime)
         sel = self.tree.get_selection()
         self.store.clear()
         for e in rows:

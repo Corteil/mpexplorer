@@ -224,10 +224,13 @@ class Pane(ttk.LabelFrame):
         show_hidden = self.app.show_hidden.get()
         rows = [e for e in self._entries
                 if (show_hidden or not e.name.startswith(".")) and flt in e.name.lower()]
+        show_mtime = self.title != "Device" or self.app.settings.get("general.device_mtimes")
+        order = self._sort[0] if show_mtime or self._sort[0] != "modified" else "name"     # no times: sort by name
         key = {"name": lambda e: e.name.lower(), "size": lambda e: e.size,
-               "modified": lambda e: e.mtime}[self._sort[0]]
+               "modified": lambda e: e.mtime}[order]
         rows.sort(key=key, reverse=self._sort[1])
         rows.sort(key=lambda e: not e.is_dir)       # folders always first
+        self.tree.configure(displaycolumns=("size", "modified") if show_mtime else ("size",))
         for e in rows:
             self.tree.insert("", "end", iid=e.name, text=("[D] " if e.is_dir else "     ") + e.name,
                              values=("" if e.is_dir else human(e.size), fmt_time(e.mtime)))

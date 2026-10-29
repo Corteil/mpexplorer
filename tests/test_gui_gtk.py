@@ -177,3 +177,16 @@ def test_reset_is_cancelled_when_the_user_says_no(make_app, monkeypatch):
     dlg._reset()
     assert app.settings.get("general.show_hidden") is True
     dlg.destroy()
+
+
+def test_device_pane_hides_modified_column_until_asked(make_app, tmp_path):
+    (tmp_path / "a.txt").write_bytes(b"hello")
+    app = make_app()
+    app.connected(DeviceBackend(RawREPL(FakeSerial())), str(tmp_path), "/dev/ttyACM0", "303a:4001:AAA")
+    pump()
+    cols = app.right._cols
+    assert not cols["modified"].get_visible() and app.left._cols["modified"].get_visible()
+    assert app.right.entry("a.txt").size == 5 and app.right.entry("a.txt").mtime == 0
+    app.settings.set("general.device_mtimes", True)
+    pump()
+    assert cols["modified"].get_visible() and app.right.entry("a.txt").mtime > 1_000_000_000
