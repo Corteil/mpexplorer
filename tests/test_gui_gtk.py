@@ -23,6 +23,7 @@ try:
 except (ImportError, ValueError) as e:                       # GTK 3 typelib missing
     unavailable("GTK 3 not available: %s" % e)
 
+import fakedisplay
 from fakedevice import FakeSerial
 from mpexplorer.backends import DeviceBackend
 from mpexplorer.settings import Settings
@@ -277,3 +278,33 @@ def test_connect_button_swaps_its_hint_with_the_state(make_app, tmp_path):
     app.disconnect()
     pump()
     assert app.connect_btn.get_tooltip_text() == "Connect to the board"
+
+
+def test_badge_screen_follows_the_connection(make_app, tmp_path, monkeypatch):
+    rec = fakedisplay.install(monkeypatch)
+    app = make_app(general__reset_on_disconnect=False)
+    app.connected(DeviceBackend(RawREPL(FakeSerial())), str(tmp_path), "/dev/ttyACM0", "303a:4001:AAA")
+    pump()
+    assert "CONNECTED" in rec.all_text() and "Ready" in rec.all_text()
+    app.runner.submit(lambda prog: None, label="Uploading main.py ...")            # a non-quiet job shows what it is
+    pump()
+    assert "Uploading main.py" in rec.all_text() and rec.last[-2] == "Done"
+    app.disconnect()
+    pump()
+    assert "DISCONNECTED" in rec.last
+
+
+def test_badge_screen_is_not_drawn_when_switched_off_or_when_the_board_restarts(make_app, tmp_path, monkeypatch):
+    rec = fakedisplay.install(monkeypatch)
+    app = make_app(general__badge_screen=False)
+    app.connected(DeviceBackend(RawREPL(FakeSerial())), str(tmp_path), "/dev/ttyACM0", "303a:4001:AAA")
+    pump()
+    app.disconnect()
+    pump()
+    assert rec.frames == []
+    app = make_app(general__reset_on_disconnect=True)
+    app.connected(DeviceBackend(RawREPL(FakeSerial())), str(tmp_path), "/dev/ttyACM0", "303a:4001:AAA")
+    pump()
+    app.disconnect()                                                               # the badge restarts: no goodbye page
+    pump()
+    assert rec.frames and "DISCONNECTED" not in rec.all_text()

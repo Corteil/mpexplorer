@@ -1,6 +1,7 @@
 """GTK 3 main window: two panes, toolbar, job progress. Same behaviour as the Tk version (mpexplorer/gui/app.py)."""
 import queue
 import threading
+import weakref
 
 from .. import __version__
 from ..backends import CHUNK, DeviceBackend, LocalBackend, human
@@ -8,6 +9,7 @@ from ..clipboard import Clipboard
 from ..console import ConsoleSession
 from ..errors import BackendError, Cancelled
 from ..jobs import JobRunner
+from ..badgescreen import BadgeScreen
 from ..ops import ConflictPolicy, copy_tree, delete_tree, is_within, move_item, total_size, unique_name
 from ..ports import board_id, device_of, list_ports
 from ..remember import device_start, host_start, port_choice, remember_folder, remember_port
@@ -35,6 +37,9 @@ class App(Gtk.Window):
         except GLib.Error:
             pass                                    # a missing icon is cosmetic only
         self.runner = JobRunner()
+        me = weakref.ref(self)              # the worker thread outlives windows: do not keep this one alive
+        self.runner.hook = lambda job, phase, exc: me() and me()._badge_hook(job, phase, exc)
+        self.badge = None                   # BadgeScreen while a board with a screen is connected
         self.clipboard = Clipboard()
         self.local = LocalBackend()
         self.device = None
@@ -172,6 +177,8 @@ class App(Gtk.Window):
 
     def folder_changed(self, pane):
         remember_folder(self.settings, pane is self.right, pane.cwd, self.board)
+        if pane is self.right:
+            self._badge_draw(folder=pane.cwd)
 
     def sort_changed(self, pane):
         which = "device" if pane is self.right else "host"
@@ -370,6 +377,8 @@ class App(Gtk.Window):
         self.set_status("Connected to %s" % port)
         if self.settings.get("general.set_board_clock"):
             self._set_clock(dev, "Connected to %s; " % port)
+        self.badge = BadgeScreen(dev.repl) if self.settings.get("general.badge_screen") else None
+        self._badge_draw(folder=start)
 
     def _connect_state(self, state):
         """The Connect button shows what a click would do: plug in, unplug, or wait."""
@@ -377,6 +386,22 @@ class App(Gtk.Window):
                             "connecting": ("emblem-synchronizing", "Connecting...", "Connecting..."),
                             "disconnect": ("network-wired", "Disconnect from the board", "Disconnect")}[state]
         set_icon(self.connect_btn, icon, tip, label)
+
+    def _badge_draw(self, **kw):
+        """Queue a redraw of the badge's status screen (a no-op without one)."""
+        badge = self.badge
+        if badge:
+            self.runner.submit(lambda prog: badge.show(**kw), label="Badge screen", quiet=True)
+
+    def _badge_hook(self, job, phase, exc):
+        """Worker thread, around every job: say what the board is doing (quiet jobs are not worth a redraw)."""
+        badge = self.badge
+        if not badge or job.quiet:
+            return
+        if phase == "start":
+            badge.show(job.status, kind="busy")
+        else:
+            badge.show("Cancelled" if isinstance(exc, Cancelled) else "Failed" if exc else "Done")
 
     def disconnect(self):
         if self.device:
@@ -387,6 +412,9 @@ class App(Gtk.Window):
                 self.console.close()
             self.right.clear()
             reset = self.settings.get("general.reset_on_disconnect")
+            if self.badge and not reset:
+                self._badge_draw(status="press reset button", kind="gone")
+            self.badge = None
             self.runner.submit(lambda prog: dev.close(reset), label="Disconnecting", quiet=True)
             self._connect_state("connect")
             self.connect_btn.set_sensitive(True)
@@ -397,7 +425,11 @@ class App(Gtk.Window):
         self.runner.cancel_all()
         if self.device:
             try:
-                self.device.close(self.settings.get("general.reset_on_disconnect"))
+                reset = self.settings.get("general.reset_on_disconnect")
+                if self.badge and not reset:
+                    self.badge.show("press reset button", kind="gone")
+                self.badge = None
+                self.device.close(reset)
             except Exception:
                 pass
 
@@ -462,7 +494,11 @@ class App(Gtk.Window):
                 error(self, "%s failed" % verb, str(exc))
             else:
                 self.set_status("Done" + (" (%d skipped)" % skipped if skipped else ""))
-        self.runner.submit(work, done, verb + " ...")
+        first, rest = items[0], len(items) - 1
+        word = ("Uploading" if dst_be.key == "device" and first[0].key != "device" else
+                "Downloading" if first[0].key == "device" and dst_be.key != "device" else verb)
+        status = "%s %s%s" % (word, first[0].basename(first[1]), " +%d" % rest if rest else "")
+        self.runner.submit(work, done, verb + " ...", status=status)
 
     def _refresh_all(self):
         for p in self.panes:
