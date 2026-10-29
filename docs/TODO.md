@@ -57,9 +57,14 @@ label if one is missing on another theme.
 
 ## 2c. Agent mode (plan: `docs/AGENT_PLAN.md`)
 - [x] `tools/bench.py` written and tested (fake board + real MicroPython).
-- [ ] Run `python3 tools/bench.py` on the Tildagon, a Pico and the 2022 badge; paste the tables into `docs/HARDWARE.md`.
-      Build the agent only if it says a threshold is exceeded (the board's flash write speed may be the real ceiling).
-- [ ] Then: `agent_src.py` + `AgentLink` (CPython tests), `AgentBackend` with fallback, GUI "Fast mode" toggle, pipelining.
+- [x] Ran `tools/bench.py` on the Tildagon (2026-10-29): SLOW, tables in `docs/HARDWARE.md`. Causes measured; see "Phase 0 results"
+      in `docs/AGENT_PLAN.md` (host->board can be about 10x faster with an agent, board->host is capped near 11 KB/s by the board).
+- [ ] Run it on a Pico and the 2022 badge too (`--sizes 64,256` if they have little free space).
+- [ ] Then, decide with the owner whether to build an upload-focused agent first. Check data integrity at 100+ KB/s on stdin
+      (the 2026-10-29 measurement only counted bytes). `agent_src.py` + `AgentLink` (CPython tests), `AgentBackend` with
+      fallback, GUI "Fast mode" toggle, pipelining.
+- [ ] Find out why the Tildagon's stdout is capped near 11 KB/s (firmware USB serial flush/tick?). Fixing that would speed up
+      downloads far more than anything on our side.
 
 ## 3. Release and housekeeping
 - [ ] Merge the `handoff-2026-10-28` branch (docs and `tools/`) when the owner says so.
@@ -71,6 +76,10 @@ label if one is missing on another theme.
 - [ ] Saved connection profiles (port, last folders).
 - [ ] GUI smoke tests in CI (GTK needs a display: weston or xvfb). The probes in `tools/` are the starting point.
 - [ ] Delete the Tk GUI (`mpexplorer/gui/`) once GTK has had enough hardware time; drop the `--tk` option and the Tk rules in `CLAUDE.md`.
-- [ ] Measure transfer speed with raw-paste on and off on hardware; tune `CHUNK` / `WRITE_BLOCK`.
+- [x] Transfer speed with raw-paste on and off measured on the Tildagon; sending now adapts per connection (`transport.py`).
+      Still to tune/measure: `CHUNK` / `WRITE_BLOCK`, and a Pico and the 2022 badge.
+- [ ] Try by hand in the GUI: Preferences > "Show modified times for device files" and "Set the board's clock (UTC)...",
+      Device > "Set board time now", and that a file downloaded from the badge keeps its time (all tested only through the fake
+      board, Xvfb and scripts).
 - [ ] Check the other GTK dialogs with the mouse (conflict, sync, message boxes) now that GTK is the default.
 - [ ] Opt-in RAM-only agent mode (design in `docs/DESIGN.md`) only if measured speed demands it.

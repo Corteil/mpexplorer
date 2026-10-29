@@ -44,6 +44,9 @@ reports a window size and says (`\x01`) when it can take more, so the host no lo
 host never exceeds the window. Real speed gains still need measuring on hardware.
 
 ## Planned: agent mode (opt-in)
+*Measured 2026-10-29 on a Tildagon: only host -> board transfers have much to gain; the board's own output to the host is
+capped near 11 KB/s. See "Phase 0 results" in `docs/AGENT_PLAN.md` before building.*
+
 **What:** a ~3 KB helper (`mpexplorer/agent_src.py`) that speaks a binary, CRC-checked protocol, for fast transfers and
 folder listings.
 
