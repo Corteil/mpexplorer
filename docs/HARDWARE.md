@@ -48,3 +48,12 @@ Decision: agent mode is worth building (a threshold was exceeded).
 
 Notes: the link is the bottleneck (flash writes at about 100 KB/s, uploads arrive at 7-11 KB/s). On this board raw-paste
 uploaded slower than plain (6.9 vs 10.8 KB/s); downloads were equal. Not measured: Pico, 2022 badge.
+
+### Upload mode on the Tildagon (2026-10-29)
+The board's raw-paste window is 128 bytes, so raw-paste stops to wait for the device every 128 bytes (about 8.7 ms per
+window over USB, about 15 KB/s of code text). Plain sending (256-byte blocks, 5 ms apart) moves about 35 KB/s. Uploading
+128 KB, three runs each, interleaved: raw-paste only 16.0 / 16.6 / 17.5 s (about 7.7 KB/s), plain 9.8 / 10.4 / 11.1 s (about
+12.3 KB/s), adaptive 10.8 s. `RawREPL` therefore times its first big sends in each mode and keeps plain only when it is
+at least 1.25x faster (`PLAIN_GAIN`); a failed plain send puts the connection back on raw-paste. Data checked with an
+on-board SHA-256. Not measured: Pico, 2022 badge. Downloads are limited by the board's output speed (about 11 KB/s of text,
+independent of mode), not by this.

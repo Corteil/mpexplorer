@@ -11,7 +11,7 @@ from mpexplorer.errors import BackendError, Cancelled
 from mpexplorer.jobs import JobRunner
 from mpexplorer.ops import (ConflictPolicy, Progress, copy_tree, delete_tree, is_within,
                             move_item, total_size, unique_name)
-from mpexplorer.transport import DeviceError, RawREPL
+from mpexplorer.transport import DeviceError, RawREPL, TransportError
 
 
 @pytest.fixture(params=["on", "off", "old"])
@@ -182,6 +182,59 @@ def test_paste_can_be_disabled():
     repl = RawREPL(ser, paste=False)
     assert repl.exec("print(7)").strip() == b"7"
     assert ser.paste_used == 0
+
+
+def _big(n):
+    return "x=%r\nprint(len(x))" % ("a" * n)
+
+
+def test_adaptive_sending_probes_both_modes_and_keeps_data_intact():
+    ser = FakeSerial(paste="on")
+    repl = RawREPL(ser)
+    repl.exec("print(1)")                                   # negotiates raw-paste
+    for i in range(10):
+        assert repl.exec(_big(1500 + i)).strip() == str(1500 + i).encode()
+    assert repl.prefer_plain is not None                    # decided after PROBE_SAMPLES timed sends per mode
+    assert 4 <= ser.paste_used < 11                         # plain was tried too, so not every send used raw-paste
+
+
+def test_adaptive_choice_needs_a_clear_win():
+    def decided(plain, paste):
+        repl = RawREPL(FakeSerial(paste="on"))
+        repl.exec("print(1)")
+        for _ in range(2):
+            repl._note_rate(False, 2000, 2000 / plain)
+            repl._note_rate(True, 2000, 2000 / paste)
+        return repl.prefer_plain
+    assert decided(plain=1500, paste=1000) is True           # 1.5x: plain
+    assert decided(plain=1100, paste=1000) is False          # 1.1x is not worth the lost flow control
+    assert decided(plain=500, paste=1000) is False
+
+
+def test_adaptive_sending_can_be_switched_off():
+    ser = FakeSerial(paste="on")
+    repl = RawREPL(ser, adaptive=False)
+    for _ in range(6):
+        repl.exec(_big(2000))
+    assert ser.paste_used == 6 and repl.prefer_plain is None
+
+
+def test_failed_plain_send_goes_back_to_raw_paste(monkeypatch):
+    repl = RawREPL(FakeSerial(paste="on"))
+    repl.exec("print(1)")
+    repl.prefer_plain = True
+    real = repl._read_until
+
+    def broken(ending, timeout):
+        if ending == b"OK":
+            raise TransportError("no OK")
+        return real(ending, timeout)
+    monkeypatch.setattr(repl, "_read_until", broken)
+    with pytest.raises(TransportError):
+        repl.exec(_big(2000))
+    monkeypatch.undo()
+    assert repl.prefer_plain is False
+    assert repl.exec(_big(2000)).strip() == b"2000"
 
 
 def test_paste_reports_device_errors():
