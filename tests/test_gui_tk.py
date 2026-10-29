@@ -2,7 +2,9 @@
 Uses a temporary settings file and the fake board: never touches ~/.config or a real port."""
 import json
 import os
+import sys
 import time
+import types
 
 import pytest
 
@@ -150,3 +152,19 @@ def test_device_pane_hides_modified_column_until_asked(make_app, tmp_path):
     pump(app)
     assert tuple(app.right.tree["displaycolumns"]) == ("size", "modified")
     assert app.right.entry("a.txt").mtime > 1_000_000_000
+
+
+def test_clock_is_set_on_connect_only_when_asked(make_app, tmp_path, monkeypatch):
+    calls = []
+    machine = types.ModuleType("machine")
+    machine.RTC = lambda: types.SimpleNamespace(datetime=lambda *a: calls.append(a[0]))
+    monkeypatch.setitem(sys.modules, "machine", machine)
+    app = make_app()
+    app.connected(DeviceBackend(RawREPL(FakeSerial())), str(tmp_path), "/dev/ttyACM0", "303a:4001:AAA")
+    pump(app)
+    assert calls == []                                          # off by default
+    app.disconnect()
+    app.settings.set("general.set_board_clock", True)
+    app.connected(DeviceBackend(RawREPL(FakeSerial())), str(tmp_path), "/dev/ttyACM0", "303a:4001:AAA")
+    pump(app)
+    assert len(calls) == 1 and calls[0][0] == time.localtime().tm_year
