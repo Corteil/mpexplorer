@@ -97,6 +97,10 @@ def run_mode(repl, label, sizes_kb, nfiles, root, workdir, log):
 
     rng = random.Random(1234)
     for size in sizes_kb:
+        free_kb = int(repl.exec("import os;s=os.statvfs('/');print(s[0]*s[3]//1024)").decode().strip())
+        if free_kb < size + 64:
+            log("  %d KB skipped: only %d KB free on the board" % (size, free_kb))
+            continue
         src = os.path.join(workdir, "up%d.bin" % size)
         with open(src, "wb") as f:
             f.write(rng.randbytes(size * 1024))
@@ -109,7 +113,7 @@ def run_mode(repl, label, sizes_kb, nfiles, root, workdir, log):
         row("download %d KB" % size, secs, size)
         if sha(src) != sha(back):
             raise BackendError("%d KB round trip came back different: data corruption" % size)
-        free_kb = int(repl.exec("import os;s=os.statvfs('/');print(s[0]*s[3]//1024)").decode().strip())
+        free_kb -= size
         if free_kb > size + 64:
             secs, _ = timed(lambda: dev.copy_file(remote, remote + ".copy"))
             row("copy on board %d KB" % size, secs, size)
