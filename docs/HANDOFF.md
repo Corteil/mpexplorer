@@ -1,7 +1,7 @@
 # Handoff / project memory
 
 Written so a new Claude session can take over with no other context. Update it as you work. Last updated at
-`main` = `6a61208` (2026-10-30); CI green (Python 3.11/3.12/3.13, real MicroPython
+`main` = `77bb74b` (2026-10-30); CI green (Python 3.11/3.12/3.13, real MicroPython
 v1.26.0 and v1.28.0, and the `gui` job: GTK windows under xvfb).
 
 **The Tk GUI was removed (2026-10-30).** `python -m mpexplorer` is GTK only and prints how to install PyGObject if
@@ -93,7 +93,9 @@ Not yet done (the owner or the next session): START HERE steps 1, 2 and 4 by han
 checklist; the owner started on it 2026-10-30). The new GUI items (icons, wrapped toolbar, status bar, badge status page, Send time,
 the Preferences options, a downloaded file keeping its time) were checked by the owner and are OK. Still open: the
 benchmark on a Pico and the 2022 badge, and `os.uname()` from them; decide on an upload-focused agent (check integrity at
-100+ KB/s first); find why the Tildagon's stdout is capped.
+100+ KB/s first); find why the Tildagon's stdout is capped. Built later on 2026-10-30, shaped by the owner's feedback but not yet
+confirmed finished by hand: the sync dialog on real folders (target confirm, mirror-delete confirm, in-dialog progress), and the transfer
+popup, delete item counts and the status bar going back to "Ready" during real transfers on the badge.
 
 Practical notes from this session:
 - The system Python has no pytest or ruff: `python3 -m venv --system-site-packages <scratch>/venv && <scratch>/venv/bin/pip
