@@ -27,7 +27,7 @@ from .prefs import PreferencesDialog
 MAX_EDIT_BYTES = 256 * 1024
 
 
-POPUP_DELAY = 1.0       # seconds a file job runs before its progress window opens
+POPUP_DELAY = 3.0       # seconds a file job runs before its progress window opens
 STATUS_HOLD = 5.0       # seconds a message stays in the status bar before it goes back to "Ready"
 
 

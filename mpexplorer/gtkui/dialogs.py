@@ -457,7 +457,8 @@ class SyncDialog(Gtk.Dialog):
 
 class TransferPopup(Gtk.Window):
     """A small non-modal progress window for a file job that is taking a while: what it is doing, a centred bar, the
-    transfer line, and Cancel. The app opens it after a second and closes it when the job ends."""
+    transfer line, and Cancel. The app opens it once a job has run for POPUP_DELAY seconds and closes it when the job
+    ends."""
 
     def __init__(self, app, job):
         super().__init__(title="Working ...", transient_for=app)
