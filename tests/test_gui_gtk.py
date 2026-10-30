@@ -643,6 +643,7 @@ def test_transfer_popup_opens_after_the_delay_and_closes_with_the_job(make_app, 
     import threading
     from mpexplorer.gtkui import app as app_module
     monkeypatch.setattr(app_module, "POPUP_DELAY", 0.4)
+    monkeypatch.setattr(app_module, "POPUP_MIN_VISIBLE", 0.0)       # these tests want it gone when the job is
     app = make_app()
     gate = threading.Event()
     app.runner.submit(_slow_job(gate), label="Copying ...", status="Uploading main.py")
@@ -668,11 +669,12 @@ def test_transfer_popup_stays_away_from_quick_quiet_and_inline_jobs(make_app, mo
     import threading
     from mpexplorer.gtkui import app as app_module
     app = make_app()
-    app.runner.submit(lambda prog: None, label="Copying ...")                 # finishes at once, default delay of 3 s
+    app.runner.submit(lambda prog: None, label="Copying ...")                 # finishes at once, default delay of 1 s
     pump(400)
     assert app._popup is None
-    assert app_module.POPUP_DELAY == 3.0
+    assert app_module.POPUP_DELAY == 1.0 and app_module.POPUP_MIN_VISIBLE == 3.0           # the defaults
     monkeypatch.setattr(app_module, "POPUP_DELAY", 0.2)
+    monkeypatch.setattr(app_module, "POPUP_MIN_VISIBLE", 0.0)       # these tests want it gone when the job is
     for kwargs in ({"quiet": True}, {"inline": True}):
         gate = threading.Event()
         app.runner.submit(_slow_job(gate), label="Working ...", **kwargs)
@@ -688,6 +690,7 @@ def test_transfer_popup_can_be_hidden_without_stopping_the_job(make_app, monkeyp
     import threading
     from mpexplorer.gtkui import app as app_module
     monkeypatch.setattr(app_module, "POPUP_DELAY", 0.2)
+    monkeypatch.setattr(app_module, "POPUP_MIN_VISIBLE", 0.0)       # these tests want it gone when the job is
     app = make_app()
     gate = threading.Event()
     job = app.runner.submit(_slow_job(gate), label="Copying ...")
@@ -715,6 +718,7 @@ def test_transfer_popup_cancel_stops_the_job(make_app, monkeypatch):
     from mpexplorer.errors import Cancelled
     from mpexplorer.gtkui import app as app_module
     monkeypatch.setattr(app_module, "POPUP_DELAY", 0.2)
+    monkeypatch.setattr(app_module, "POPUP_MIN_VISIBLE", 0.0)       # these tests want it gone when the job is
     app = make_app()
     outcome = []
 
@@ -735,6 +739,7 @@ def test_delete_progress_shows_item_counts_in_the_status_bar_and_the_popup(make_
     import threading
     from mpexplorer.gtkui import app as app_module
     monkeypatch.setattr(app_module, "POPUP_DELAY", 0.3)
+    monkeypatch.setattr(app_module, "POPUP_MIN_VISIBLE", 0.0)       # these tests want it gone when the job is
     app = make_app()
     gate = threading.Event()
 
@@ -817,3 +822,46 @@ def test_a_simple_job_reports_done_and_the_cancel_button_is_a_word(make_app, mon
     assert app.status.get_text() == "Ready"
     cancel = [c for c in app.status.get_parent().get_children() if isinstance(c, Gtk.Button)][0]
     assert cancel.get_label() == "Cancel" and cancel.get_image() is None      # the word, not an icon
+
+
+def test_transfer_popup_stays_up_for_the_minimum_time_when_the_job_ends_sooner(make_app, monkeypatch):
+    import threading
+    from mpexplorer.gtkui import app as app_module
+    monkeypatch.setattr(app_module, "POPUP_DELAY", 0.2)
+    monkeypatch.setattr(app_module, "POPUP_MIN_VISIBLE", 1.2)
+    app = make_app()
+    gate = threading.Event()
+    app.runner.submit(_slow_job(gate), label="Copying ...", status="Uploading main.py")
+    pump(500)
+    popup = app._popup
+    assert popup is not None
+    gate.set()
+    pump(300)                                                              # the job has ended; the popup has not gone
+    assert app._popup is popup and popup.finished and not popup.cancel_btn.get_sensitive()
+    assert popup.heading.get_text() == "Finished: Uploading main.py" and popup.get_visible()
+    pump(1300)                                                             # ... until it has been up long enough
+    assert app._popup is None
+
+
+def test_a_lingering_popup_does_not_stop_the_next_job_getting_its_own(make_app, monkeypatch):
+    import threading
+    from mpexplorer.gtkui import app as app_module
+    monkeypatch.setattr(app_module, "POPUP_DELAY", 0.2)
+    monkeypatch.setattr(app_module, "POPUP_MIN_VISIBLE", 0.8)
+    app = make_app()
+    first, second = threading.Event(), threading.Event()
+    app.runner.submit(_slow_job(first), label="Copying ...", status="First")
+    pump(500)
+    old = app._popup
+    first.set()
+    app.runner.submit(_slow_job(second), label="Copying ...", status="Second")
+    pump(300)
+    assert app._popup is old and old.finished                              # the first one is still shown, finished
+    pump(1500)                                                             # then it goes and the second job's appears
+    try:
+        assert app._popup is not None and app._popup is not old and app._popup.job.status == "Second"
+        assert not app._popup.finished
+    finally:
+        second.set()
+    pump(1500)
+    assert app._popup is None
