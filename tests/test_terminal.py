@@ -3,10 +3,10 @@ import time
 
 import pytest
 
+from ansiscreen import AnsiScreen
 from fakedevice import FakeSerial
 from mpexplorer.console import ConsoleSession
-from mpexplorer.screen import AnsiScreen
-from mpexplorer.terminal import TerminalSession, key_bytes, paste_bytes
+from mpexplorer.terminal import TerminalSession, paste_bytes
 from mpexplorer.transport import RawREPL, TransportError
 
 UP, DOWN, LEFT, RIGHT = b"\x1b[A", b"\x1b[B", b"\x1b[D", b"\x1b[C"
@@ -77,15 +77,6 @@ def test_screen_clear_all():
     assert s.lines == [""] and (s.row, s.col) == (0, 0)
 
 
-# ------------------------------------------------------------------ key map
-def test_key_bytes():
-    assert key_bytes("Return") == b"\r" and key_bytes("BackSpace") == b"\x7f"
-    assert key_bytes("Up") == UP and key_bytes("Delete") == b"\x1b[3~"
-    assert key_bytes("a", "a") == b"a" and key_bytes("eacute", "\u00e9") == "\u00e9".encode()
-    assert key_bytes("c", "\x03", ctrl=True) == b"\x03" and key_bytes("D", "", ctrl=True) == b"\x04"
-    assert key_bytes("Shift_L", "") is None and key_bytes("F5", "") is None
-
-
 def test_paste_bytes_single_and_multiline():
     assert paste_bytes("x = 1\n") == b"x = 1"
     assert paste_bytes("for i in r:\n    print(i)\nz=1\n") == b"\x05for i in r:\r    print(i)\rz=1\x04"
@@ -93,7 +84,7 @@ def test_paste_bytes_single_and_multiline():
 
 # --------------------------------------------------- terminal over the fake
 class Term:
-    """A terminal session wired to a screen, like the Tk widget does."""
+    """A terminal session wired to a screen, as a GUI terminal widget would be."""
 
     def __init__(self, ser=None, repl=None):
         self.ser = ser or FakeSerial()

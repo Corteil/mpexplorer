@@ -1,4 +1,4 @@
-"""GTK 3 main window: two panes, toolbar, job progress. Same behaviour as the Tk version (mpexplorer/gui/app.py)."""
+"""GTK 3 main window: two panes, toolbar, job progress."""
 import queue
 import threading
 import weakref
