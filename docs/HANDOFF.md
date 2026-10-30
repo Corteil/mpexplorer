@@ -123,7 +123,7 @@ the Preferences options, a downloaded file keeping its time) were checked by the
 benchmark and `os.uname()` on the 2022 badge (a Pico and a Pico 2 were done, see below); decide on an upload-focused agent (check integrity at
 100+ KB/s first); find why the Tildagon's stdout is capped. Built later on 2026-10-30, shaped by the owner's feedback but not yet
 confirmed finished by hand: all of it (sync dialog, transfer popup, delete item counts, "Ready" status) passed on a Pico on
-2026-10-30, see above. Only the 2022 badge and the Tildagon re-check of these remain.
+2026-10-30, see above. Only the 2022 badge remains.
 
 Practical notes from this session:
 - The system Python has no pytest or ruff: `python3 -m venv --system-site-packages <scratch>/venv && <scratch>/venv/bin/pip
