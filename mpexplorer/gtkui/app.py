@@ -11,7 +11,7 @@ from ..console import ConsoleSession
 from ..errors import BackendError, Cancelled
 from ..jobs import JobRunner
 from ..badgescreen import BadgeScreen
-from ..ops import ConflictPolicy, copy_tree, delete_tree, is_within, move_item, total_size, unique_name
+from ..ops import ConflictPolicy, copy_tree, delete_items, is_within, move_item, total_size, unique_name
 from ..ports import board_id, device_of, list_ports
 from ..remember import device_start, host_start, port_choice, remember_folder, remember_port
 from ..settings import Settings
@@ -531,8 +531,7 @@ class App(Gtk.Window):
         be = pane.backend
 
         def work(prog):
-            for _n, p in sel:
-                delete_tree(be, p, prog)
+            delete_items(be, [p for _n, p in sel], prog)
         self._simple_job(work, "Deleting ...", "Delete failed")
 
     def new_folder(self):
@@ -705,7 +704,10 @@ class App(Gtk.Window):
         job = self.runner.current
         if job and not job.quiet and not job.inline:
             p = job.prog
-            self.bar.set_fraction(p.fraction())
+            if p.known():
+                self.bar.set_fraction(p.fraction())
+            else:
+                self.bar.pulse()                    # nothing to measure against yet
             self.set_status(p.describe())
         elif not job:
             self.bar.set_fraction(0)

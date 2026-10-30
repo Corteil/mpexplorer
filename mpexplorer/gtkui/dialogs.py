@@ -497,7 +497,10 @@ class TransferPopup(Gtk.Window):
     def update(self):
         p = self.job.prog
         self.heading.set_markup("<b>%s</b>" % GLib.markup_escape_text(self.job.status))
-        self.bar.set_fraction(p.fraction())
+        if p.known():
+            self.bar.set_fraction(p.fraction())
+        else:
+            self.bar.pulse()
         self.file.set_text(p.label)
         self.text.set_text(p.describe(with_label=False))
 

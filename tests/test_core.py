@@ -11,7 +11,7 @@ from mpexplorer.backends import CHUNK, DeviceBackend, LocalBackend, human_durati
 from mpexplorer.badgescreen import BadgeScreen, fit
 from mpexplorer.errors import BackendError, Cancelled
 from mpexplorer.jobs import JobRunner
-from mpexplorer.ops import (ConflictPolicy, Progress, copy_tree, delete_tree, is_within,
+from mpexplorer.ops import (ConflictPolicy, Progress, copy_tree, delete_items, delete_tree, is_within,
                             move_item, total_size, unique_name)
 from mpexplorer.transport import DeviceError, RawREPL, TransportError
 
@@ -353,7 +353,7 @@ def test_human_duration():
 def test_progress_describes_the_transfer(monkeypatch):
     p = Progress()
     p.label = "main.py"
-    assert p.describe() == "main.py   0 B   0 B/s" and p.eta() is None and p.fraction() == 0.0     # nothing known yet
+    assert p.describe() == "main.py" and p.eta() is None and p.fraction() == 0.0 and not p.known()   # nothing known yet
     clock = {"t": p.started}
     monkeypatch.setattr(time, "monotonic", lambda: clock["t"])
     p.total, p.done = 4096, 1024
@@ -363,3 +363,61 @@ def test_progress_describes_the_transfer(monkeypatch):
     assert p.describe(with_label=False) == "1.0 KB of 4.0 KB (25%)   512 B/s   6 s left"
     p.total = 0
     assert p.describe() == "main.py   1.0 KB   512 B/s" and p.eta() is None
+
+
+def test_progress_counts_items_when_there_are_no_bytes(monkeypatch):
+    p = Progress()
+    p.label, p.items_word = "Deleting a.py", "deleted"
+    assert p.describe() == "Deleting a.py" and not p.known()               # no "0 B", no "0 B/s"
+    clock = {"t": p.started}
+    monkeypatch.setattr(time, "monotonic", lambda: clock["t"])
+    p.items_total, p.items = 40, 10
+    clock["t"] = p.started + 5.0                                            # 2 items a second
+    assert p.known() and p.fraction() == 0.25 and p.eta() == pytest.approx(15.0)
+    assert p.describe() == "Deleting a.py   10 of 40 item(s) deleted (25%)   15 s left"
+    assert p.describe(with_label=False) == "10 of 40 item(s) deleted (25%)   15 s left"
+
+
+class CountingBackend:
+    """Wraps a backend and counts stat calls (each one is a round trip on a device)."""
+
+    def __init__(self, be):
+        self.be, self.stats = be, 0
+
+    def stat(self, p):
+        self.stats += 1
+        return self.be.stat(p)
+
+    def __getattr__(self, name):
+        return getattr(self.be, name)
+
+
+def test_delete_items_counts_what_it_removes_and_stats_only_the_top(dev, tmp_path):
+    d, root = dev
+    (tmp_path / "keep.txt").write_text("k")
+    (tmp_path / "gone").mkdir()
+    (tmp_path / "gone" / "sub").mkdir()
+    for name in ("gone/a.txt", "gone/b.txt", "gone/sub/c.txt"):
+        (tmp_path / name).write_text("x")
+    (tmp_path / "single.txt").write_text("s")
+    counted = CountingBackend(d)
+    prog = Progress()
+    delete_items(counted, [root + "/gone", root + "/single.txt"], prog)
+    assert prog.items == prog.items_total == 6 and prog.items_word == "deleted" and prog.fraction() == 1.0
+    assert prog.describe(with_label=False).startswith("6 of 6 item(s) deleted (100%)")
+    assert counted.stats == 2                                               # one per selected item, not one per file
+    assert (tmp_path / "keep.txt").exists()
+    assert not (tmp_path / "gone").exists() and not (tmp_path / "single.txt").exists()
+    delete_tree(counted, root + "/already-gone", Progress())                # a missing path is not an error
+
+
+def test_delete_items_can_be_cancelled_part_way(dev, tmp_path):
+    d, root = dev
+    (tmp_path / "many").mkdir()
+    for i in range(5):
+        (tmp_path / "many" / ("f%d" % i)).write_text("x")
+    prog = Progress()
+    prog.cancel()
+    with pytest.raises(Cancelled):
+        delete_items(d, [root + "/many"], prog)
+    assert (tmp_path / "many" / "f0").exists()                              # nothing was removed
