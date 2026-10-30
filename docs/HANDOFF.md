@@ -59,6 +59,10 @@ What was done:
   while the badge screen still shows "Comparing"/"Syncing". Cancel stops the running job, then closes or reports. Tests start at the
   review with `SyncDialog(..., plan=plan)` and intercept `dialog.start_transfer`.
   Rendered under Xvfb in all four phases and tested; the owner has not yet tried it with real folders.
+- **Status bar text**: a message now goes back to "Ready" `STATUS_HOLD` (5 s, in `gtkui/app.py`) after the last `set_status`; a running job
+  refreshes its progress every 100 ms so the text stays while it runs, and `set_status(text, keep=True)` (used for the settings
+  warning) is never cleared. Simple jobs (delete, new folder, rename) now end with "Done"/"Cancelled"/"Failed". The status bar's
+  Cancel is the word "Cancel" (a plain button), not the stop icon.
 - **Delete progress** (`ops.delete_items`, `Progress.items/items_total/items_word`): a delete used to show "Deleting ...   0 B   0 B/s" because it
   has no bytes. It now collects the whole list first (one stat per selected item, not one per file: on the Tildagon a stat is about
   40 ms), then reports "Deleting x   67 of 1204 item(s) deleted (5%)   4 s left". `Progress.known()` says whether there is any total; when

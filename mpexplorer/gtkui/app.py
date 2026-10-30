@@ -16,7 +16,8 @@ from ..ports import board_id, device_of, list_ports
 from ..remember import device_start, host_start, port_choice, remember_folder, remember_port
 from ..settings import Settings
 from ..transport import RawREPL
-from .common import ICON, Gdk, GdkPixbuf, GLib, Gtk, ask_yes_no, error, fmt_time, icon_button, info, prompt, set_icon
+from .common import (ICON, Gdk, GdkPixbuf, GLib, Gtk, ask_yes_no, button, error, fmt_time, icon_button, info, prompt,
+                     set_icon)
 from .console import ConsoleWindow
 from .dialogs import OutputWindow, SyncDialog, TransferPopup, ask_conflict, ask_sync_target
 from .editor import Editor
@@ -27,6 +28,7 @@ MAX_EDIT_BYTES = 256 * 1024
 
 
 POPUP_DELAY = 1.0       # seconds a file job runs before its progress window opens
+STATUS_HOLD = 5.0       # seconds a message stays in the status bar before it goes back to "Ready"
 
 
 class App(Gtk.Window):
@@ -44,6 +46,7 @@ class App(Gtk.Window):
         self.runner.hook = lambda job, phase, exc: me() and me()._badge_hook(job, phase, exc)
         self.badge = None                   # BadgeScreen while a board with a screen is connected
         self._popup, self._popup_job, self._popup_since, self._popup_dismissed = None, None, 0.0, False
+        self._status_timer = None
         self.clipboard = Clipboard()
         self.local = LocalBackend()
         self.device = None
@@ -77,10 +80,10 @@ class App(Gtk.Window):
         self.right.clear()
         self.connect("delete-event", lambda *_: self._quit() or False)
         self.connect("configure-event", self._configured)
-        self.connect("destroy", lambda _w: Gtk.main_quit())
+        self.connect("destroy", lambda _w: (self._stop_status_timer(), Gtk.main_quit()))
         self.show_all()
         if self.settings.problems:
-            self.set_status("Settings: " + self.settings.problems[0])
+            self.set_status("Settings: " + self.settings.problems[0], keep=True)       # a warning stays
         GLib.timeout_add(100, self._poll)
 
     # -- ui construction ---------------------------------------------------
@@ -263,7 +266,7 @@ class App(Gtk.Window):
         grid.attach(self.bar, 1, 0, 3, 1)
         self.status = Gtk.Label(label="Ready", xalign=0, ellipsize=3, hexpand=True)       # 3 = end
         grid.attach(self.status, 1, 1, 3, 1)
-        cancel = icon_button("process-stop", "Cancel the running job", self.runner.cancel_all, "Cancel")
+        cancel = button("Cancel", self.runner.cancel_all, "Cancel the running job")
         cancel.set_halign(Gtk.Align.START)
         cancel.set_valign(Gtk.Align.FILL)       # stretches to the height of the bar and the text beside it
         grid.attach(cancel, 4, 0, 1, 2)
@@ -305,8 +308,23 @@ class App(Gtk.Window):
     def other_pane(self, pane):
         return self.right if pane is self.left else self.left
 
-    def set_status(self, text):
+    def set_status(self, text, keep=False):
+        """Show text in the status bar. It goes back to "Ready" after STATUS_HOLD seconds, unless keep is set.
+        A running job refreshes its progress every 100 ms, which restarts the countdown until the job ends."""
         self.status.set_text(text)
+        self._stop_status_timer()
+        if text != "Ready" and not keep:
+            self._status_timer = GLib.timeout_add(int(STATUS_HOLD * 1000), self._status_ready)
+
+    def _stop_status_timer(self):
+        if self._status_timer is not None:
+            GLib.source_remove(self._status_timer)
+            self._status_timer = None
+
+    def _status_ready(self):
+        self._status_timer = None
+        self.status.set_text("Ready")
+        return False
 
     def _need_backend(self, pane=None):
         pane = pane or self.active
@@ -516,8 +534,13 @@ class App(Gtk.Window):
     def _simple_job(self, fn, label, error_title):
         def done(_res, exc):
             self._refresh_all()
-            if exc and not isinstance(exc, Cancelled):
+            if isinstance(exc, Cancelled):
+                self.set_status("Cancelled")
+            elif exc:
+                self.set_status("Failed")
                 error(self, error_title, str(exc))
+            else:
+                self.set_status("Done")
         self.runner.submit(fn, done, label)
 
     def delete(self):

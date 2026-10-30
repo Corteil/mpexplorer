@@ -765,3 +765,54 @@ def test_a_job_with_no_total_shows_no_fake_numbers(make_app):
     finally:
         gate.set()
     pump(300)
+
+
+def test_status_goes_back_to_ready_after_the_hold_time(make_app, monkeypatch):
+    from mpexplorer.gtkui import app as app_module
+    monkeypatch.setattr(app_module, "STATUS_HOLD", 0.4)
+    app = make_app()
+    app.set_status("Sync complete")
+    pump(150)
+    assert app.status.get_text() == "Sync complete"                           # held for a while
+    pump(500)
+    assert app.status.get_text() == "Ready"
+    app.set_status("Settings: bad value", keep=True)                          # a warning is not wiped
+    pump(700)
+    assert app.status.get_text() == "Settings: bad value"
+    app.set_status("Ready")
+    assert app._status_timer is None                                          # nothing pending for Ready
+
+
+def test_status_stays_while_a_job_runs_and_clears_after_it_finishes(make_app, monkeypatch):
+    import threading
+    from mpexplorer.gtkui import app as app_module
+    monkeypatch.setattr(app_module, "STATUS_HOLD", 0.4)
+    app = make_app()
+    gate = threading.Event()
+
+    def job(prog):
+        prog.label, prog.total, prog.done = "main.py", 4096, 1024
+        gate.wait(5)
+    app.runner.submit(job, label="Copying ...", inline=False)
+    pump(900)                                                                  # longer than the hold time
+    try:
+        assert app.status.get_text().startswith("main.py")                    # progress keeps the status alive
+    finally:
+        gate.set()
+    pump(300)
+    assert app.status.get_text() != "Ready"                                    # the result is shown first ...
+    pump(700)
+    assert app.status.get_text() == "Ready"                                    # ... then it clears
+
+
+def test_a_simple_job_reports_done_and_the_cancel_button_is_a_word(make_app, monkeypatch):
+    from mpexplorer.gtkui import app as app_module
+    monkeypatch.setattr(app_module, "STATUS_HOLD", 0.4)
+    app = make_app()
+    app._simple_job(lambda prog: None, "Creating folder", "Cannot create folder")
+    pump(400)
+    assert app.status.get_text() == "Done"
+    pump(700)
+    assert app.status.get_text() == "Ready"
+    cancel = [c for c in app.status.get_parent().get_children() if isinstance(c, Gtk.Button)][0]
+    assert cancel.get_label() == "Cancel" and cancel.get_image() is None      # the word, not an icon
