@@ -17,7 +17,7 @@ way to pick another program, and binary or larger files are refused.
    and cancel. No size limit here (external programs can take big files); the built-in editor keeps its 256 KB limit.
 2. Launch the chosen program on the local copy.
 3. **Watch the copy**: Gio file monitor on the folder in GTK (editors often save by replacing the file, so watch the
-   directory, not the inode), polling mtime+size every second in Tk. On a change, wait ~1 s for it to settle, then upload.
+   directory, not the inode). On a change, wait ~1 s for it to settle, then upload.
 4. **Conflict check before upload**: remember the device file's size/mtime/SHA-256 at download. If the device copy changed
    since (another tool, or the board itself), ask: overwrite / keep both (saved as `name (device).ext`) / skip.
 5. Status bar: "Uploaded notes.txt (3 KB)" after each save; errors in a dialog. Stop watching when the program's launcher
@@ -29,11 +29,10 @@ way to pick another program, and binary or larger files are refused.
 - **GTK (default GUI):** `Gtk.AppChooserDialog` gives the native "Open With" list for the file's content type and its
   own "Set as default" option for free. Launch with `Gio.AppInfo.launch([Gio.File...])`. Content type from
   `Gio.content_type_guess(name, None)`.
-- **Tk fallback:** a small dialog listing apps from `Gio` if PyGObject exists, else only built-ins + "Custom command".
 - **Custom command:** a string with `{file}` placeholder, split with `shlex.split` and run with `subprocess.Popen(list)`,
   **never through a shell**. Example: `geany {file}`, `thonny {file}`.
 - Built-ins are internal handlers: `editor` (existing), `run` (existing run-script output window), `hex` (read-only
-  viewer, new, small), `image` (GdkPixbuf/Tk PhotoImage, new, small).
+  viewer, new, small), `image` (GdkPixbuf, new, small).
 - Never set the executable bit on cached files and never auto-run what was downloaded; opening an executable-looking file
   with the system default asks first.
 
@@ -50,7 +49,7 @@ fall back to defaults and never block startup.
 - New GUI-free `mpexplorer/openwith.py`: settings load/save, association lookup, command expansion and validation,
   the cache path rules, and `Watcher` (injectable clock and file-system functions) that decides when to upload and when
   there is a conflict. Fully unit-tested against the fake board and a temp directory.
-- GUI glue in `gtkui/app.py` / `pane.py` (menu items, chooser, preferences page) and the Tk equivalents; `open_file()`
+- GUI glue in `gtkui/app.py` / `pane.py` (menu items, chooser, preferences page); `open_file()`
   becomes `open_with(pane, path, handler=None)`.
 
 ## Tests
@@ -63,7 +62,7 @@ fall back to defaults and never block startup.
 ## Phases
 1. `openwith.py` + tests (settings, lookup, commands, watcher). 2. Device download/launch/upload loop for one custom
 command. 3. GTK chooser + default-for-type + context-menu entries. 4. Built-in hex and image viewers, preferences page.
-5. Tk equivalent (smaller: custom command and built-ins). 6. Hardware shakedown.
+5. Hardware shakedown.
 
 ## Decisions
 - **Geany is the first external editor** to wire up and test with (owner, 2026-10-28).

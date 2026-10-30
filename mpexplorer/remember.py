@@ -1,4 +1,4 @@
-"""What the GUIs restore at start and record as the user works (GUI-free, shared by GTK and Tk)."""
+"""What the GUIs restore at start and record as the user works (GUI-free)."""
 import os
 
 from .ports import device_of

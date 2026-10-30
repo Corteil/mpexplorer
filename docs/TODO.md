@@ -42,7 +42,7 @@ label if one is missing on another theme.
       `process-stop` / `edit-clear` with hints ("Run, Enter", "Interrupt, Esc", "Clear output").
 - [x] Show the shortcut in each hint, and keep the menus as they are (text) so nothing is lost.
 - [ ] Check it still fits the 1180 px window and the minimum width; look at it with `grim` before and after.
-- [x] Leave the Tk GUI alone (it is the fallback). Still to do: update README screenshots.
+- [x] (The Tk GUI was removed on 2026-10-29.) Still to do: update README screenshots.
 
 ## 2d. Badge status screen (`mpexplorer/badgescreen.py`)
 - [x] While connected, a Tildagon's frozen screen shows a status page: CONNECTED, this computer's name, the device folder, free
@@ -53,7 +53,7 @@ label if one is missing on another theme.
 
 ## 2a. Settings (module built; see "Settings" in `docs/DESIGN.md`)
 - [x] `settings.py` + 22 tests: validated keys, atomic writes, damaged-file recovery, forward compatibility.
-- [x] GTK and Tk: remember last port / folders (per board) / window size / sort / hidden; saved on exit and on change.
+- [x] GTK: remember last port / folders (per board) / window size / sort / hidden; saved on exit and on change.
 - [x] Edit > Preferences... (General, Settings file) in both GUIs; a damaged file is reported in the status bar.
 - [ ] Preferences tabs for File types (with Open with...) and Connection (fast mode, once agent mode exists).
 - [ ] Check on the Pi: window size/position restore under Wayland, the remembered device folder on the badge.
@@ -62,7 +62,7 @@ label if one is missing on another theme.
 - [ ] (Decided: saves upload automatically; Geany first.) Phase 1: `openwith.py` (settings, associations, `{file}` commands, upload watcher) with tests, no GUI.
 - [ ] Device files: download to a private cache, launch the program, upload saves back with a conflict check.
 - [ ] GTK: Open with... chooser (`Gtk.AppChooserDialog`), "remember for this type", context menu and Shift+Enter.
-- [ ] Hex and image viewers, File types preferences page, Tk fallback.
+- [ ] Hex and image viewers, File types preferences page.
 
 ## 2c. Agent mode (plan: `docs/AGENT_PLAN.md`)
 - [x] `tools/bench.py` written and tested (fake board + real MicroPython).
@@ -84,7 +84,7 @@ label if one is missing on another theme.
 ## 4. Later / ideas
 - [ ] Saved connection profiles (port, last folders).
 - [ ] GUI smoke tests in CI (GTK needs a display: weston or xvfb). The probes in `tools/` are the starting point.
-- [ ] Delete the Tk GUI (`mpexplorer/gui/`) once GTK has had enough hardware time; drop the `--tk` option and the Tk rules in `CLAUDE.md`.
+- [x] Delete the Tk GUI, the `--tk` option and the Tk rules in `CLAUDE.md` (done 2026-10-29; `AnsiScreen` moved to `tests/ansiscreen.py`).
 - [x] Transfer speed with raw-paste on and off measured on the Tildagon; sending now adapts per connection (`transport.py`).
       Still to tune/measure: `CHUNK` / `WRITE_BLOCK`, and a Pico and the 2022 badge.
 - [ ] Try by hand in the GUI: Preferences > "Show modified times for device files" and "Set the board's clock (UTC)...",

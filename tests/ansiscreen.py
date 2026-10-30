@@ -1,4 +1,4 @@
-"""A minimal terminal screen: applies what the MicroPython REPL sends (GUI-free, unit-tested).
+"""A minimal terminal screen for tests: applies what the MicroPython REPL sends (the GTK terminal uses VTE instead).
 
 The REPL's line editor only needs a handful of controls: CR, LF, backspace, and the CSI sequences for erasing and
 moving the cursor. Lines are unbounded (the board does not know the window width), so this is a scrollback of

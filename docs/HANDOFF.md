@@ -1,8 +1,12 @@
 # Handoff / project memory
 
 Written so a new Claude session can take over with no other context. Update it as you work. Last updated at
-`main` = `8fd57f2` plus the toolbar-icons and badge-screen branches (2026-10-29); CI green (Python 3.11/3.12/3.13, real MicroPython
-v1.26.0 and v1.28.0, and the `gui` job: GTK and Tk windows under xvfb).
+`main` = `a7d5f82` plus the unmerged transfer-bar and remove-tk branches (2026-10-30); CI was green at `a7d5f82` (Python 3.11/3.12/3.13, real MicroPython
+v1.26.0 and v1.28.0, and the `gui` job: GTK windows under xvfb).
+
+**The Tk GUI was removed (2026-10-30, branch `remove-tk`).** `python -m mpexplorer` is GTK only and prints how to install PyGObject if
+it is missing. `AnsiScreen` (the Tk terminal's emulator) moved to `tests/ansiscreen.py` because the terminal-session tests use it; Tk's key
+table (`key_bytes`) and `--tk`/`MPEXPLORER_UI` are gone. The Tk-specific lessons further down are historical (git history has the code).
 
 ## Status after the 2026-10-29 Pi session (read this first)
 Done from a Claude Code session on the Pi 5 with the Tildagon (MicroPython 1.28.0) on `/dev/ttyACM0`. Everything below is
@@ -27,24 +31,24 @@ What was done:
   kept ticking, survived a soft reset. The board's clock was 2000-01-01 before.
 - **Download keeps the board file's time** (`ops.copy_tree` -> `LocalBackend.set_mtime`), unless the board's clock was never
   set (before 2001, `MIN_VALID_MTIME`). Uploads cannot set a time: MicroPython here has no `os.utime`.
-- **Send time button** (toolbar, next to Connect, both GUIs): same action as Device > "Set board time now". The toolbar now
-  wraps onto a second row when the window is narrow (GTK `FlowBox` of two groups, Port..Send time and Upload..Delete; Tk
-  re-lays out on `<Configure>`), so the window's minimum width is set by the panes (about 995 px in GTK), and at the 1180 px
+- **Send time button** (toolbar, next to Connect): same action as Device > "Set board time now". The toolbar now
+  wraps onto a second row when the window is narrow (GTK `FlowBox` of two groups, Port..Send time and Upload..Delete),
+  so the window's minimum width is set by the panes (about 995 px in GTK), and at the 1180 px
   default the toolbar shows two rows (one row needs about 1460 px). Tested under Xvfb only: not yet seen on the real display.
 - **Restart on disconnect** (Preferences > "Restart the board when disconnecting or quitting", `general.reset_on_disconnect`,
   off by default): connecting interrupts the badge OS (Ctrl-C), and a plain disconnect (Ctrl-B) leaves its screen frozen; with
   the option on, `RawREPL.close(reset=True)` sends Ctrl-B Ctrl-D so the badge restarts. **Confirmed by the owner on the
   Tildagon** (the badge reset after a connect and disconnect). The screen still stays frozen while connected: unavoidable.
   Note: the badge re-enumerated as `/dev/ttyACM1` after a reset; Scan finds it.
-- **Toolbar icons** (GTK only; Tk unchanged): toolbar, pane bars, editor, console and status bar use theme icons (PiXflat) with
+- **Toolbar icons**: toolbar, pane bars, editor, console and status bar use theme icons (PiXflat) with
   hover hints that carry the shortcut; `icon_button`/`set_icon` in `gtkui/common.py` fall back to the old text label if the theme
   lacks an icon. Connect swaps its icon with the state. At 1180 px the toolbar now fits on one row. Rendered under Xvfb with
   `gtk-icon-theme-name=PiXflat` (Xvfb has no settings daemon, so set it in the script); not yet seen on the real display.
 - **Transfer bar** (GTK only): the progress bar sits over the status or transfer line (file, `1.2 MB of 3.0 MB (40%)`, speed,
   time left: `Progress.describe()`/`eta()` in `ops.py`, tested), with Cancel beside the bar, stretched to the height of both; the bar is centred at about 60% of the width
   (34 px here, the same as a toolbar button). Rendered under Xvfb with a simulated job; not yet seen with a real transfer.
-  Tk's status bar is unchanged. The Tk GUI tests are flaky when run after the GTK ones (one test, about 4 runs in 10); the
-  owner said Tk can be removed, so this was not chased further.
+  (The Tk GUI tests were flaky when run after the GTK ones, about 4 runs in 10; the owner said Tk could go, so it was removed
+  instead of chased.)
 - **Badge status screen** (`mpexplorer/badgescreen.py`, `docs/TODO.md` 2d): while connected, the Tildagon's frozen screen shows a
   status page (CONNECTED, this computer's name, device folder, free space, current activity, connect time). Drawn through the raw
   REPL with `display.get_ctx()`/`display.end_frame(ctx)` (RAM only), by a `JobRunner.hook` that runs on the worker thread around
@@ -64,7 +68,7 @@ Practical notes from this session:
 - The system Python has no pytest or ruff: `python3 -m venv --system-site-packages <scratch>/venv && <scratch>/venv/bin/pip
   install -e '.[dev]'` (no sudo).
 - `xvfb-run` is not installed but `Xvfb` is: `Xvfb :97 -screen 0 1800x900x24 &`, then `env -u WAYLAND_DISPLAY DISPLAY=:97 python
-  -m pytest tests/test_gui_gtk.py tests/test_gui_tk.py`, then stop it by its PID. No windows appear on the owner's screen.
+  -m pytest tests/test_gui_gtk.py`, then stop it by its PID. No windows appear on the owner's screen.
 - Every script that talks to the board must soft-reset it in a `finally` (raw REPL freezes the badge screen), and use
   `mark_dirty(); enter_raw()` first if an earlier script died. Never leave test files on the board (use `/_mpx_*` and remove).
 
@@ -96,22 +100,21 @@ boards plugged in**, which is the thing everything below is waiting for. Read `C
 Things that behave differently on the Pi than in the sandbox:
 - **GUI tests open real windows** on your desktop if `WAYLAND_DISPLAY`/`DISPLAY` is set. They use a temporary settings
   file and the fake board, so the real config and boards are safe, but the windows flash on screen. For quiet runs use
-  `sudo apt install xvfb` and `xvfb-run -a -s "-screen 0 1800x900x24" python3 -m pytest tests/test_gui_gtk.py tests/test_gui_tk.py`.
+  `sudo apt install xvfb` and `xvfb-run -a -s "-screen 0 1800x900x24" python3 -m pytest tests/test_gui_gtk.py`.
   The Pi's own Python 3.11 already sees the system PyGObject (no venv needed there). On a bare Python they skip.
 - **Never kill the GUI with `pkill`/SIGKILL while a board is connected** (frozen badge screen; Ctrl-B then Ctrl-D, or the
   reset button, recovers). **Never put DTR low** (Tildagon corrupts long replies). Close the GUI before `tools/bench.py`.
-- The sandbox could `apt-get install` and run GTK/Tk under xvfb; the Pi has the real thing, so prefer looking at real
+- The sandbox could `apt-get install` and run GTK under xvfb; the Pi has the real thing, so prefer looking at real
   screenshots (`grim`) and the virtual-mouse rig (`tools/vmouse*.py`, below) over guessing.
 - Git: work on a short branch off `main`, merge only when the owner says so (`gh pr merge N --rebase` or
   `git push origin <branch>:main`), then check CI with `gh run list/watch/view --repo Corteil/mpexplorer`. There are two
   merged leftovers on the remote (`claude/micropython-file-explorer-gui-7tsgfy`, `wire-settings`): safe to delete once the
   owner agrees. Dependabot PR #2 (`action-gh-release` v3) is held until the first release tag `v0.1.0`.
-- Not a priority but open: GUI smoke tests for the dialogs with the mouse, deleting the Tk GUI once GTK is proven,
+- Not a priority but open: GUI smoke tests for the dialogs with the mouse,
   saved connection profiles, README screenshots, release tag.
 
 ## Earlier notes from the Pi session (2026-10-28)
-- `main` has everything: GTK 3 interface is the default (`python -m mpexplorer`), Tk is `--tk` and the automatic
-  fallback. All feature branches are merged and deleted. Only open PR: Dependabot #2 (`softprops/action-gh-release`
+- `main` has everything: GTK 3 interface is the default (`python -m mpexplorer`); Tk was the `--tk` fallback then (removed 2026-10-30). All feature branches are merged and deleted. Only open PR: Dependabot #2 (`softprops/action-gh-release`
   v2 -> v3), deliberately held until the first release tag.
 - The owner has tried the GTK build on the Pi 5 with the Tildagon plugged in ("looking good"). Not yet done on
   hardware: the full flow (connect, transfer, edit, console, terminal) in GTK, a Pico, the 2022 badge. First thing to do
@@ -126,7 +129,7 @@ Things that behave differently on the Pi than in the sandbox:
   `pip install evdev` in a scratch venv. `python3 tools/vmouse_ctl.py start <venv-python> /tmp/vm.fifo`, send lines like
   `click 400 300` to the FIFO, `... stop` when done (and always stop it: it keeps a root process and two input devices).
   `gtk_smoke.py` / `gtk_term_smoke.py` run the GTK app against the fake board in-process (need a display);
-  `tk_click_probe.py` is the click-through probe used on the Tk GUI.
+  (`tk_click_probe.py`, the Tk click probe, was removed with the Tk GUI.)
 - Things Claude tripped on this session, avoid them: `pkill -f` / `pgrep -f` with a pattern that also appears in the
   shell command kills or matches the shell itself (scan `/proc` or use `[x]pattern`); a hard `git reset` and a
   `gh pr merge` were each blocked once by the permission system and worked after the owner repeated the request; the
@@ -139,8 +142,7 @@ Things that behave differently on the Pi than in the sandbox:
 - The ordered to-do list is `docs/TODO.md` (first item: GTK on real hardware; second: replace toolbar buttons with
   icons that have hover hints).
 - Possible next features, none started: saved connection profiles, a release tag `v0.1.0` (exercises `release.yml`,
-  then merge Dependabot #2), screenshots in the README, GUI smoke tests in CI (needs a display: weston or xvfb),
-  deleting the Tk GUI once GTK is proven.
+  then merge Dependabot #2), screenshots in the README, GUI smoke tests in CI (needs a display: weston or xvfb).
 
 ## The user and how they work
 - Owner: Corteil (GitHub), builds EMF Camp badge hardware (see their repos `rp2350-hdmi-hexpansion`,
@@ -188,13 +190,11 @@ through, `AnsiScreen`, key/paste mapping, device pane paused while active), thre
 `python -m mpexplorer` now opens the GTK 3 interface (`mpexplorer/gtkui/`, PyGObject from `python3-gi`; GTK 3.24 is
 what Raspberry Pi OS Bookworm ships: no GTK 4, libadwaita or GtkSourceView). It was written because the Tk GUI kept
 hitting labwc/XWayland quirks (see lessons: clicks falling through new windows, dialogs ignoring the mouse, taskbar
-icon matching, minimise/restore). GTK talks Wayland natively. `--tk` / `MPEXPLORER_UI=tk` runs the Tk GUI, which is
-also the automatic fallback when PyGObject is missing. Both GUIs use the same core modules unchanged; port discovery
+icon matching, minimise/restore). GTK talks Wayland natively. (The Tk GUI that was the `--tk` fallback was removed on 2026-10-30.) Port discovery
 moved to `mpexplorer/ports.py`. Feature parity: panes (sort, filter, hidden, drag between panes, context menu), transfers,
 copy/cut/paste, rename/delete/new, properties, free space, soft reset, conflict prompt, editor (unsaved-changes info
 bar inside the window), run script output, folder sync, REPL console (emulated) and Terminal mode (VTE widget,
-`gir1.2-vte-2.91`, optional; Tk's hand-drawn `AnsiScreen` is not used by GTK), Window menu. The Tk GUI is kept, not
-deleted; remove it once GTK has had enough hardware time.
+`gir1.2-vte-2.91`, optional), Window menu.
 
 GTK notes: import GTK only through `gtkui/common.py` (it pins Gtk/Gdk/GdkPixbuf versions before import, otherwise
 PyGIWarning). The window app id is `mpexplorer` (`GLib.set_prgname`), so the taskbar matches
@@ -207,8 +207,8 @@ with `winfo_rootx()`-style calls: find the window by differencing `grim` screens
 ## Verified vs not verified
 - Verified in tests (about 130 tests, all in CI): core logic against the fake board; the real MicroPython unix port
   v1.26.0 / v1.28.0 (16 tests, through `rawrepl_shim.py` for file/console/sync and the unix REPL for terminal tests, and
-  `tools/bench.py` end to end); the settings module (23 tests); and the GTK and Tk windows' settings wiring and Preferences
-  dialogs (17 GUI tests under xvfb, the `gui` CI job). The GUI tests do not cover transfers, the editor or the console on
+  `tools/bench.py` end to end); the settings module (23 tests); and the GTK windows' settings wiring and Preferences
+  dialogs (GUI tests under xvfb, the `gui` CI job). The GUI tests do not cover transfers, the editor or the console on
   real boards, and no test touches real hardware or the real raw-REPL framing.
 - Verified by hand on a Tildagon (Pi 5, 2026-10-27): the GUI launches and renders; Scan, Connect and Disconnect work
   (the button toggles); the device pane lists `/`; the toolbar fits the window; the REPL console opens with a visible
@@ -226,16 +226,15 @@ with `winfo_rootx()`-style calls: find the window by differencing `grim` screens
   checked on the board); the fast listing compared with the full one on `/` and `/apps` (same names, kinds, sizes); the
   benchmark; 21 GUI tests under Xvfb including the Modified column and the clock setting. NOT verified by hand: the new GUI
   controls, a downloaded file's time on a real board, the clock setting on a Pico or the 2022 badge.
-- NOT verified (Tk, and mostly GTK too): running code in the REPL console, terminal mode, upload/download, saving from the editor, run script, sync and soft reset on a real
+- NOT verified (mostly): running code in the REPL console, terminal mode, upload/download, saving from the editor, run script, sync and soft reset on a real
   board; whether raw-paste is negotiated on the badge (not traced); Pico / RP2 and the 2022 badge (the DTR change
   below could behave differently there); transfer speed; whether a clean Disconnect restores the badge's own app
   (see lessons). Add rows to `docs/HARDWARE.md` once tested.
 
 ## Open items / suggested next steps
 0. GTK follow-ups: run the GTK GUI against the Tildagon and a Pico (connect, list, transfer, editor, console,
-   terminal); test clicks and dialogs with the virtual mouse (locate windows via screenshot diffs); decide when to
-   delete the Tk GUI; add GUI smoke tests (GTK needs a display: weston/xvfb in CI).
-1. Keep running it on the Pi 5 (`sudo apt install python3-tk`; `pip install -e .`; `python -m mpexplorer`) with a
+   terminal); test clicks and dialogs with the virtual mouse (locate windows via screenshot diffs); add GUI smoke tests (GTK needs a display: weston/xvfb in CI).
+1. Keep running it on the Pi 5 (`pip install -e .`; `python -m mpexplorer`) with a
    Pico and a badge and fix breakage. Done so far: connect/list on a Tildagon, toolbar, console opens focused. Still to try:
    running code in the console, terminal mode, transfers, drag between panes, editor, sync, a Pico, the 2022 badge. Consider GUI smoke
    tests (build `App` against the fake board; CI would need `xvfb`).
@@ -269,6 +268,7 @@ with `winfo_rootx()`-style calls: find the window by differencing `grim` screens
   frozen while in raw REPL. Killing the GUI (`pkill`) leaves it frozen: send Ctrl-B then Ctrl-D (soft reset) on the
   port, or press the badge's reset button. Disconnect only leaves raw REPL and does not soft-reset, so the app may not
   come back; unconfirmed.
+**Historical: the Tk-specific lessons below are kept for the labwc/XWayland/uinput insights; the Tk GUI is gone.**
 - Tk on this Pi: the clam theme forces a 104 px minimum width on every `TButton`, which made the toolbar 1457 px wide
   in a 1180 px window (right-hand buttons clipped). `style.configure("TButton", width=0, ...)` fixes it and the
   window has a `minsize` equal to the toolbar's requested width.

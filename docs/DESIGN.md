@@ -15,7 +15,7 @@
 
 ## Layers
 ```
-GUI (GTK 3 / PyGObject; Tkinter fallback) -> JobRunner (one worker thread) -> Backend
+GUI (GTK 3 / PyGObject) -> JobRunner (one worker thread) -> Backend
                                                   |- LocalBackend   host disk
                                                   |- DeviceBackend  raw-REPL snippets   (default)
                                                   |- AgentBackend   RAM-resident helper (opt-in, planned)
@@ -113,8 +113,8 @@ Ctrl-D and `input()` all work, with no emulation.
 - **Keys** (`key_bytes`): Enter -> CR, Backspace -> 0x7f, arrows/Home/End/Delete -> CSI sequences, Ctrl+letter ->
   control byte (so Ctrl-C always interrupts, as in a real terminal). **Paste** (`paste_bytes`): one line is typed;
   several lines are wrapped in paste mode so indentation survives.
-- **Tk widget** (`gui/terminal_widget.py`): a read-only `Text` that captures keys, redraws from the screen every 30 ms
-  when something changed, and draws the cursor as a highlighted cell.
+- **GTK widget** (`gtkui/terminal.py`): a VTE terminal; keys go straight to the board through `TerminalSession`. (The old Tk
+  widget drew an `AnsiScreen` itself; that class now lives in `tests/ansiscreen.py` to read terminal output in tests.)
 - **Testing.** `FakeSerial` implements a friendly REPL: prompt, echo, backspace, mid-line edits, history, tab
   completion, `... ` continuation, paste mode, Ctrl-C/D/B, `input()` and the raw-mode switches. Tests drive a
   `TerminalSession` into an `AnsiScreen` and assert on what a user would see.
@@ -172,8 +172,8 @@ directory). `Settings.load()`, `get("window.width")`, `set(...)`, `save()`, `sub
 in GUI-free `remember.py` (`host_start`, `device_start`, `remember_folder`, `port_choice`, `remember_port`), `ports.board_id()`
 keys a board by vid:pid:serial so its last folder follows it to any /dev/ttyACMx.
 - Restored at start: show hidden, sort order per pane, window size (and maximised), last host folder, last folder per board
-  (checked with a `stat` on the board while connecting, else the root), last serial port. GTK also restores the position on
-  X11 only (Wayland never lets a window place itself); Tk restores size only. GTK never makes the window narrower than its
+  (checked with a `stat` on the board while connecting, else the root), last serial port. The position is restored on
+  X11 only (Wayland never lets a window place itself). GTK never makes the window narrower than its
   toolbar, so a remembered width below that is clamped.
 - Saved: show hidden and sort order immediately; everything else when the window closes (`save_state()`); the last port after
   a successful connect.

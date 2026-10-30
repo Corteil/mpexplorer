@@ -2,29 +2,6 @@
 import threading
 import time
 
-from .screen import AnsiScreen  # noqa: F401  (re-exported for callers)
-
-_SPECIAL = {
-    "Return": b"\r", "KP_Enter": b"\r", "BackSpace": b"\x7f", "Tab": b"\t", "Escape": b"\x1b",
-    "Up": b"\x1b[A", "Down": b"\x1b[B", "Right": b"\x1b[C", "Left": b"\x1b[D",
-    "Home": b"\x1b[H", "End": b"\x1b[F", "Delete": b"\x1b[3~",
-}
-
-
-def key_bytes(keysym, char="", ctrl=False):
-    """Map a Tk key event to the bytes a terminal would send, or None to ignore the key."""
-    if keysym in _SPECIAL:
-        return _SPECIAL[keysym]
-    if ctrl:
-        if len(keysym) == 1 and keysym.isalpha():
-            return bytes([ord(keysym.lower()) - 96])        # Ctrl-A..Z -> 0x01..0x1a
-        if char and 0 < ord(char[0]) < 32:
-            return char[0].encode()
-        return None
-    if char and char.isprintable():
-        return char.encode("utf-8")
-    return None
-
 
 def paste_bytes(text):
     """One line is typed as is; several lines use the REPL's paste mode (Ctrl-E ... Ctrl-D) so indentation survives."""
