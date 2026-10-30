@@ -412,3 +412,97 @@ def test_sync_dialog_warns_when_the_target_is_too_small(make_app, tmp_path):
         assert "unknown" in dialog.space.get_text()
     finally:
         dialog.destroy()
+
+
+def _target_dialog(app, tmp_path, from_selection, src="/dev/lib/proj"):
+    from mpexplorer.backends import LocalBackend
+    from mpexplorer.gtkui.dialogs import SyncTargetDialog
+    be = LocalBackend()
+    return SyncTargetDialog(app, be, src, from_selection, be, str(tmp_path))
+
+
+def test_sync_target_dialog_offers_a_folder_for_a_selected_folder(make_app, tmp_path):
+    app = make_app()
+    dialog = _target_dialog(app, tmp_path, from_selection=True)
+    try:
+        assert dialog.make.get_active() and dialog.name.get_text() == "proj"             # ticked for a selected folder
+        assert dialog.target() == str(tmp_path / "proj") and dialog.go.get_sensitive()
+        assert "created first" in dialog.result.get_text()
+        dialog.name.set_text("copy-of-proj")
+        assert dialog.target() == str(tmp_path / "copy-of-proj")
+        for bad in ("", "a/b", "..", "."):                                               # not usable as one folder name
+            dialog.name.set_text(bad)
+            assert not dialog.go.get_sensitive(), bad
+        dialog.make.set_active(False)                                                    # sync into the target itself
+        assert dialog.target() == str(tmp_path) and dialog.go.get_sensitive()
+    finally:
+        dialog.destroy()
+
+
+def test_sync_target_dialog_does_not_default_to_a_new_folder_for_the_current_folder(make_app, tmp_path):
+    app = make_app()
+    current = _target_dialog(app, tmp_path, from_selection=False)
+    root = _target_dialog(app, tmp_path, from_selection=True, src="/")                   # the root has no name to use
+    try:
+        assert not current.make.get_active() and current.target() == str(tmp_path)
+        assert not root.make.get_active() and not root.make.get_sensitive() and root.target() == str(tmp_path)
+    finally:
+        current.destroy()
+        root.destroy()
+
+
+def test_mirror_deletion_needs_a_confirmation(make_app, tmp_path, monkeypatch):
+    from mpexplorer.gtkui import dialogs
+    app = make_app()
+    sent, asked = [], []
+    app.run_sync = lambda plan, mirror, selected: sent.append(selected)
+    plan = _sync_plan(tmp_path)
+    for answer in (False, True):
+        monkeypatch.setattr(dialogs, "confirm_mirror_delete",
+                            lambda parent, label, path, count, tops, a=answer: asked.append((count, tops)) or a)
+        dialog = dialogs.SyncDialog(app, plan)
+        dialog.mirror.set_active(True)
+        dialog.response(Gtk.ResponseType.OK)
+        if not answer:
+            dialog.destroy()                      # a refusal leaves the dialog open
+    assert asked == [(1, [("extra.txt", 1)])] * 2
+    # only the second answer went through
+    assert len(sent) == 1 and ("delete", "extra.txt") in sent[0]
+
+
+def test_no_confirmation_when_nothing_is_deleted(make_app, tmp_path, monkeypatch):
+    from mpexplorer.gtkui import dialogs
+    app = make_app()
+    sent = []
+    app.run_sync = lambda plan, mirror, selected: sent.append(selected)
+    monkeypatch.setattr(dialogs, "confirm_mirror_delete", lambda *a: pytest.fail("asked although nothing is deleted"))
+    dialog = dialogs.SyncDialog(app, _sync_plan(tmp_path))
+    dialog.response(Gtk.ResponseType.OK)                                                 # mirror is off
+    assert len(sent) == 1 and not any(k[0] == "delete" for k in sent[0])
+
+
+def test_many_deletions_are_listed_by_folder_and_can_be_unticked(make_app, tmp_path):
+    from mpexplorer.backends import LocalBackend
+    from mpexplorer.gtkui import dialogs
+    from mpexplorer.sync import build_plan
+    src, dst = tmp_path / "src", tmp_path / "dst"
+    src.mkdir()
+    (src / "keep.txt").write_text("k")
+    for top, n in (("big", dialogs.MAX_DELETE_ROWS), ("small", 5)):
+        (dst / top).mkdir(parents=True)
+        for i in range(n):
+            (dst / top / ("f%d" % i)).write_text("x")
+    be = LocalBackend()
+    app = make_app()
+    dialog = dialogs.SyncDialog(app, build_plan(be, str(src), be, str(dst)))
+    try:
+        dialog.mirror.set_active(True)
+        rows = [(r[5], r[6], r[1]) for r in dialog.store if r[5] == "delete-group"]       # one row per top-level folder
+        assert sorted(rows) == [("delete-group", "big", "Delete %d" % (dialogs.MAX_DELETE_ROWS + 1)),
+                                ("delete-group", "small", "Delete 6")]                    # the files and their folder
+        assert sum(k[0] == "delete" for k in dialog._selected()) == dialogs.MAX_DELETE_ROWS + 1 + 6
+        dialog._toggled(None, str(next(r.path for r in dialog.store if r[6] == "big")))
+        assert not any(k[1].startswith("big") for k in dialog._selected() if k[0] == "delete")
+        assert any(k[1].startswith("small") for k in dialog._selected() if k[0] == "delete")
+    finally:
+        dialog.destroy()
