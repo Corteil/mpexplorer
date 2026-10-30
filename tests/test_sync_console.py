@@ -203,3 +203,31 @@ def test_trace_reports_everything_sent_and_received():
     assert "error" in kinds and "info" in kinds
     repl.trace = lambda k, t: 1 / 0                   # a broken observer is ignored
     assert repl.exec("print(1)").strip() == b"1"
+
+
+def test_plan_records_the_free_space_and_what_was_ignored(env, tmp_path):
+    local, dev, src, dst = env
+    (src / "a.py").write_text("x")
+    plan = build_plan(local, str(src), dev, str(dst))
+    assert isinstance(plan.dst_free, int) and plan.dst_free > 0 and "__pycache__" in plan.exclude
+    missing = build_plan(local, str(src), dev, str(tmp_path / "not" / "there"))      # asks the nearest existing parent
+    assert isinstance(missing.dst_free, int)
+
+
+def test_apply_plan_runs_only_the_selected_items(env):
+    local, dev, src, dst = env
+    (src / "a.py").write_text("a")
+    (src / "b.py").write_text("b")
+    (src / "lib").mkdir()
+    (src / "lib" / "m.py").write_text("m")
+    (dst / "stale.txt").write_text("old")
+    (dst / "keep.txt").write_text("old")
+    plan = build_plan(local, str(src), dev, str(dst))
+    # everything except b.py and keep.txt
+    chosen = {("copy", "a.py"), ("mkdir", "lib"), ("copy", "lib/m.py"), ("delete", "stale.txt")}
+    apply_plan(plan, Progress(), include_delete=True, selected=chosen)
+    assert (dst / "a.py").exists() and (dst / "lib" / "m.py").exists() and not (dst / "b.py").exists()
+    assert not (dst / "stale.txt").exists() and (dst / "keep.txt").exists()
+    # a ticked deletion still needs include_delete
+    apply_plan(plan, Progress(), include_delete=False, selected={("delete", "keep.txt")})
+    assert (dst / "keep.txt").exists()

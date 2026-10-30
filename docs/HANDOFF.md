@@ -44,6 +44,12 @@ What was done:
   hover hints that carry the shortcut; `icon_button`/`set_icon` in `gtkui/common.py` fall back to the old text label if the theme
   lacks an icon. Connect swaps its icon with the state. At 1180 px the toolbar now fits on one row. Rendered under Xvfb with
   `gtk-icon-theme-name=PiXflat` (Xvfb has no settings daemon, so set it in the script); not yet seen on the real display.
+- **Sync dialog** (`gtkui/dialogs.py` `SyncDialog`, `sync.py`): shows From/To (with Host/Device and the paths), the target's free space
+  (`Plan.dst_free`, gathered on the worker; red when the ticked files will not fit), what is ignored (`Plan.exclude`), a live
+  summary, and every item with a tick box. Unticked items are not transferred (`apply_plan(..., selected=...)`); folders stay
+  consistent (unticking a folder unticks what is in it, ticking a file ticks the new folders it needs, a folder is only deleted
+  with everything inside it). Select all / Select none; the button is now "Sync". Rendered under Xvfb and tested; the owner has
+  not yet tried it with real folders.
 - **Transfer bar** (GTK only): the progress bar sits over the status or transfer line (file, `1.2 MB of 3.0 MB (40%)`, speed,
   time left: `Progress.describe()`/`eta()` in `ops.py`, tested), with Cancel beside the bar, stretched to the height of both; the bar is centred at about 60% of the width
   (34 px here, the same as a toolbar button). Rendered under Xvfb with a simulated job; not yet seen with a real transfer.

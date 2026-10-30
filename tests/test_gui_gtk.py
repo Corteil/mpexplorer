@@ -337,3 +337,78 @@ def test_transfer_progress_sits_above_the_transfer_information(make_app):
         gate.set()
     pump(500)
     assert app.bar.get_fraction() == 0
+
+
+def _sync_plan(tmp_path):
+    from mpexplorer.backends import LocalBackend
+    from mpexplorer.sync import build_plan
+    src, dst = tmp_path / "src", tmp_path / "dst"
+    (src / "lib").mkdir(parents=True)
+    dst.mkdir()
+    for name in ("a.py", "b.txt", "lib/m.py", "lib/n.py"):
+        (src / name).write_text(name)
+    (dst / "extra.txt").write_text("old")
+    be = LocalBackend()
+    return build_plan(be, str(src), be, str(dst))
+
+
+def _tick(dialog, kind, rel):
+    return next(r[0] for r in dialog.store if (r[5], r[6]) == (kind, rel))
+
+
+def _click(dialog, kind, rel):
+    path = next(r.path for r in dialog.store if (r[5], r[6]) == (kind, rel))
+    dialog._toggled(None, str(path))
+
+
+def test_sync_dialog_shows_both_folders_and_the_space_and_lets_items_be_unticked(make_app, tmp_path):
+    from mpexplorer.gtkui.dialogs import SyncDialog
+    app = make_app()
+    plan = _sync_plan(tmp_path)
+    dialog = SyncDialog(app, plan)
+    try:
+        texts = [w.get_text() for w in dialog.get_content_area().get_children()[0].get_children()
+                 if isinstance(w, Gtk.Label)]
+        assert any(str(tmp_path / "src") in t for t in texts) and any(str(tmp_path / "dst") in t for t in texts)
+        assert "needed" in dialog.space.get_text() and "free" in dialog.space.get_text()
+        assert dialog.sync_btn.get_label() == "Sync" and all(r[0] for r in dialog.store)      # everything ticked
+        assert [r[6] for r in dialog.store if r[5] == "delete"] == []                           # mirror is off
+        # leave one file out
+        _click(dialog, "copy", "b.txt")
+        assert _tick(dialog, "copy", "b.txt") is False and "3 of 4 file(s)" in dialog.summary.get_text()
+        # a folder takes its files along
+        _click(dialog, "mkdir", "lib")
+        assert not _tick(dialog, "copy", "lib/m.py") and not _tick(dialog, "copy", "lib/n.py")
+        # a file brings its folder back
+        _click(dialog, "copy", "lib/n.py")
+        assert _tick(dialog, "mkdir", "lib") and _tick(dialog, "copy", "lib/n.py")
+        assert not _tick(dialog, "copy", "lib/m.py")
+        # nothing ticked: nothing to sync
+        dialog._set_all(False)
+        assert not dialog.sync_btn.get_sensitive()
+        dialog._set_all(True)
+        sent = []
+        app.run_sync = lambda plan, mirror, selected: sent.append((mirror, selected))
+        dialog.mirror.set_active(True)
+        # and one deletion left out
+        _click(dialog, "delete", "extra.txt")
+        dialog.response(Gtk.ResponseType.OK)
+        (mirror, selected), = sent
+        assert mirror is True and ("copy", "b.txt") in selected and ("delete", "extra.txt") not in selected
+    finally:
+        dialog.destroy()
+
+
+def test_sync_dialog_warns_when_the_target_is_too_small(make_app, tmp_path):
+    from mpexplorer.gtkui.dialogs import SyncDialog
+    app = make_app()
+    plan = _sync_plan(tmp_path)
+    plan.dst_free = 3                                         # smaller than the files to copy
+    dialog = SyncDialog(app, plan)
+    try:
+        assert "not enough" in dialog.space.get_text()
+        plan.dst_free = None
+        dialog._summarise()
+        assert "unknown" in dialog.space.get_text()
+    finally:
+        dialog.destroy()
