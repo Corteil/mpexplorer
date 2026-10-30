@@ -1,7 +1,34 @@
 # Plan: "Open with..." - choose the program that opens a file
 
-Status: **planned, not started.** Today double-clicking a text file (up to 256 KB) opens the built-in editor; there is no
-way to pick another program, and binary or larger files are refused.
+Status (2026-10-30): **phases 1 and 2 are built and merged** (`main` = `f1791d8`, CI green); phases 3-5 are not started. Today
+double-clicking a text file (up to 256 KB) still opens the built-in editor, and the one new entry is **right-click > Open with
+Geany** (one selected file, host or device; shown only if `geany` is installed). Binary and larger files still cannot be opened
+by double-click.
+
+### What exists (phases 1 and 2)
+- `mpexplorer/openwith.py`, GUI-free and tested (`tests/test_openwith.py`, fake board, injected clock): `expand_command` (`{file}`
+  template to an argument list, never a shell), `handler_for` / `parse_handler` (lookup by extension then content type), `cache_path`
+  (private cache, `..` refused), `Watcher` (settle time, polling-safe), `download_for_edit` / `upload_changes` (temp name + rename,
+  conflict check), and `EditManager` (the sessions: download job, launch, poll, upload job, flush and cleanup).
+- GTK glue in `gtkui/app.py`: `open_external`, the context-menu entry (the editor is the constant `EXTERNAL_EDITOR = "geany {file}"`),
+  the three-way conflict dialog `ask_edit_conflict` (`gtkui/dialogs.py`), `_release_edits` on disconnect, a flush on quit, and
+  `EditManager.tick()` from the 100 ms `_poll`.
+- Verified: tests (core and GTK under Xvfb), a script driving the real GTK app against a Pico 2 with a scratch file (open, save,
+  close, quit), and by hand by the owner on the Pico 2 (open `main.py` in Geany, save, close Geany: the edit was on the board).
+  **Not verified by hand:** the conflict dialog, a host file, the Tildagon, the RP2040 Pico, large files.
+
+### Where the build differs from the plan above
+- It **polls** the cache copy (a `stat` every 0.5 s, a SHA-256 only when the stat changed or a save is waiting) instead of a Gio file
+  monitor. It is simpler, works for replace-style saves, and costs nothing when idle.
+- **Keep both** means: the board's version is renamed `name (device).ext`, then yours is uploaded under the original name.
+- A failed upload backs off 10 s (no retry loop). On disconnect or quit, saves still waiting go up first; a conflict is **never**
+  overwritten silently: it is left alone and its cache copy kept in `~/.cache/mpexplorer/open/` (the user is told). Cache copies are
+  deleted when nothing is unsent. A session is dropped after the program has exited and nothing changed for 10 minutes. Geany hands a
+  file to a running window and may exit at once, so the watcher follows the file, not the process.
+- `Watcher.paused` exists but has no button, and the `open_with.auto_upload` setting is declared but **not read yet**.
+- Lessons: a poller that restarted the settle timer on every poll would never have uploaded (caught by a test, now covered);
+  tests that swap the manager's clock must reset `_last_tick`; run Geany as `geany -i` (new instance) when testing so it cannot
+  hand the file to a window on the owner's screen.
 
 ## What the user gets
 - Double-click / Enter opens a file with its **default program for that file type** (built-in editor unless changed).
