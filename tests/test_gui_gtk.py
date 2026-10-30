@@ -893,3 +893,19 @@ def test_the_finished_popup_can_be_closed_at_once_with_its_close_button(make_app
     app._popup.dismiss()
     app.runner.cancel_all()
     pump(300)
+
+
+def test_device_pane_label_names_the_port_and_board(make_app, tmp_path):
+    app = make_app()
+    assert app.right.get_label() == "Device (not connected)"
+    app.connected(DeviceBackend(RawREPL(FakeSerial())), str(tmp_path), "/dev/ttyACM2", "2e8a:0005:AAA",
+                  "Raspberry Pi Pico2 with RP2350")
+    assert app.right.get_label() == "Device: /dev/ttyACM2  Pico 2 (RP2350)"
+    assert app.left.get_label() == "Host"
+    app.right.set_paused(True)
+    assert app.right.get_label() == "Device: /dev/ttyACM2  Pico 2 (RP2350) (terminal active - paused)"
+    app.disconnect()
+    assert app.right.get_label() == "Device (not connected)"
+    # the model is not known (no answer to os.uname): just the port
+    app.connected(DeviceBackend(RawREPL(FakeSerial())), str(tmp_path), "/dev/ttyACM0", "303a:4001:AAA")
+    assert app.right.get_label() == "Device: /dev/ttyACM0"
