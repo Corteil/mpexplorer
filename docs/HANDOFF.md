@@ -8,6 +8,15 @@ v1.26.0 and v1.28.0, and the `gui` job: GTK windows under xvfb).
 it is missing. `AnsiScreen` (the Tk terminal's emulator) moved to `tests/ansiscreen.py` because the terminal-session tests use it; Tk's key
 table (`key_bytes`) and `--tk`/`MPEXPLORER_UI` are gone. The Tk-specific lessons further down are historical (git history has the code).
 
+## Pico and Pico 2 (2026-10-30, Pi session)
+Both were in BOOTSEL mode, so they were flashed with MicroPython v1.28.0 (`RPI_PICO` and `RPI_PICO2` UF2s from micropython.org) and now
+show up as `/dev/ttyACM1` (Pico, RP2040) and `/dev/ttyACM2` (Pico 2, RP2350); the ports can change on re-plug (see `/dev/serial/by-id`).
+`os.uname()` and `tools/bench.py` ran on both through the stock raw REPL; tables and notes are in `docs/HARDWARE.md`. Short version:
+uploads 30 KB/s (Pico) and 58 KB/s (Pico 2) in raw-paste, which beats plain there (the opposite of the Tildagon); downloads 67 and
+101 KB/s; verdict "agent mode not needed". `tools/bench.py` now skips a size that does not fit in the free flash (the Pico filled up
+and left a garbled directory entry; its flash was reformatted with `os.VfsLfs2.mkfs`). **Not done:** the GTK app has not been run
+against a Pico (connect, list, transfer, editor, console, terminal), and the 2022 badge is untried.
+
 ## Status after the 2026-10-29 Pi session (read this first)
 Done from a Claude Code session on the Pi 5 with the Tildagon (MicroPython 1.28.0) on `/dev/ttyACM0`. Everything below is
 merged to `main` and CI was green at `9524f1e`. It was done through scripts, the fake board and GUI tests on a private
@@ -92,7 +101,7 @@ What was done:
 Not yet done (the owner or the next session): START HERE steps 1, 2 and 4 by hand (settings on Wayland, the GTK hardware
 checklist; the owner started on it 2026-10-30). The new GUI items (icons, wrapped toolbar, status bar, badge status page, Send time,
 the Preferences options, a downloaded file keeping its time) were checked by the owner and are OK. Still open: the
-benchmark on a Pico and the 2022 badge, and `os.uname()` from them; decide on an upload-focused agent (check integrity at
+benchmark and `os.uname()` on the 2022 badge (a Pico and a Pico 2 were done, see below); decide on an upload-focused agent (check integrity at
 100+ KB/s first); find why the Tildagon's stdout is capped. Built later on 2026-10-30, shaped by the owner's feedback but not yet
 confirmed finished by hand: the sync dialog on real folders (target confirm, mirror-delete confirm, in-dialog progress), and the transfer
 popup, delete item counts and the status bar going back to "Ready" during real transfers on the badge.

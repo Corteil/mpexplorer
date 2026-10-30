@@ -11,7 +11,7 @@ something. State of the project: see "Where we stopped" in `docs/HANDOFF.md`.
       (real REPL, tab completion, paste), switch back, device pane resumes.
 - [x] Does Disconnect bring the badge's own app back? No: the badge stays frozen after a plain disconnect. Preferences >
       "Restart the board when disconnecting or quitting" (off by default) fixes it; confirmed on the Tildagon 2026-10-29.
-- [ ] Same run on a Pico / Pico 2, and the 2022 badge (DTR change may behave differently). Add rows to `docs/HARDWARE.md`.
+- [x] Same run on a Pico / Pico 2 (done 2026-10-30, rows in `docs/HARDWARE.md`). [ ] Still to do on the 2022 badge (DTR change may behave differently).
 - [ ] Mouse in GTK windows: drag between panes, context menu, conflict dialog, sync dialog, Window menu. (The old
       virtual-mouse rig can't aim at Wayland-native windows yet: locate them by differencing `grim` screenshots.)
 
@@ -68,7 +68,7 @@ label if one is missing on another theme.
 - [x] `tools/bench.py` written and tested (fake board + real MicroPython).
 - [x] Ran `tools/bench.py` on the Tildagon (2026-10-29): SLOW, tables in `docs/HARDWARE.md`. Causes measured; see "Phase 0 results"
       in `docs/AGENT_PLAN.md` (host->board can be about 10x faster with an agent, board->host is capped near 11 KB/s by the board).
-- [ ] Run it on a Pico and the 2022 badge too (`--sizes 64,256` if they have little free space).
+- [x] Run it on a Pico and Pico 2 (2026-10-30; it now skips sizes that do not fit). [ ] The 2022 badge is still to do.
 - [ ] Then, decide with the owner whether to build an upload-focused agent first. Check data integrity at 100+ KB/s on stdin
       (the 2026-10-29 measurement only counted bytes). `agent_src.py` + `AgentLink` (CPython tests), `AgentBackend` with
       fallback, GUI "Fast mode" toggle, pipelining.
