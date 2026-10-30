@@ -21,7 +21,7 @@ icons through `Gtk.Image.new_from_icon_name`, `Gtk.IconSize.LARGE_TOOLBAR`, flat
 All icon names below exist in the Pi's current theme (PiXflat); check `Gtk.IconTheme.has_icon` and fall back to the text
 label if one is missing on another theme.
 
-- [x] (Done 2026-10-29, `main` after `8fd57f2`; rendered under Xvfb with the PiXflat theme, not yet seen on the real display.)
+- [x] (Done 2026-10-29, `main` after `8fd57f2`; rendered under Xvfb with the PiXflat theme, then confirmed OK by the owner on the real display 2026-10-30.)
 - [x] Add a helper in `gtkui/common.py`: `icon_button(icon_name, tooltip, callback, fallback_label)` (and `set_icon`).
 - [x] Toolbar (`gtkui/app.py` `_build_toolbar`), keep Port box and keep Connect as an icon that swaps:
 
@@ -49,7 +49,7 @@ label if one is missing on another theme.
       space, what is happening (Uploading x, Done, Failed) and the connect time; DISCONNECTED when the badge is not restarted.
       Preferences > "Show a status screen on the badge while connected" (`general.badge_screen`, on by default, from the next
       connect). Boards without `display.get_ctx()` are detected on the first draw and left alone. Seen on the real badge.
-- [ ] Not tried through the GUI with real transfers; each redraw costs about 0.2-0.6 s on the serial line.
+- [x] Confirmed OK by the owner in real use (2026-10-30); each redraw costs about 0.2-0.6 s on the serial line.
 
 ## 2a. Settings (module built; see "Settings" in `docs/DESIGN.md`)
 - [x] `settings.py` + 22 tests: validated keys, atomic writes, damaged-file recovery, forward compatibility.
@@ -87,7 +87,7 @@ label if one is missing on another theme.
 - [x] Delete the Tk GUI, the `--tk` option and the Tk rules in `CLAUDE.md` (done 2026-10-29; `AnsiScreen` moved to `tests/ansiscreen.py`).
 - [x] Transfer speed with raw-paste on and off measured on the Tildagon; sending now adapts per connection (`transport.py`).
       Still to tune/measure: `CHUNK` / `WRITE_BLOCK`, and a Pico and the 2022 badge.
-- [ ] Try by hand in the GUI: Preferences > "Show modified times for device files" and "Set the board's clock (UTC)...",
+- [x] (Owner confirmed OK 2026-10-30.) Try by hand in the GUI: Preferences > "Show modified times for device files" and "Set the board's clock (UTC)...",
       Device > "Set board time now", and that a file downloaded from the badge keeps its time (all tested only through the fake
       board, Xvfb and scripts).
 - [ ] Check the other GTK dialogs with the mouse (conflict, sync, message boxes) now that GTK is the default.
