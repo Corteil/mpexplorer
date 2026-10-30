@@ -328,7 +328,8 @@ def test_transfer_progress_sits_above_the_transfer_information(make_app):
         grid = app.bar.get_parent()
         bar, label, total = app.bar.get_allocation(), app.status.get_allocation(), grid.get_allocation()
         cancel = [c for c in grid.get_children() if isinstance(c, Gtk.Button)][0].get_allocation()
-        assert abs(cancel.height - (label.y + label.height - bar.y)) <= 1             # Cancel as tall as bar + text
+        assert abs(cancel.height - total.height) <= 1                                 # Cancel as tall as both rows
+        assert total.height >= bar.height + label.height                              # ... which hold both
         assert 0.55 < bar.width / total.width < 0.65                                  # about 60% of the width
         assert abs((bar.x + bar.width / 2) - (total.x + total.width / 2)) <= 3        # centred
         assert abs(label.x - bar.x) <= 1                                              # text lines up with the bar
