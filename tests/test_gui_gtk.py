@@ -668,9 +668,10 @@ def test_transfer_popup_stays_away_from_quick_quiet_and_inline_jobs(make_app, mo
     import threading
     from mpexplorer.gtkui import app as app_module
     app = make_app()
-    app.runner.submit(lambda prog: None, label="Copying ...")                 # finishes at once, default delay of 1 s
+    app.runner.submit(lambda prog: None, label="Copying ...")                 # finishes at once, default delay of 3 s
     pump(400)
     assert app._popup is None
+    assert app_module.POPUP_DELAY == 3.0
     monkeypatch.setattr(app_module, "POPUP_DELAY", 0.2)
     for kwargs in ({"quiet": True}, {"inline": True}):
         gate = threading.Event()

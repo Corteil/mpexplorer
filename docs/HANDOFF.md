@@ -67,8 +67,8 @@ What was done:
   has no bytes. It now collects the whole list first (one stat per selected item, not one per file: on the Tildagon a stat is about
   40 ms), then reports "Deleting x   67 of 1204 item(s) deleted (5%)   4 s left". `Progress.known()` says whether there is any total; when
   not, the status bar and the popup pulse instead of showing a fake 0%, and `describe()` shows only what is known.
-- **Transfer popup** (`TransferPopup` in `gtkui/dialogs.py`, `App._update_popup`, `POPUP_DELAY` = 1 s): a non-modal progress window opens
-  when a normal file job (not `quiet`, not `inline`) has run for a second and closes by itself when the job ends: the job's status as a
+- **Transfer popup** (`TransferPopup` in `gtkui/dialogs.py`, `App._update_popup`, `POPUP_DELAY` = 3 s): a non-modal progress window opens
+  when a normal file job (not `quiet`, not `inline`) has run for 3 seconds and closes by itself when the job ends: the job's status as a
   heading, the bar centred at 60%, the current file, then done of total / speed / time left (`Progress.describe(with_label=False)`),
   with Cancel and Hide (Hide closes it for that job only). The status bar keeps updating underneath. Rendered under Xvfb and tested
   (opens after the delay, never for quick/quiet/inline jobs, Hide, Cancel); the owner has not yet seen it with real transfers.
