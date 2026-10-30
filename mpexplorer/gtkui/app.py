@@ -4,7 +4,7 @@ import threading
 import weakref
 
 from .. import __version__
-from ..backends import CHUNK, DeviceBackend, LocalBackend, human
+from ..backends import CHUNK, DeviceBackend, Entry, LocalBackend, human
 from ..clipboard import Clipboard
 from ..console import ConsoleSession
 from ..errors import BackendError, Cancelled
@@ -18,7 +18,7 @@ from ..sync import apply_plan, build_plan
 from ..transport import RawREPL
 from .common import ICON, Gdk, GdkPixbuf, GLib, Gtk, ask_yes_no, error, fmt_time, icon_button, info, prompt, set_icon
 from .console import ConsoleWindow
-from .dialogs import OutputWindow, SyncDialog, ask_conflict
+from .dialogs import OutputWindow, SyncDialog, ask_conflict, ask_sync_target
 from .editor import Editor
 from .pane import Pane
 from .prefs import PreferencesDialog
@@ -643,7 +643,12 @@ class App(Gtk.Window):
         dst = self.other_pane(src)
         if not (self._need_backend(src) and self._need_backend(dst)):
             return
-        s_be, s_dir, d_be, d_dir = src.backend, src.cwd, dst.backend, dst.cwd
+        picked = src.selected()                         # one selected folder is synced instead of the current folder
+        chosen = picked[0][1] if len(picked) == 1 and (src.entry(picked[0][0]) or Entry("", False)).is_dir else None
+        s_be, s_dir, d_be = src.backend, chosen or src.cwd, dst.backend
+        d_dir = ask_sync_target(self, s_be, s_dir, bool(chosen), d_be, dst.cwd)
+        if d_dir is None:
+            return
         if s_be is d_be and (is_within(s_be, d_dir, s_dir) or is_within(s_be, s_dir, d_dir)):
             error(self, "Sync", "The two folders must be separate (neither inside the other).")
             return
