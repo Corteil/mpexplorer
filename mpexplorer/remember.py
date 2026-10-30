@@ -53,3 +53,13 @@ def port_choice(settings, entries):
 def remember_port(settings, device):
     if settings.get("general.remember_port") and device:
         settings.set("general.last_port", device)
+
+
+def remember_board_name(settings, board, machine):
+    """Keep the model a board reported (os.uname().machine) so the port list can name it next time."""
+    machine = (machine or "").strip()
+    if board and machine:
+        names = settings.get("boards.names")
+        if names.get(segment(board)) != machine:
+            names[segment(board)] = machine
+            settings.set("boards.names", names)
