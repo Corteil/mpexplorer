@@ -1,7 +1,7 @@
 # Handoff / project memory
 
 Written so a new Claude session can take over with no other context. Update it as you work. Last updated at
-`main` = `77bb74b` (2026-10-30); CI green (Python 3.11/3.12/3.13, real MicroPython
+`main` = `eafb13f` (2026-10-30); CI green (Python 3.11/3.12/3.13, real MicroPython
 v1.26.0 and v1.28.0, and the `gui` job: GTK windows under xvfb).
 
 **The Tk GUI was removed (2026-10-30).** `python -m mpexplorer` is GTK only and prints how to install PyGObject if
@@ -17,6 +17,19 @@ uploads 30 KB/s (Pico) and 58 KB/s (Pico 2) in raw-paste, which beats plain ther
 and left a garbled directory entry; its flash was reformatted with `os.VfsLfs2.mkfs`). The owner then used the GTK app on both
 Picos by hand (moved `blink.py` to each and renamed it to `main.py`; console, terminal and editor all worked). **Not done:** the 2022
 badge is untried.
+
+**Port list and device label (2026-10-30).** The port dropdown shows `/dev/ttyACM2  Pico 2 (RP2350)  #9842` (name, then the last 4 of the
+serial; non-USB ports hidden). A Pico and a Pico 2 look the same on USB, so the exact model is learned at connect (`os.uname().machine`,
+kept in settings `boards.names`) and shows from the next Scan. The device pane's frame reads `Device: /dev/ttyACM2  Pico 2 (RP2350)`.
+Code: `mpexplorer/ports.py` (`port_label`, `short_model`), `remember_board_name`, `Pane._caption`.
+
+**Sync logic tested on a Pico (2026-10-30, by script, not through the dialog).** Folder `~/Code/mpx-test-folder` (12 files, 5 folders,
+random binaries, an empty folder, a hidden file, spaces in a name; outside the repo, 392 KB) synced to `/mpx-test` on the RP2040 and back:
+identical by SHA-256, 15 s up and 8 s back, and a second plan was empty. Then, on a scratch copy: a changed text file, a same-size changed
+binary (caught: the plan compares content), a new file and folder, a removed file and a removed folder. The plan copied only the 4
+changed/new files; with mirror-delete off nothing was deleted; with only some deletes ticked only those went (the unticked folder stayed);
+the full mirror removed the rest and left the board identical to the source, with no `.mpx-part` leftovers. **Not tested:** the sync
+dialog itself (target confirm, mirror-delete confirm, tick boxes, in-dialog progress): that needs the owner at the GTK window.
 
 ## Status after the 2026-10-29 Pi session (read this first)
 Done from a Claude Code session on the Pi 5 with the Tildagon (MicroPython 1.28.0) on `/dev/ttyACM0`. Everything below is
@@ -110,8 +123,10 @@ popup, delete item counts and the status bar going back to "Ready" during real t
 Practical notes from this session:
 - The system Python has no pytest or ruff: `python3 -m venv --system-site-packages <scratch>/venv && <scratch>/venv/bin/pip
   install -e '.[dev]'` (no sudo).
-- `xvfb-run` is not installed but `Xvfb` is: `Xvfb :97 -screen 0 1800x900x24 &`, then `env -u WAYLAND_DISPLAY DISPLAY=:97 python
-  -m pytest tests/test_gui_gtk.py`, then stop it by its PID. No windows appear on the owner's screen.
+- `xvfb-run` is not installed but `Xvfb` is: `Xvfb :97 -screen 0 1800x900x24 &`, check `/tmp/.X11-unix/X97` exists, then
+  `env -u WAYLAND_DISPLAY GDK_BACKEND=x11 DISPLAY=:97 python -m pytest tests/test_gui_gtk.py`, then stop Xvfb by its PID.
+  **`GDK_BACKEND=x11` is required**: without it GTK falls back to the Wayland socket and the test windows and dialogs appear on the
+  owner's real screen (seen 2026-10-30; a stuck modal dialog also hangs the run).
 - Every script that talks to the board must soft-reset it in a `finally` (raw REPL freezes the badge screen), and use
   `mark_dirty(); enter_raw()` first if an earlier script died. Never leave test files on the board (use `/_mpx_*` and remove).
 
