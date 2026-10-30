@@ -251,17 +251,18 @@ class App(Gtk.Window):
         return bar
 
     def _build_statusbar(self):
-        """Progress bar and Cancel on their own row, with the status or transfer text under them."""
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2, margin_start=4, margin_end=4)
-        top = Gtk.Box(spacing=6)
+        """Progress bar over the status text on the left; Cancel on the right, as tall as the two together."""
+        row = Gtk.Box(spacing=6, margin_start=4, margin_end=4)
+        col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         self.bar = Gtk.ProgressBar(valign=Gtk.Align.CENTER)
-        top.pack_start(self.bar, True, True, 0)
-        top.pack_start(icon_button("process-stop", "Cancel the running job", self.runner.cancel_all, "Cancel"),
-                       False, False, 0)
-        box.pack_start(top, False, False, 0)
+        col.pack_start(self.bar, False, False, 0)
         self.status = Gtk.Label(label="Ready", xalign=0, ellipsize=3)       # 3 = end
-        box.pack_start(self.status, False, False, 0)
-        return box
+        col.pack_start(self.status, False, False, 0)
+        row.pack_start(col, True, True, 0)
+        cancel = icon_button("process-stop", "Cancel the running job", self.runner.cancel_all, "Cancel")
+        cancel.set_valign(Gtk.Align.FILL)       # stretches to the height of the bar and the text beside it
+        row.pack_start(cancel, False, False, 0)
+        return row
 
     def context_menu(self):
         m = Gtk.Menu()
@@ -717,12 +718,9 @@ class App(Gtk.Window):
         if job and not job.quiet:
             p = job.prog
             self.bar.set_fraction(p.fraction())
-            self.bar.set_show_text(bool(p.total))
-            self.bar.set_text("%d%%" % (p.fraction() * 100))
             self.set_status(p.describe())
         elif not job:
             self.bar.set_fraction(0)
-            self.bar.set_show_text(False)
         return True
 
 

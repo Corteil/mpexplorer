@@ -321,11 +321,15 @@ def test_transfer_progress_sits_above_the_transfer_information(make_app):
     app.runner.submit(job, label="Uploading ...")
     pump(500)
     try:
-        assert app.bar.get_fraction() == 0.25 and app.bar.get_show_text() and app.bar.get_text() == "25%"
+        assert app.bar.get_fraction() == 0.25
         text = app.status.get_text()
         assert text.startswith("main.py") and "1.0 KB of 4.0 KB (25%)" in text and "/s" in text
         assert app.bar.get_allocation().y < app.status.get_allocation().y            # the bar is the upper row
+        cancel = app.bar.get_parent().get_parent().get_children()[1]
+        block = app.bar.get_parent().get_allocation()
+        assert abs(cancel.get_allocation().height - block.height) <= 1                # Cancel as tall as bar + text
+        assert cancel.get_allocation().y <= block.y + 1
     finally:
         gate.set()
     pump(500)
-    assert app.bar.get_fraction() == 0 and not app.bar.get_show_text()
+    assert app.bar.get_fraction() == 0
