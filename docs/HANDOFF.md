@@ -40,9 +40,11 @@ What was done:
   hover hints that carry the shortcut; `icon_button`/`set_icon` in `gtkui/common.py` fall back to the old text label if the theme
   lacks an icon. Connect swaps its icon with the state. At 1180 px the toolbar now fits on one row. Rendered under Xvfb with
   `gtk-icon-theme-name=PiXflat` (Xvfb has no settings daemon, so set it in the script); not yet seen on the real display.
-- **Transfer bar** (GTK only): the progress bar is now a full-width row (percentage on it, Cancel at its right) with the status or
-  transfer line under it: file, `1.2 MB of 3.0 MB (40%)`, speed, time left (`Progress.describe()`/`eta()` in `ops.py`, tested).
-  Rendered under Xvfb with a simulated job; not yet seen with a real transfer. Tk's status bar is unchanged.
+- **Transfer bar** (GTK only): the progress bar sits over the status or transfer line (file, `1.2 MB of 3.0 MB (40%)`, speed,
+  time left: `Progress.describe()`/`eta()` in `ops.py`, tested), with Cancel at the right stretched to the height of both
+  (34 px here, the same as a toolbar button). Rendered under Xvfb with a simulated job; not yet seen with a real transfer.
+  Tk's status bar is unchanged. The Tk GUI tests are flaky when run after the GTK ones (one test, about 4 runs in 10); the
+  owner said Tk can be removed, so this was not chased further.
 - **Badge status screen** (`mpexplorer/badgescreen.py`, `docs/TODO.md` 2d): while connected, the Tildagon's frozen screen shows a
   status page (CONNECTED, this computer's name, device folder, free space, current activity, connect time). Drawn through the raw
   REPL with `display.get_ctx()`/`display.end_frame(ctx)` (RAM only), by a `JobRunner.hook` that runs on the worker thread around

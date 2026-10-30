@@ -26,10 +26,12 @@ except (ImportError, ModuleNotFoundError) as e:
     unavailable("Tk not usable: %s" % e)
 
 
-def pump(app, ms=400):
-    """Let Tk run: the job poller fires every 100 ms, so board listings arrive a little later."""
+def pump(app, ms=400, until=None):
+    """Let Tk run: the job poller fires every 100 ms, so board listings arrive a little later.
+    With `until`, keep going (up to 5 s) until it is true: a fixed delay is flaky on a busy machine."""
     end = time.time() + ms / 1000
-    while time.time() < end:
+    limit = time.time() + 5
+    while time.time() < end or (until is not None and not until() and time.time() < limit):
         app.update()
         time.sleep(0.01)
 
@@ -145,12 +147,12 @@ def test_device_pane_hides_modified_column_until_asked(make_app, tmp_path):
     (tmp_path / "a.txt").write_bytes(b"hello")
     app = make_app()
     app.connected(DeviceBackend(RawREPL(FakeSerial())), str(tmp_path), "/dev/ttyACM0", "303a:4001:AAA")
-    pump(app)
+    pump(app, until=lambda: app.right.entry("a.txt"))
     assert tuple(app.right.tree["displaycolumns"]) == ("size",)
     assert tuple(app.left.tree["displaycolumns"]) == ("size", "modified")
     assert app.right.entry("a.txt").size == 5 and app.right.entry("a.txt").mtime == 0
     app.settings.set("general.device_mtimes", True)
-    pump(app)
+    pump(app, until=lambda: app.right.entry("a.txt") and app.right.entry("a.txt").mtime)
     assert tuple(app.right.tree["displaycolumns"]) == ("size", "modified")
     assert app.right.entry("a.txt").mtime > 1_000_000_000
 
@@ -232,7 +234,7 @@ def test_badge_screen_is_not_drawn_when_switched_off_or_when_the_board_restarts(
     assert rec.frames == []
     app = make_app(general__reset_on_disconnect=True)
     app.connected(DeviceBackend(RawREPL(FakeSerial())), str(tmp_path), "/dev/ttyACM0", "303a:4001:AAA")
-    pump(app)
+    pump(app, until=lambda: rec.frames)
     app.disconnect()                                                               # the badge restarts: no goodbye page
     pump(app)
     assert rec.frames and "DISCONNECTED" not in rec.all_text()
