@@ -1,9 +1,15 @@
 # Plan: "Open with..." - choose the program that opens a file
 
-Status (2026-10-30): **phases 1 and 2 are built and merged** (`main` = `f1791d8`, CI green); phases 3-5 are not started. Today
-double-clicking a text file (up to 256 KB) still opens the built-in editor, and the one new entry is **right-click > Open with
-Geany** (one selected file, host or device; shown only if `geany` is installed). Binary and larger files still cannot be opened
-by double-click.
+Status (2026-10-30): phases 1 and 2 are built and merged (`main` = `3ec4b95`). **Phase 3 is built on branch `open-with-chooser`
+(not merged, not tried by hand):** right-click > **Open with...** opens a dialog (`ask_open_with` in `gtkui/dialogs.py`) listing the
+built-in editor, "Run on the board" (device `.py`), every installed desktop app for the file's content type (`Gio.AppInfo`, with
+icons) and a custom command row (`geany {file}`), plus "Always use this for .ext files". Double-click / Enter now uses the saved
+program for the extension (`handler_for`), else the built-in editor. Host files launch directly; device files are edit-in-place
+sessions. It replaced the fixed "Open with Geany" entry (Geany is in the list). Differences from the plan: our own list dialog instead
+of `Gtk.AppChooserDialog` (so the built-ins and the custom row fit in one list); `app_template()` turns a desktop file's `Exec` line
+into a `{file}` template; `remember_handler()` saves the default. Still missing: Shift+Enter and a File menu entry, the File types
+preferences page, the hex and image viewers (a saved `hex`/`image` handler falls back to the editor with a status message), asking
+before opening an executable-looking file with the system default.
 
 ### What exists (phases 1 and 2)
 - `mpexplorer/openwith.py`, GUI-free and tested (`tests/test_openwith.py`, fake board, injected clock): `expand_command` (`{file}`

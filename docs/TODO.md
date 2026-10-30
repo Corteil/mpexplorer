@@ -62,7 +62,8 @@ label if one is missing on another theme.
 - [x] (Decided: saves upload automatically; Geany first.) Phase 1: `openwith.py` (settings, associations, `{file}` commands, upload watcher) with tests, no GUI. (Done 2026-10-30.)
 - [x] Device files: download to a private cache, launch the program, upload saves back with a conflict check. (Done 2026-10-30 for Geany, via right-click; the owner confirmed it on the Pico 2. Still to try by hand: the conflict dialog, a host file, the Tildagon.)
 - [ ] Read the `open_with.auto_upload` setting, add the pause button on the status entry, and try the conflict dialog (overwrite, keep both, skip) by hand.
-- [ ] GTK: Open with... chooser (`Gtk.AppChooserDialog`), "remember for this type", context menu and Shift+Enter.
+- [x] GTK: Open with... chooser, "remember for this type", context menu (built 2026-10-30 on branch `open-with-chooser`; tests only, not tried by hand).
+- [ ] Open with...: Shift+Enter and a File menu entry; ask before opening an executable-looking file with a system app.
 - [ ] Hex and image viewers, File types preferences page.
 
 ## 2c. Agent mode (plan: `docs/AGENT_PLAN.md`)

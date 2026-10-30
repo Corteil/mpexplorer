@@ -1,12 +1,14 @@
 """Conflict prompt, sync dialogs and script output windows."""
+import posixpath
 import time
 from collections import Counter
 
 from ..backends import human, human_duration
 from ..errors import Cancelled
+from ..openwith import expand_command
 from ..sync import apply_plan, build_plan
 from ..transport import DeviceError
-from .common import Gdk, GLib, Gtk, monospace_view, scrolled
+from .common import Gdk, Gio, GLib, Gtk, error, monospace_view, scrolled
 
 LABELS = {"mkdir": "Create folder", "copy": "Copy", "delete": "Delete", "delete-group": "Delete"}
 
@@ -46,6 +48,81 @@ def ask_edit_conflict(parent, name):
     res = dlg.run()
     dlg.destroy()
     return actions[res] if 0 <= res < len(actions) else "skip"
+
+
+def installed_apps(name):
+    """Desktop applications that can open this file name: [(display name, desktop id, icon)], best matches first."""
+    ctype, _uncertain = Gio.content_type_guess(name, None)
+    seen, out = set(), []
+    for app in Gio.AppInfo.get_recommended_for_type(ctype) + Gio.AppInfo.get_all_for_type(ctype):
+        ident = app.get_id()
+        if ident and ident not in seen and app.should_show() and app.supports_files():
+            seen.add(ident)
+            out.append((app.get_display_name(), ident, app.get_icon()))
+    return out
+
+
+def ask_open_with(parent, name, can_run):
+    """Choose the program for a file. Returns (handler, custom, remember) or None if cancelled.
+
+    handler is 'editor' | 'run' | 'app:<desktop id>' | 'custom:<name>'; custom is (name, command) for a typed command
+    (else None); remember is True if the choice should become the default for this file type."""
+    dlg = Gtk.Dialog(title="Open with", transient_for=parent, modal=True)
+    dlg.add_button("Cancel", Gtk.ResponseType.CANCEL)
+    dlg.add_button("Open", Gtk.ResponseType.OK)
+    dlg.set_default_response(Gtk.ResponseType.OK)
+    dlg.set_default_size(420, 420)
+    box = dlg.get_content_area()
+    box.set_border_width(12)
+    box.set_spacing(8)
+    box.pack_start(Gtk.Label(label="Open '%s' with:" % name, xalign=0), False, False, 0)
+    choices = [("Built-in editor", "editor", None)]
+    if can_run:
+        choices.append(("Run on the board", "run", None))
+    choices += [(n, "app:" + ident, icon) for n, ident, icon in installed_apps(name)]
+    lst = Gtk.ListBox(selection_mode=Gtk.SelectionMode.SINGLE)
+    for label, _h, icon in choices:
+        row = Gtk.ListBoxRow()
+        line = Gtk.Box(spacing=8, margin=4)
+        if icon:
+            line.pack_start(Gtk.Image.new_from_gicon(icon, Gtk.IconSize.LARGE_TOOLBAR), False, False, 0)
+        line.pack_start(Gtk.Label(label=label, xalign=0), True, True, 0)
+        row.add(line)
+        lst.add(row)
+    custom_row = Gtk.ListBoxRow()
+    line = Gtk.Box(spacing=8, margin=4)
+    line.pack_start(Gtk.Label(label="Custom command:"), False, False, 0)
+    cmd = Gtk.Entry(hexpand=True, placeholder_text="geany {file}")
+    cmd.set_activates_default(True)
+    line.pack_start(cmd, True, True, 0)
+    custom_row.add(line)
+    lst.add(custom_row)
+    lst.select_row(lst.get_row_at_index(0))
+    lst.connect("row-activated", lambda *_: dlg.response(Gtk.ResponseType.OK))
+    cmd.connect("grab-focus", lambda _w: lst.select_row(custom_row))
+    box.pack_start(scrolled(lst), True, True, 0)
+    ext = posixpath.splitext(name)[1].lower()
+    remember = Gtk.CheckButton(label="Always use this for %s files" % ext if ext else "Always use this")
+    remember.set_sensitive(bool(ext))
+    box.pack_start(remember, False, False, 0)
+    dlg.show_all()
+    result = None
+    while dlg.run() == Gtk.ResponseType.OK:
+        row = lst.get_selected_row()
+        if row is custom_row:
+            template = cmd.get_text().strip()
+            try:
+                argv = expand_command(template, "x")
+            except ValueError as e:
+                error(dlg, "Custom command", str(e))
+                continue
+            short = posixpath.basename(argv[0])
+            result = ("custom:" + short, (short, template), remember.get_active())
+        elif row is not None:
+            result = (choices[row.get_index()][1], None, remember.get_active())
+        break
+    dlg.destroy()
+    return result
 
 
 MAX_DELETE_ROWS = 2000      # more deletions than this are listed as one row per top-level folder

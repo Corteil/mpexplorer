@@ -1,7 +1,7 @@
 """GTK 3 main window: two panes, toolbar, job progress."""
 import os
+import posixpath
 import queue
-import shutil
 import threading
 import time
 import weakref
@@ -13,23 +13,23 @@ from ..console import ConsoleSession
 from ..errors import BackendError, Cancelled
 from ..jobs import JobRunner
 from ..badgescreen import BadgeScreen
-from ..openwith import EditManager
+from ..openwith import EditManager, app_template, handler_for, parse_handler, remember_handler
 from ..ops import ConflictPolicy, copy_tree, delete_items, is_within, move_item, total_size, unique_name
 from ..ports import board_id, device_of, list_ports, short_model
 from ..remember import device_start, host_start, port_choice, remember_board_name, remember_folder, remember_port
 from ..settings import Settings
 from ..transport import RawREPL
 from ..watchdog import Watchdog
-from .common import (ICON, Gdk, GdkPixbuf, GLib, Gtk, ask_yes_no, button, error, fmt_time, icon_button, info, prompt,
-                     set_icon)
+from .common import (ICON, Gdk, GdkPixbuf, Gio, GLib, Gtk, ask_yes_no, button, error, fmt_time, icon_button, info,
+                     prompt, set_icon)
 from .console import ConsoleWindow
-from .dialogs import OutputWindow, SyncDialog, TransferPopup, ask_conflict, ask_edit_conflict, ask_sync_target
+from .dialogs import (OutputWindow, SyncDialog, TransferPopup, ask_conflict, ask_edit_conflict, ask_open_with,
+                      ask_sync_target)
 from .editor import Editor
 from .pane import Pane
 from .prefs import PreferencesDialog
 
 MAX_EDIT_BYTES = 256 * 1024
-EXTERNAL_EDITOR = "geany {file}"      # the first external editor wired to "Open with" (docs/OPEN_WITH_PLAN.md)
 
 
 def cache_dir():
@@ -298,9 +298,8 @@ class App(Gtk.Window):
         if len(sel) == 1:
             add("Open", self.active._open)
             entry = self.active.entry(sel[0][0])
-            if entry and not entry.is_dir and shutil.which(EXTERNAL_EDITOR.split()[0]):
-                add("Open with %s" % EXTERNAL_EDITOR.split()[0].capitalize(),
-                    lambda: self.open_external(self.active, sel[0][1]))
+            if entry and not entry.is_dir:
+                add("Open with...", lambda: self.choose_open_with(self.active, sel[0][1], entry.size))
         other = self.other_pane(self.active)
         add("Send to %s" % other.title, lambda: self.transfer(self.active, other))
         m.append(Gtk.SeparatorMenuItem())
@@ -656,14 +655,52 @@ class App(Gtk.Window):
         self.runner.submit(work, done, "Reading properties", quiet=True)
 
     # -- editor and device tools ------------------------------------------
-    def open_external(self, pane, path):
-        """Open a file in the external editor: a host file directly, a device file as an edit-in-place session."""
+    def open_external(self, pane, path, template):
+        """Open a file in an external program: a host file directly, a device file as an edit-in-place session."""
         if pane.backend.key == "local":
-            err = self.edits.open_host_file(path, EXTERNAL_EDITOR)
+            err = self.edits.open_host_file(path, template)
             if err:
                 error(self, "Cannot open file", err)
         elif self.device:
-            self.edits.edit_device_file(self.device, self.board, path, EXTERNAL_EDITOR)
+            self.edits.edit_device_file(self.device, self.board, path, template)
+
+    def open_default(self, pane, path, size):
+        """Double-click / Enter: the program saved for this file type, else the built-in editor."""
+        self.open_with(pane, path, size, handler_for(self.settings, posixpath.basename(path)))
+
+    def choose_open_with(self, pane, path, size):
+        name = posixpath.basename(path)
+        can_run = name.endswith(".py") and pane.backend.key == "device"
+        picked = ask_open_with(self, name, can_run)
+        if picked is None:
+            return
+        handler, custom, remember = picked
+        if remember:
+            remember_handler(self.settings, name, handler, custom)
+        elif custom:
+            remember_handler(self.settings, "", handler, custom)        # the command is kept; no default is set
+        self.open_with(pane, path, size, handler)
+
+    def open_with(self, pane, path, size, handler):
+        """Open a file the way `handler` says: 'editor' | 'run' | 'app:<desktop id>' | 'custom:<name>' (openwith.py)."""
+        try:
+            kind, value = parse_handler(self.settings, handler)
+            if kind == "app":
+                desktop = Gio.DesktopAppInfo.new(value)
+                if desktop is None:
+                    raise ValueError("the application %s is not installed any more" % value)
+                kind, value = "command", app_template(desktop.get_commandline())
+        except ValueError as e:
+            error(self, "Cannot open file", str(e))
+            return
+        if kind == "command":
+            self.open_external(pane, path, value)
+        elif value == "run":
+            self.run_path(pane, path)
+        else:
+            if value != "editor":
+                self.set_status("The %s viewer is not built yet: opening in the editor" % value)
+            self.open_file(pane, path, size)
 
     def _edit_say(self, text):
         self.set_status(text)
@@ -716,7 +753,13 @@ class App(Gtk.Window):
         if len(sel) != 1 or not sel[0][0].endswith(".py"):
             info(self, "Run", "Select one .py file on the device first.")
             return
-        be, path = pane.backend, sel[0][1]
+        self.run_path(pane, sel[0][1])
+
+    def run_path(self, pane, path):
+        be = pane.backend
+        if be.key != "device" or not path.endswith(".py"):
+            info(self, "Run", "Only a .py file on the device can be run.")
+            return
         self.runner.submit(lambda prog: be.run(path), lambda out, exc: OutputWindow(self, path, out, exc),
                            "Running " + path, quiet=True, on_cancel=be.repl.interrupt)     # Cancel / Quit send Ctrl-C
 
