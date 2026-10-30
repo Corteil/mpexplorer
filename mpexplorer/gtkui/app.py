@@ -1,6 +1,7 @@
 """GTK 3 main window: two panes, toolbar, job progress."""
 import queue
 import threading
+import time
 import weakref
 
 from .. import __version__
@@ -17,12 +18,15 @@ from ..settings import Settings
 from ..transport import RawREPL
 from .common import ICON, Gdk, GdkPixbuf, GLib, Gtk, ask_yes_no, error, fmt_time, icon_button, info, prompt, set_icon
 from .console import ConsoleWindow
-from .dialogs import OutputWindow, SyncDialog, ask_conflict, ask_sync_target
+from .dialogs import OutputWindow, SyncDialog, TransferPopup, ask_conflict, ask_sync_target
 from .editor import Editor
 from .pane import Pane
 from .prefs import PreferencesDialog
 
 MAX_EDIT_BYTES = 256 * 1024
+
+
+POPUP_DELAY = 1.0       # seconds a file job runs before its progress window opens
 
 
 class App(Gtk.Window):
@@ -39,6 +43,7 @@ class App(Gtk.Window):
         me = weakref.ref(self)              # the worker thread outlives windows: do not keep this one alive
         self.runner.hook = lambda job, phase, exc: me() and me()._badge_hook(job, phase, exc)
         self.badge = None                   # BadgeScreen while a board with a screen is connected
+        self._popup, self._popup_job, self._popup_since, self._popup_dismissed = None, None, 0.0, False
         self.clipboard = Clipboard()
         self.local = LocalBackend()
         self.device = None
@@ -704,7 +709,22 @@ class App(Gtk.Window):
             self.set_status(p.describe())
         elif not job:
             self.bar.set_fraction(0)
+        self._update_popup(job)
         return True
+
+    def _update_popup(self, job):
+        """Open a progress window once a file job has run for POPUP_DELAY seconds; close it when the job ends."""
+        watched = job if job and not job.quiet and not job.inline else None
+        if watched is not self._popup_job:                       # another job, or none: start over
+            if self._popup:
+                self._popup.close_window()
+            self._popup_job, self._popup_since, self._popup_dismissed = watched, time.monotonic(), False
+        if watched is None or self._popup_dismissed:
+            return
+        if self._popup is None and time.monotonic() - self._popup_since >= POPUP_DELAY:
+            self._popup = TransferPopup(self, watched)
+        if self._popup:
+            self._popup.update()
 
 
 def run():
