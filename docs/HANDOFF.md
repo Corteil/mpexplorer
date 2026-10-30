@@ -1,10 +1,10 @@
 # Handoff / project memory
 
 Written so a new Claude session can take over with no other context. Update it as you work. Last updated at
-`main` = `a7d5f82` plus the unmerged transfer-bar and remove-tk branches (2026-10-30); CI was green at `a7d5f82` (Python 3.11/3.12/3.13, real MicroPython
+`main` = `6a61208` (2026-10-30); CI green (Python 3.11/3.12/3.13, real MicroPython
 v1.26.0 and v1.28.0, and the `gui` job: GTK windows under xvfb).
 
-**The Tk GUI was removed (2026-10-30, branch `remove-tk`).** `python -m mpexplorer` is GTK only and prints how to install PyGObject if
+**The Tk GUI was removed (2026-10-30).** `python -m mpexplorer` is GTK only and prints how to install PyGObject if
 it is missing. `AnsiScreen` (the Tk terminal's emulator) moved to `tests/ansiscreen.py` because the terminal-session tests use it; Tk's key
 table (`key_bytes`) and `--tk`/`MPEXPLORER_UI` are gone. The Tk-specific lessons further down are historical (git history has the code).
 
