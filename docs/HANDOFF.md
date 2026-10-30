@@ -54,8 +54,8 @@ What was done:
   mirror option, pressing Sync asks `confirm_mirror_delete` (count, biggest folders, red warning above 1,000 items, deleted
   permanently not trashed, default Cancel). Above 2,000 deletions the list shows one row per top-level folder instead of one per
   item. Why: on 2026-10-30 a sync of the badge's `/` into `/home/pi` listed 271,479 items to delete (the whole home folder).
-  The whole sync is one `SyncDialog` window: comparing (what is being scanned, a pulsing bar), the review, then the transfer (bar and the
-  `Progress.describe()` line) and a result line with Close. Its jobs are `inline=True` (`jobs.py`), so the main status bar ignores them
+  The whole sync is one `SyncDialog` window: comparing (what is being scanned, a pulsing bar, centred at 60% of the width like the main
+  window's bar), the review, then the transfer (bar and the `Progress.describe()` line) and a result line with Close. Its jobs are `inline=True` (`jobs.py`), so the main status bar ignores them
   while the badge screen still shows "Comparing"/"Syncing". Cancel stops the running job, then closes or reports. Tests start at the
   review with `SyncDialog(..., plan=plan)` and intercept `dialog.start_transfer`.
   Rendered under Xvfb in all four phases and tested; the owner has not yet tried it with real folders.
