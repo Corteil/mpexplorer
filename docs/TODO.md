@@ -59,8 +59,9 @@ label if one is missing on another theme.
 - [ ] Check on the Pi: window size/position restore under Wayland, the remembered device folder on the badge.
 
 ## 2b. Open with... (plan: `docs/OPEN_WITH_PLAN.md`)
-- [ ] (Decided: saves upload automatically; Geany first.) Phase 1: `openwith.py` (settings, associations, `{file}` commands, upload watcher) with tests, no GUI.
-- [ ] Device files: download to a private cache, launch the program, upload saves back with a conflict check.
+- [x] (Decided: saves upload automatically; Geany first.) Phase 1: `openwith.py` (settings, associations, `{file}` commands, upload watcher) with tests, no GUI. (Done 2026-10-30.)
+- [x] Device files: download to a private cache, launch the program, upload saves back with a conflict check. (Done 2026-10-30 for Geany, via right-click; the owner confirmed it on the Pico 2. Still to try by hand: the conflict dialog, a host file, the Tildagon.)
+- [ ] Read the `open_with.auto_upload` setting, add the pause button on the status entry, and try the conflict dialog (overwrite, keep both, skip) by hand.
 - [ ] GTK: Open with... chooser (`Gtk.AppChooserDialog`), "remember for this type", context menu and Shift+Enter.
 - [ ] Hex and image viewers, File types preferences page.
 

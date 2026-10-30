@@ -1,7 +1,7 @@
 # Handoff / project memory
 
 Written so a new Claude session can take over with no other context. Update it as you work. Last updated at
-`main` = `eafb13f` (2026-10-30); CI green (Python 3.11/3.12/3.13, real MicroPython
+`main` = `f1791d8` (2026-10-30); CI green (Python 3.11/3.12/3.13, real MicroPython
 v1.26.0 and v1.28.0, and the `gui` job: GTK windows under xvfb).
 
 **The Tk GUI was removed (2026-10-30).** `python -m mpexplorer` is GTK only and prints how to install PyGObject if
@@ -17,6 +17,18 @@ uploads 30 KB/s (Pico) and 58 KB/s (Pico 2) in raw-paste, which beats plain ther
 and left a garbled directory entry; its flash was reformatted with `os.VfsLfs2.mkfs`). The owner then used the GTK app on both
 Picos by hand (moved `blink.py` to each and renamed it to `main.py`; console, terminal and editor all worked). **Not done:** the 2022
 badge is untried.
+
+**Open with Geany, the watchdog and the Cancel fix (2026-10-30).** Right-click a file > Open with Geany: a device file is downloaded
+to `~/.cache/mpexplorer/open/<board>/...`, opened in Geany, and each save is uploaded back (conflicts ask: overwrite / keep both /
+skip). Details, differences from the plan and what is unverified: `docs/OPEN_WITH_PLAN.md`. The owner confirmed the flow on the Pico 2.
+While testing it the GUI "froze after closing Geany". Cause (found with the new watchdog, `mpexplorer/watchdog.py`, which writes every
+thread's stack to `~/.cache/mpexplorer/stalls.txt` when the main loop stalls for 5 s): the owner had used **Run** on the board's
+`main.py`, the blink program that never ends; `exec` held the serial line until its 60 s timeout, Cancel could not stop it, and closing
+the window waited on the same lock. Not an Open with bug. Now jobs have an `on_cancel` hook: Run passes the repl's `interrupt`
+(Ctrl-C), Cancel and Quit use it, and Quit waits up to 2 s for the job. Not tried on a real board by running an endless script and
+pressing Cancel after the fix beyond the owner's "it worked".
+Test-running notes: foreground full-suite runs piped through `tail` stalled three times for no reason found (the same suite passes in
+73 s every time when run in the background to a log: `... pytest -q > log 2>&1`), so run it that way, with `-o faulthandler_timeout=60`.
 
 **Port list and device label (2026-10-30).** The port dropdown shows `/dev/ttyACM2  Pico 2 (RP2350)  #9842` (name, then the last 4 of the
 serial; non-USB ports hidden). A Pico and a Pico 2 look the same on USB, so the exact model is learned at connect (`os.uname().machine`,
@@ -156,7 +168,7 @@ boards plugged in**, which is the thing everything below is waiting for. Read `C
    console `input()`, terminal mode, Disconnect behaviour, drag and drop, dialogs) and fix what breaks. Get `os.uname()`
    from every board (especially the 2022 TiLDA Mk6: its MicroPython version is unconfirmed) and put it in `docs/HARDWARE.md`.
 5. **Then pick the next feature** with the owner: (a) toolbar icons with hover hints (`docs/TODO.md` section 2), or
-   (b) Open with... (`docs/OPEN_WITH_PLAN.md`; decided: saves upload automatically with a conflict check, Geany is the first
+   (b) Open with... (`docs/OPEN_WITH_PLAN.md`; phases 1-2 done 2026-10-30, the chooser and File types page are next; decided: saves upload automatically with a conflict check, Geany is the first
    external editor; check `which geany`). Settings keys for it already exist (`open_with.*`); the Preferences File types
    tab is added together with it. Agent mode only if step 3 says so.
 
