@@ -83,3 +83,37 @@ def test_reset_all_notifies_and_keeps_unknown_keys(tmp_path):
     assert sorted(seen) == [("general.show_hidden", False), ("window.width", 1180)]
     assert s.get("window.width") == 1180 and s.save()
     assert os.path.exists(path) and Settings.load(path)._data["future"] == {"keep": 1}
+
+
+def test_list_ports_labels_boards_and_skips_onboard_uarts(monkeypatch):
+    class P:
+        def __init__(self, device, vid, pid, serial, product=None, description="n/a"):
+            self.device, self.vid, self.pid, self.serial_number = device, vid, pid, serial
+            self.product, self.description = product, description
+
+    found = [P("/dev/ttyAMA10", None, None, None),
+             P("/dev/ttyACM0", 0x303A, 0x1001, "7AC00000", product="TiLDAGON"),
+             P("/dev/ttyACM2", 0x2E8A, 0x0005, "15EDD94F06289842", description="Board in FS mode - Board CDC")]
+    monkeypatch.setattr("serial.tools.list_ports.comports", lambda: found)
+    assert ports.list_ports() == ["/dev/ttyACM2  Raspberry Pi Pico / Pico 2 (MicroPython)  #06289842",
+                                  "/dev/ttyACM0  TiLDAGON  #7ac00000"]
+    assert ports.device_of(ports.list_ports()[0]) == "/dev/ttyACM2"
+
+
+def test_connecting_teaches_the_port_list_the_exact_model(monkeypatch, tmp_path):
+    from mpexplorer.remember import remember_board_name
+    from mpexplorer.settings import Settings
+
+    class P:
+        device, vid, pid, product, description = "/dev/ttyACM2", 0x2E8A, 0x0005, None, "x"
+        serial_number = "15EDD94F06289842"
+
+    monkeypatch.setattr("serial.tools.list_ports.comports", lambda: [P()])
+    settings = Settings(str(tmp_path / "s.json"))
+    # not connected yet: the generic name
+    assert "Pico / Pico 2" in ports.list_ports(settings.get("boards.names"))[0]
+    remember_board_name(settings, "2e8a:0005:15EDD94F06289842", " Raspberry Pi Pico2 with RP2350\n")
+    named = ports.list_ports(settings.get("boards.names"))
+    assert named == ["/dev/ttyACM2  Raspberry Pi Pico2 with RP2350  #06289842"]
+    remember_board_name(settings, "2e8a:0005:15EDD94F06289842", "")                    # no answer: keep what we knew
+    assert "RP2350" in ports.list_ports(settings.get("boards.names"))[0]

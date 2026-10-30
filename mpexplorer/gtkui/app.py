@@ -13,7 +13,7 @@ from ..jobs import JobRunner
 from ..badgescreen import BadgeScreen
 from ..ops import ConflictPolicy, copy_tree, delete_items, is_within, move_item, total_size, unique_name
 from ..ports import board_id, device_of, list_ports
-from ..remember import device_start, host_start, port_choice, remember_folder, remember_port
+from ..remember import device_start, host_start, port_choice, remember_board_name, remember_folder, remember_port
 from ..settings import Settings
 from ..transport import RawREPL
 from .common import (ICON, Gdk, GdkPixbuf, GLib, Gtk, ask_yes_no, button, error, fmt_time, icon_button, info, prompt,
@@ -345,7 +345,7 @@ class App(Gtk.Window):
 
     # -- connection --------------------------------------------------------
     def scan_ports(self):
-        ports = list_ports()
+        ports = list_ports(self.settings.get("boards.names"))
         self.port_box.remove_all()
         for p in ports:
             self.port_box.append_text(p)
@@ -377,7 +377,11 @@ class App(Gtk.Window):
             try:
                 repl.enter_raw()
                 dev = DeviceBackend(repl)
-                return dev, device_start(self.settings, dev, board)
+                try:
+                    machine = repl.exec("import os;print(os.uname().machine)").decode().strip()
+                except Exception:
+                    machine = ""            # a build without os.uname: the port list keeps its generic name
+                return dev, device_start(self.settings, dev, board), machine
             except BaseException:
                 repl.close()
                 raise
@@ -389,12 +393,13 @@ class App(Gtk.Window):
                 self.set_status("Connection failed")
                 error(self, "Connection failed", str(exc))
                 return
-            self.connected(res[0], res[1], port, board)
+            self.connected(res[0], res[1], port, board, res[2])
         self.runner.submit(work, done, "Connecting", quiet=True)
 
-    def connected(self, dev, start, port, board):
-        """The connection is up: show the board, and remember the port (and later its folders)."""
+    def connected(self, dev, start, port, board, machine=""):
+        """The connection is up: show the board, and remember the port, its model (and later its folders)."""
         self.device = dev
+        remember_board_name(self.settings, board, machine)
         self.board = board
         self.session = ConsoleSession(dev.repl)
         remember_port(self.settings, port)

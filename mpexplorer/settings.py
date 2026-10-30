@@ -81,6 +81,7 @@ SPEC = {
     "window.maximized": (False, boolean),
     "folders.host": ("", string),
     "folders.boards": ({}, str_dict),               # board id -> last device folder
+    "boards.names": ({}, str_dict),                 # board id -> what os.uname().machine said at the last connect
     "open_with.auto_upload": (True, boolean),       # upload saves made in an external program (docs/OPEN_WITH_PLAN.md)
     "open_with.by_extension": ({}, str_dict),       # ".py" -> "editor" | "app:<desktop id>" | "custom:<name>"
     "open_with.custom": ({}, str_dict),             # name -> command with {file}
