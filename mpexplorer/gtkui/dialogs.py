@@ -458,11 +458,12 @@ class SyncDialog(Gtk.Dialog):
 class TransferPopup(Gtk.Window):
     """A small non-modal progress window for a file job that is taking a while: what it is doing, a centred bar, the
     transfer line, and Cancel. The app opens it once a job has run for POPUP_DELAY seconds and closes it when the job
-    ends."""
+    ends, but not before it has been up for POPUP_MIN_VISIBLE seconds."""
 
     def __init__(self, app, job):
         super().__init__(title="Working ...", transient_for=app)
         self.app, self.job = app, job
+        self.opened, self.finished = time.monotonic(), False
         self.set_type_hint(Gdk.WindowTypeHint.DIALOG)
         self.set_position(Gtk.WindowPosition.CENTER_ON_PARENT)
         self.set_focus_on_map(False)                        # do not pull the keyboard away from the main window
@@ -496,6 +497,8 @@ class TransferPopup(Gtk.Window):
         self.show_all()
 
     def update(self):
+        if self.finished:
+            return
         p = self.job.prog
         self.heading.set_markup("<b>%s</b>" % GLib.markup_escape_text(self.job.status))
         if p.known():
@@ -505,6 +508,14 @@ class TransferPopup(Gtk.Window):
         self.file.set_text(p.label)
         self.text.set_text(p.describe(with_label=False))
 
+    def finish(self):
+        """The job has ended: show its last numbers and wait to be closed (the app keeps it up for a minimum time)."""
+        if not self.finished:
+            self.update()
+            self.finished = True
+            self.heading.set_markup("<b>Finished: %s</b>" % GLib.markup_escape_text(self.job.status))
+            self.cancel_btn.set_sensitive(False)
+
     def _cancel(self):
         self.cancel_btn.set_sensitive(False)
         self.cancel_btn.set_label("Cancelling ...")
@@ -512,7 +523,8 @@ class TransferPopup(Gtk.Window):
 
     def dismiss(self):
         """Close the window but leave the job running; it is not shown again for this job."""
-        self.app._popup_dismissed = True
+        if self.job is self.app._popup_job:
+            self.app._popup_dismissed = True
         self.close_window()
 
     def close_window(self):

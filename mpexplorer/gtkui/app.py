@@ -27,7 +27,8 @@ from .prefs import PreferencesDialog
 MAX_EDIT_BYTES = 256 * 1024
 
 
-POPUP_DELAY = 3.0       # seconds a file job runs before its progress window opens
+POPUP_DELAY = 1.0       # seconds a file job runs before its progress window opens
+POPUP_MIN_VISIBLE = 3.0     # ... and the least time it then stays up, even if the job ends sooner
 STATUS_HOLD = 5.0       # seconds a message stays in the status bar before it goes back to "Ready"
 
 
@@ -738,19 +739,23 @@ class App(Gtk.Window):
         return True
 
     def _update_popup(self, job):
-        """Open a progress window once a file job has run for POPUP_DELAY seconds; close it when the job ends."""
+        """Open a progress window once a file job has run for POPUP_DELAY seconds; close it when the job ends, but not
+        before it has been up for POPUP_MIN_VISIBLE seconds (until then it shows the finished state)."""
+        now = time.monotonic()
         watched = job if job and not job.quiet and not job.inline else None
-        if watched is not self._popup_job:                       # another job, or none: start over
-            if self._popup:
-                self._popup.close_window()
-            self._popup_job, self._popup_since, self._popup_dismissed = watched, time.monotonic(), False
+        popup = self._popup
+        if popup and popup.job is not watched:                    # the popup's job has ended
+            popup.finish()
+            if now - popup.opened >= POPUP_MIN_VISIBLE:
+                popup.close_window()
+        if watched is not self._popup_job:                        # another job, or none: start the clock again
+            self._popup_job, self._popup_since, self._popup_dismissed = watched, now, False
         if watched is None or self._popup_dismissed:
             return
-        if self._popup is None and time.monotonic() - self._popup_since >= POPUP_DELAY:
+        if self._popup is None and now - self._popup_since >= POPUP_DELAY:
             self._popup = TransferPopup(self, watched)
-        if self._popup:
+        if self._popup and self._popup.job is watched:
             self._popup.update()
-
 
 def run():
     GLib.set_prgname("mpexplorer")              # becomes the Wayland app_id: the taskbar finds mpexplorer.desktop
