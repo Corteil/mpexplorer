@@ -251,6 +251,16 @@ class DeviceBackend:
         self.repl.close(reset)
 
 
+def human_duration(seconds):
+    """'45 s', '3 min 20 s', '1 h 05 min': a short time span for the transfer line."""
+    s = int(round(seconds))
+    if s < 60:
+        return "%d s" % s
+    if s < 3600:
+        return "%d min %02d s" % (s // 60, s % 60)
+    return "%d h %02d min" % (s // 3600, s % 3600 // 60)
+
+
 def human(n):
     n = float(n)
     for unit in ("B", "KB", "MB"):
@@ -260,4 +270,4 @@ def human(n):
     return "%.1f GB" % n
 
 
-__all__ = ["Entry", "LocalBackend", "DeviceBackend", "BackendError", "CHUNK", "human"]
+__all__ = ["Entry", "LocalBackend", "DeviceBackend", "BackendError", "CHUNK", "human", "human_duration"]

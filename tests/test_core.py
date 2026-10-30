@@ -7,7 +7,7 @@ import pytest
 
 import fakedisplay
 from fakedevice import FakeSerial
-from mpexplorer.backends import CHUNK, DeviceBackend, LocalBackend
+from mpexplorer.backends import CHUNK, DeviceBackend, LocalBackend, human_duration
 from mpexplorer.badgescreen import BadgeScreen, fit
 from mpexplorer.errors import BackendError, Cancelled
 from mpexplorer.jobs import JobRunner
@@ -343,3 +343,22 @@ def test_job_runner_hook_sees_start_and_end_and_cannot_break_the_worker():
     assert [d[2] for d in done] == [None, done[1][2]] and isinstance(done[1][2], ZeroDivisionError)
     assert seen == [("Copying", "start", None), ("Copying", "end", None),
                     ("Deleting x", "start", None), ("Deleting x", "end", "ZeroDivisionError")]
+
+
+def test_human_duration():
+    got = [human_duration(x) for x in (0, 44.6, 60, 200, 3900)]
+    assert got == ["0 s", "45 s", "1 min 00 s", "3 min 20 s", "1 h 05 min"]
+
+
+def test_progress_describes_the_transfer(monkeypatch):
+    p = Progress()
+    p.label = "main.py"
+    assert p.describe() == "main.py   0 B   0 B/s" and p.eta() is None and p.fraction() == 0.0     # nothing known yet
+    clock = {"t": p.started}
+    monkeypatch.setattr(time, "monotonic", lambda: clock["t"])
+    p.total, p.done = 4096, 1024
+    clock["t"] = p.started + 2.0                                                              # 512 B/s
+    assert p.fraction() == 0.25 and p.eta() == pytest.approx(6.0)
+    assert p.describe() == "main.py   1.0 KB of 4.0 KB (25%)   512 B/s   6 s left"
+    p.total = 0
+    assert p.describe() == "main.py   1.0 KB   512 B/s" and p.eta() is None

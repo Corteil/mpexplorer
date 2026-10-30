@@ -2,7 +2,7 @@
 import threading
 import time
 
-from .backends import CHUNK, MIN_VALID_MTIME
+from .backends import CHUNK, MIN_VALID_MTIME, human, human_duration
 from .errors import BackendError, Cancelled
 
 
@@ -26,6 +26,27 @@ class Progress:
 
     def rate(self):
         return self.done / max(time.monotonic() - self.started, 1e-3)
+
+    def fraction(self):
+        return min(1.0, self.done / self.total) if self.total else 0.0
+
+    def eta(self):
+        """Seconds left at the current rate, or None when the total or the rate is not known yet."""
+        rate = self.rate()
+        return (self.total - self.done) / rate if self.total > self.done and self.done and rate > 0 else None
+
+    def describe(self):
+        """The transfer line: file, bytes done of total, percent, speed, time left."""
+        parts = [self.label] if self.label else []
+        if self.total:
+            parts.append("%s of %s (%d%%)" % (human(self.done), human(self.total), self.fraction() * 100))
+        else:
+            parts.append(human(self.done))
+        parts.append("%s/s" % human(self.rate()))
+        eta = self.eta()
+        if eta is not None:
+            parts.append("%s left" % human_duration(eta))
+        return "   ".join(parts)
 
 
 class ConflictPolicy:

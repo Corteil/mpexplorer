@@ -308,3 +308,24 @@ def test_badge_screen_is_not_drawn_when_switched_off_or_when_the_board_restarts(
     app.disconnect()                                                               # the badge restarts: no goodbye page
     pump()
     assert rec.frames and "DISCONNECTED" not in rec.all_text()
+
+
+def test_transfer_progress_sits_above_the_transfer_information(make_app):
+    import threading
+    app = make_app()
+    gate = threading.Event()
+
+    def job(prog):
+        prog.label, prog.total, prog.done = "main.py", 4096, 1024
+        gate.wait(5)
+    app.runner.submit(job, label="Uploading ...")
+    pump(500)
+    try:
+        assert app.bar.get_fraction() == 0.25 and app.bar.get_show_text() and app.bar.get_text() == "25%"
+        text = app.status.get_text()
+        assert text.startswith("main.py") and "1.0 KB of 4.0 KB (25%)" in text and "/s" in text
+        assert app.bar.get_allocation().y < app.status.get_allocation().y            # the bar is the upper row
+    finally:
+        gate.set()
+    pump(500)
+    assert app.bar.get_fraction() == 0 and not app.bar.get_show_text()
