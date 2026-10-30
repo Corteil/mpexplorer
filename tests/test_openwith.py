@@ -264,3 +264,200 @@ def test_local_copy_deleted_means_nothing_to_upload(dev, bd, tmp_path):
     os.unlink(local)
     assert openwith.upload_changes(dev, w) == "skipped"
     assert read(dev, bd + "/a.txt") == b"v1\n"
+
+
+# -- the sessions: download, launch, watch, upload --------------------------
+class SyncRunner:
+    """A job runner that does the work at once on the calling thread (the real one uses a worker thread)."""
+
+    def __init__(self):
+        self.labels = []
+
+    def submit(self, fn, on_done=None, label="", quiet=False, status=None, inline=False):
+        from mpexplorer.ops import Progress
+        self.labels.append(label)
+        try:
+            res, exc = fn(Progress()), None
+        except BaseException as e:
+            res, exc = None, e
+        if on_done:
+            on_done(res, exc)
+
+
+class FakeProc:
+    def __init__(self, alive=True):
+        self.alive = alive
+
+    def poll(self):
+        return None if self.alive else 0
+
+
+class Rig:
+    def __init__(self, dev, bd, tmp_path, answer="skip"):
+        self.dev, self.bd, self.clock, self.said, self.launched = dev, bd, Clock(), [], []
+        self.answer, self.asked, self.refreshed = answer, [], 0
+        self.proc = FakeProc()
+        self.runner = SyncRunner()
+        self.root = str(tmp_path / "cache")
+        self.mgr = openwith.EditManager(self.runner, self.root, self.said.append, self._ask, self._refresh,
+                                        launch=self._launch, clock=self.clock, interval=0.5, idle=60)
+
+    def _ask(self, name):
+        self.asked.append(name)
+        return self.answer
+
+    def _refresh(self):
+        self.refreshed += 1
+
+    def _launch(self, argv):
+        self.launched.append(argv)
+        return self.proc
+
+    def edit(self, name="main.py", template="geany {file}"):
+        self.mgr.edit_device_file(self.dev, "bd1", self.bd + "/" + name, template)
+
+    def save(self, text, advance=1.6):
+        s = self.mgr.sessions[0]
+        open(s.watcher.local, "wb").write(text)
+        os.utime(s.watcher.local, ns=(self.clock.t_ns, self.clock.t_ns))
+        self.clock.t += 0.6                         # the manager looks at most every 0.5 s
+        self.mgr.tick()                             # notices the save
+        self.clock.t += advance
+        self.mgr.tick()                             # the save has settled: uploads
+
+
+@pytest.fixture
+def rig(dev, bd, tmp_path):
+    Clock.t_ns = property(lambda self: int(self.t * 1e9))
+    return Rig(dev, bd, tmp_path)
+
+
+def test_open_downloads_launches_and_uploads_each_save(rig, dev, bd):
+    put(dev, bd + "/main.py", b"v1\n")
+    rig.edit()
+    s = rig.mgr.sessions[0]
+    assert rig.launched == [["geany", s.watcher.local]]
+    assert s.watcher.local.startswith(rig.root) and open(s.watcher.local, "rb").read() == b"v1\n"
+    assert any("Editing main.py in geany" in t for t in rig.said)
+    rig.save(b"v2 saved in geany\n")
+    assert read(dev, bd + "/main.py") == b"v2 saved in geany\n"
+    assert rig.said[-1] == "Uploaded main.py (18 B)" and rig.refreshed == 1
+    rig.save(b"v3\n")
+    assert read(dev, bd + "/main.py") == b"v3\n" and rig.refreshed == 2
+    assert [e.name for e in dev.listdir(bd)] == ["main.py"]
+    assert rig.runner.labels == ["Downloading " + bd + "/main.py"] + ["Uploading " + bd + "/main.py"] * 2
+
+
+def test_no_upload_before_the_save_settles_or_without_a_change(rig, dev, bd):
+    put(dev, bd + "/main.py", b"v1\n")
+    rig.edit()
+    rig.clock.t += 5
+    rig.mgr.tick()
+    assert len(rig.runner.labels) == 1                                  # only the download: nothing changed
+    rig.save(b"v2\n", advance=0.2)
+    assert len(rig.runner.labels) == 1                                  # 0.2 s after the save: still waiting
+    rig.clock.t += 2
+    rig.mgr.tick()
+    assert len(rig.runner.labels) == 2 and read(dev, bd + "/main.py") == b"v2\n"
+
+
+def test_opening_again_relaunches_without_downloading_twice(rig, dev, bd):
+    put(dev, bd + "/main.py", b"v1\n")
+    rig.edit()
+    rig.edit()
+    assert len(rig.mgr.sessions) == 1 and len(rig.launched) == 2 and len(rig.runner.labels) == 1
+
+
+def test_conflict_asks_and_applies_the_answer(dev, bd, tmp_path):
+    put(dev, bd + "/main.py", b"v1\n")
+    rig = Rig(dev, bd, tmp_path, answer="keep_both")
+    Clock.t_ns = property(lambda self: int(self.t * 1e9))
+    rig.edit()
+    put(dev, bd + "/main.py", b"changed on the board\n")
+    rig.save(b"my edit\n")
+    assert rig.asked == ["main.py"]
+    assert read(dev, bd + "/main.py") == b"my edit\n"
+    assert read(dev, bd + "/main (device).py") == b"changed on the board\n"
+    assert rig.said[-1].startswith("Uploaded main.py")
+
+
+def test_failed_upload_is_reported_and_retried_later(rig, dev, bd, monkeypatch):
+    put(dev, bd + "/main.py", b"v1\n")
+    rig.edit()
+
+    def boom(*a, **k):
+        raise OSError("cable unplugged")
+    monkeypatch.setattr(openwith, "upload_changes", boom)
+    rig.save(b"v2\n")
+    assert rig.said[-1] == "Upload of main.py failed: cable unplugged"
+    labels = len(rig.runner.labels)
+    rig.clock.t += 5
+    rig.mgr.tick()
+    assert len(rig.runner.labels) == labels                             # backs off for 10 s, not a retry loop
+    monkeypatch.undo()
+    rig.clock.t += 10
+    rig.mgr.tick()
+    assert read(dev, bd + "/main.py") == b"v2\n"
+
+
+def test_launch_failure_and_bad_input(rig, dev, bd):
+    put(dev, bd + "/main.py", b"v1\n")
+    rig.mgr.launch = lambda argv: (_ for _ in ()).throw(FileNotFoundError("no such program"))
+    rig.edit()
+    assert rig.said[-1] == "Cannot start geany: no such program" and not rig.mgr.sessions
+    assert not os.path.exists(rig.root + "/bd1/" + bd.lstrip("/") + "/main.py")        # the copy was cleaned up
+    rig.edit("missing.py")
+    assert rig.said[-1].startswith("Cannot open missing.py:")
+    rig.said.clear()
+    rig.mgr.edit_device_file(rig.dev, "bd1", bd + "/main.py", "")
+    assert rig.said[-1].startswith("Cannot open main.py: the command is empty") and not rig.launched
+
+
+def test_idle_session_is_dropped_only_after_the_program_has_gone(rig, dev, bd):
+    put(dev, bd + "/main.py", b"v1\n")
+    rig.edit()
+    local = rig.mgr.sessions[0].watcher.local
+    rig.clock.t += 500
+    rig.mgr.tick()
+    assert rig.mgr.sessions and os.path.exists(local)                   # the program still runs: keep watching
+    rig.proc.alive = False                              # (a hand-over to a running window looks the same)
+    rig.clock.t += 100
+    rig.mgr.tick()
+    assert not rig.mgr.sessions and not os.path.exists(local)
+    assert not os.path.exists(rig.root + "/bd1")                        # empty cache folders are removed too
+
+
+def test_flush_and_close_board_keep_unsent_work(rig, dev, bd):
+    put(dev, bd + "/a.py", b"a1\n")
+    put(dev, bd + "/b.py", b"b1\n")
+    rig.edit("a.py")
+    rig.edit("b.py")
+    a, b = rig.mgr.sessions
+    open(a.watcher.local, "wb").write(b"a2\n")                         # saved, not yet uploaded
+    put(dev, bd + "/b.py", b"board changed b\n")
+    open(b.watcher.local, "wb").write(b"b2 mine\n")                     # saved, and the board changed too
+    assert rig.mgr.flush(dev, "bd1") == ["b.py"]                        # a.py went up, b.py is a conflict: left alone
+    assert read(dev, bd + "/a.py") == b"a2\n" and read(dev, bd + "/b.py") == b"board changed b\n"
+    assert rig.mgr.close_board("bd1") == ["b.py"]
+    assert not rig.mgr.sessions
+    assert open(b.watcher.local, "rb").read() == b"b2 mine\n"           # the unsent edit is still in the cache
+    assert not os.path.exists(a.watcher.local)
+
+
+def test_open_host_file_launches_directly(rig):
+    assert rig.mgr.open_host_file("/home/pi/my file.py", "geany {file}") is None
+    assert rig.launched == [["geany", "/home/pi/my file.py"]]
+    assert rig.mgr.open_host_file("/f", "") == "the command is empty"
+    rig.mgr.launch = lambda argv: (_ for _ in ()).throw(FileNotFoundError("nope"))
+    assert rig.mgr.open_host_file("/f", "geany {file}") == "nope"
+
+
+def test_polling_an_unchanged_file_does_not_restart_the_wait(tmp_path):
+    clock = Clock()
+    f, w = make_watcher(tmp_path, clock)
+    f.write_bytes(b"two\n")
+    w.notice()
+    for _ in range(5):
+        clock.t += 0.3                      # the manager looks every 0.5 s while a save is waiting
+        w.notice()
+    assert w.ready()                        # 1.5 s since the save: it settled although it was polled throughout
