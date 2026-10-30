@@ -653,6 +653,8 @@ def test_transfer_popup_opens_after_the_delay_and_closes_with_the_job(make_app, 
     popup = app._popup
     try:
         assert popup is not None and popup.get_visible() and not popup.get_modal()
+        # Hide and Cancel while running
+        assert popup.running.get_visible() and not popup.close_btn.get_visible()
         assert popup.heading.get_text() == "Uploading main.py" and popup.bar.get_fraction() == 0.25
         assert popup.file.get_text() == "main.py" and popup.text.get_text().startswith("1.0 KB of 4.0 KB (25%)")
         grid, bar = popup.bar.get_parent().get_allocation(), popup.bar.get_allocation()
@@ -837,7 +839,9 @@ def test_transfer_popup_stays_up_for_the_minimum_time_when_the_job_ends_sooner(m
     assert popup is not None
     gate.set()
     pump(300)                                                              # the job has ended; the popup has not gone
-    assert app._popup is popup and popup.finished and not popup.cancel_btn.get_sensitive()
+    assert app._popup is popup and popup.finished
+    # Hide and Cancel give way to Close
+    assert not popup.running.get_visible() and popup.close_btn.get_visible()
     assert popup.heading.get_text() == "Finished: Uploading main.py" and popup.get_visible()
     pump(1300)                                                             # ... until it has been up long enough
     assert app._popup is None
@@ -865,3 +869,27 @@ def test_a_lingering_popup_does_not_stop_the_next_job_getting_its_own(make_app, 
         second.set()
     pump(1500)
     assert app._popup is None
+
+
+def test_the_finished_popup_can_be_closed_at_once_with_its_close_button(make_app, monkeypatch):
+    import threading
+    from mpexplorer.gtkui import app as app_module
+    monkeypatch.setattr(app_module, "POPUP_DELAY", 0.2)
+    monkeypatch.setattr(app_module, "POPUP_MIN_VISIBLE", 30.0)                # it would otherwise stay for a long time
+    app = make_app()
+    gate = threading.Event()
+    app.runner.submit(_slow_job(gate), label="Copying ...", status="Uploading main.py")
+    pump(500)
+    popup = app._popup
+    assert popup is not None and popup.running.get_visible()
+    gate.set()
+    pump(400)
+    assert app._popup is popup and popup.close_btn.get_visible()
+    popup.close_btn.clicked()
+    assert app._popup is None                                                  # gone straight away, not after 30 s
+    app.runner.submit(_slow_job(threading.Event()), label="Copying ...", status="Next")
+    pump(600)
+    assert app._popup is not None                                              # closing it did not hide the next job's
+    app._popup.dismiss()
+    app.runner.cancel_all()
+    pump(300)

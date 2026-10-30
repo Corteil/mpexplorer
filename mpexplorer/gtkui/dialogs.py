@@ -484,13 +484,19 @@ class TransferPopup(Gtk.Window):
         grid.attach(self.text, 1, 3, 3, 1)
         box.pack_start(grid, True, True, 0)
         buttons = Gtk.Box(spacing=6)
+        self.running = Gtk.Box(spacing=6)                   # while the job runs: Hide and Cancel ...
         self.cancel_btn = Gtk.Button(label="Cancel")
         self.cancel_btn.connect("clicked", lambda _b: self._cancel())
         hide = Gtk.Button(label="Hide")
         hide.set_tooltip_text("Close this window; the job keeps running (see the status bar)")
         hide.connect("clicked", lambda _b: self.dismiss())
-        buttons.pack_end(self.cancel_btn, False, False, 0)
-        buttons.pack_end(hide, False, False, 0)
+        self.running.pack_end(self.cancel_btn, False, False, 0)
+        self.running.pack_end(hide, False, False, 0)
+        buttons.pack_end(self.running, False, False, 0)
+        self.close_btn = Gtk.Button(label="Close")          # ... when it has ended: just Close, to dismiss it at once
+        self.close_btn.set_no_show_all(True)
+        self.close_btn.connect("clicked", lambda _b: self.dismiss())
+        buttons.pack_end(self.close_btn, False, False, 0)
         box.pack_start(buttons, False, False, 0)
         self.connect("delete-event", lambda *_: self.dismiss() or True)
         self.update()
@@ -514,7 +520,8 @@ class TransferPopup(Gtk.Window):
             self.update()
             self.finished = True
             self.heading.set_markup("<b>Finished: %s</b>" % GLib.markup_escape_text(self.job.status))
-            self.cancel_btn.set_sensitive(False)
+            self.running.hide()
+            self.close_btn.show()
 
     def _cancel(self):
         self.cancel_btn.set_sensitive(False)
