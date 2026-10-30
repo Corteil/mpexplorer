@@ -929,3 +929,49 @@ def test_run_script_can_be_interrupted_by_cancel(make_app, monkeypatch):
     submitted[0]["on_cancel"]()
     assert calls == ["ctrl-c"]
     app.right.backend = None
+
+
+def test_open_with_external_editor_uploads_saves_and_cleans_up(make_app, tmp_path, monkeypatch):
+    dialogs = []
+    monkeypatch.setattr("mpexplorer.gtkui.app.error", lambda parent, title, text: dialogs.append((title, text)))
+    board = tmp_path / "board"
+    board.mkdir()
+    (board / "main.py").write_bytes(b"v1\n")
+    app = make_app()
+    launched = []
+
+    class Clock:
+        t = 100.0
+
+        def __call__(self):
+            return self.t
+    clock = Clock()
+    app.edits._clock, app.edits.interval, app.edits.root = clock, 0, str(tmp_path / "cache")
+    app.edits._last_tick = float("-inf")                            # the poller already ticked on the real clock
+    app.edits.launch = lambda argv: launched.append(argv) or type("P", (), {"poll": lambda self: None})()
+    app.edits.ask_conflict = lambda name: "skip"                    # a real dialog would block the test
+    app.connected(DeviceBackend(RawREPL(FakeSerial())), str(board), "/dev/ttyACM0", "303a:4001:AAA")
+    app.open_external(app.right, str(board / "main.py"))
+    pump(400)
+    assert len(launched) == 1 and launched[0][0] == "geany"
+    cached = launched[0][1]
+    assert cached.startswith(str(tmp_path / "cache")) and open(cached, "rb").read() == b"v1\n"
+    open(cached, "wb").write(b"v2 from geany\n")
+    pump(300)                                                       # the app notices the save
+    clock.t += 2                                                    # ... and it settles
+    pump(600)
+    assert (board / "main.py").read_bytes() == b"v2 from geany\n"
+    assert app.status.get_text().startswith("Uploaded main.py")
+    app.disconnect()
+    pump(400)
+    assert not os.path.exists(cached) and not app.edits.sessions    # nothing unsent: the cache copy is removed
+    assert dialogs == []                                            # and no 'edits not uploaded' warning
+
+
+def test_host_file_opens_directly_in_the_external_editor(make_app, tmp_path):
+    (tmp_path / "a b.py").write_text("x\n")
+    app = make_app()
+    launched = []
+    app.edits.launch = lambda argv: launched.append(argv)
+    app.open_external(app.left, str(tmp_path / "a b.py"))
+    assert launched == [["geany", str(tmp_path / "a b.py")]]

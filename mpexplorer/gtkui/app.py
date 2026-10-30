@@ -1,5 +1,7 @@
 """GTK 3 main window: two panes, toolbar, job progress."""
+import os
 import queue
+import shutil
 import threading
 import time
 import weakref
@@ -11,6 +13,7 @@ from ..console import ConsoleSession
 from ..errors import BackendError, Cancelled
 from ..jobs import JobRunner
 from ..badgescreen import BadgeScreen
+from ..openwith import EditManager
 from ..ops import ConflictPolicy, copy_tree, delete_items, is_within, move_item, total_size, unique_name
 from ..ports import board_id, device_of, list_ports, short_model
 from ..remember import device_start, host_start, port_choice, remember_board_name, remember_folder, remember_port
@@ -19,12 +22,18 @@ from ..transport import RawREPL
 from .common import (ICON, Gdk, GdkPixbuf, GLib, Gtk, ask_yes_no, button, error, fmt_time, icon_button, info, prompt,
                      set_icon)
 from .console import ConsoleWindow
-from .dialogs import OutputWindow, SyncDialog, TransferPopup, ask_conflict, ask_sync_target
+from .dialogs import OutputWindow, SyncDialog, TransferPopup, ask_conflict, ask_edit_conflict, ask_sync_target
 from .editor import Editor
 from .pane import Pane
 from .prefs import PreferencesDialog
 
 MAX_EDIT_BYTES = 256 * 1024
+EXTERNAL_EDITOR = "geany {file}"      # the first external editor wired to "Open with" (docs/OPEN_WITH_PLAN.md)
+
+
+def cache_dir():
+    base = os.environ.get("XDG_CACHE_HOME") or os.path.join(os.path.expanduser("~"), ".cache")
+    return os.path.join(base, "mpexplorer", "open")
 
 
 POPUP_DELAY = 1.0       # seconds a file job runs before its progress window opens
@@ -50,6 +59,7 @@ class App(Gtk.Window):
         self._status_timer = None
         self.clipboard = Clipboard()
         self.local = LocalBackend()
+        self.edits = EditManager(self.runner, cache_dir(), self._edit_say, self._edit_conflict, self._refresh_all)
         self.device = None
         self.session = None
         self.console = None
@@ -284,6 +294,10 @@ class App(Gtk.Window):
         sel = self.active.selected()
         if len(sel) == 1:
             add("Open", self.active._open)
+            entry = self.active.entry(sel[0][0])
+            if entry and not entry.is_dir and shutil.which(EXTERNAL_EDITOR.split()[0]):
+                add("Open with %s" % EXTERNAL_EDITOR.split()[0].capitalize(),
+                    lambda: self.open_external(self.active, sel[0][1]))
         other = self.other_pane(self.active)
         add("Send to %s" % other.title, lambda: self.transfer(self.active, other))
         m.append(Gtk.SeparatorMenuItem())
@@ -438,8 +452,9 @@ class App(Gtk.Window):
 
     def disconnect(self):
         if self.device:
-            dev, self.device = self.device, None
+            dev, self.device, board = self.device, None, self.board
             self.board = None
+            self._release_edits(dev, board)
             self.session = None
             if self.console:
                 self.console.close()
@@ -453,6 +468,19 @@ class App(Gtk.Window):
             self.connect_btn.set_sensitive(True)
             self.set_status("Disconnected")
 
+    def _release_edits(self, dev, board):
+        """Disconnecting: send saves still waiting (before the board is closed), then drop the cache copies."""
+        if not any(s.board == board for s in self.edits.sessions):
+            return
+
+        def done(left, exc):
+            kept = self.edits.close_board(board)
+            if exc or left or kept:
+                names = ", ".join(sorted(set(left or []) | set(kept)))
+                error(self, "Edits not uploaded", "These files have saves that were not sent to the board:\n\n%s\n\n"
+                      "Your copies are kept in %s" % (names or str(exc), cache_dir()))
+        self.runner.submit(lambda prog: self.edits.flush(dev, board), done, "Uploading saved edits", quiet=True)
+
     def _quit(self):
         self.save_state()
         self.runner.cancel_all()
@@ -460,6 +488,12 @@ class App(Gtk.Window):
             if not self.runner.busy:
                 break
             time.sleep(0.1)
+        if self.device and not self.runner.busy:
+            try:
+                self.edits.flush(self.device, self.board)         # saves still waiting go up before the board is closed
+                self.edits.close_board(self.board)
+            except Exception:
+                pass
         if self.device:
             try:
                 reset = self.settings.get("general.reset_on_disconnect")
@@ -619,6 +653,22 @@ class App(Gtk.Window):
         self.runner.submit(work, done, "Reading properties", quiet=True)
 
     # -- editor and device tools ------------------------------------------
+    def open_external(self, pane, path):
+        """Open a file in the external editor: a host file directly, a device file as an edit-in-place session."""
+        if pane.backend.key == "local":
+            err = self.edits.open_host_file(path, EXTERNAL_EDITOR)
+            if err:
+                error(self, "Cannot open file", err)
+        elif self.device:
+            self.edits.edit_device_file(self.device, self.board, path, EXTERNAL_EDITOR)
+
+    def _edit_say(self, text):
+        self.set_status(text)
+
+    def _edit_conflict(self, name):
+        return ask_edit_conflict(self, name)
+
+    # -- editor and device tools (built-in) ---------------------------------
     def open_file(self, pane, path, size):
         if size > MAX_EDIT_BYTES:
             info(self, "Too large", "Files over %s are not opened in the editor." % human(MAX_EDIT_BYTES))
@@ -720,6 +770,10 @@ class App(Gtk.Window):
 
     # -- main loop tick ----------------------------------------------------
     def _poll(self):
+        try:
+            self.edits.tick()
+        except Exception as e:           # a broken tick must not stop the poller
+            self.set_status("Internal error: %s" % e)
         for job, res, exc in self.runner.drain():
             try:
                 if job.on_done:

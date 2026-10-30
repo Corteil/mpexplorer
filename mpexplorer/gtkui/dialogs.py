@@ -30,6 +30,24 @@ def ask_conflict(parent, name):
     return (actions[res] if 0 <= res < len(actions) else "cancel", all_)
 
 
+def ask_edit_conflict(parent, name):
+    """The board's copy changed while the file was open in another program: 'overwrite' | 'keep_both' | 'skip'."""
+    dlg = Gtk.Dialog(title="Changed on the board", transient_for=parent, modal=True)
+    actions = ["overwrite", "keep_both", "skip"]
+    for i, text in enumerate(("Overwrite the board's copy", "Keep both", "Skip")):
+        dlg.add_button(text, i)
+    box = dlg.get_content_area()
+    box.set_border_width(12)
+    box.set_spacing(8)
+    box.add(Gtk.Label(label="'%s' was changed on the board after you opened it." % name))
+    box.add(Gtk.Label(label="Keep both saves the board's version as '%s (device)' and uploads yours." % name,
+                      xalign=0, wrap=True))
+    dlg.show_all()
+    res = dlg.run()
+    dlg.destroy()
+    return actions[res] if 0 <= res < len(actions) else "skip"
+
+
 MAX_DELETE_ROWS = 2000      # more deletions than this are listed as one row per top-level folder
 BIG_DELETE = 1000           # ... and more than this gets a red warning in the confirmation
 
