@@ -325,10 +325,13 @@ def test_transfer_progress_sits_above_the_transfer_information(make_app):
         text = app.status.get_text()
         assert text.startswith("main.py") and "1.0 KB of 4.0 KB (25%)" in text and "/s" in text
         assert app.bar.get_allocation().y < app.status.get_allocation().y            # the bar is the upper row
-        cancel = app.bar.get_parent().get_parent().get_children()[1]
-        block = app.bar.get_parent().get_allocation()
-        assert abs(cancel.get_allocation().height - block.height) <= 1                # Cancel as tall as bar + text
-        assert cancel.get_allocation().y <= block.y + 1
+        grid = app.bar.get_parent()
+        bar, label, total = app.bar.get_allocation(), app.status.get_allocation(), grid.get_allocation()
+        cancel = [c for c in grid.get_children() if isinstance(c, Gtk.Button)][0].get_allocation()
+        assert abs(cancel.height - (label.y + label.height - bar.y)) <= 1             # Cancel as tall as bar + text
+        assert 0.55 < bar.width / total.width < 0.65                                  # about 60% of the width
+        assert abs((bar.x + bar.width / 2) - (total.x + total.width / 2)) <= 3        # centred
+        assert abs(label.x - bar.x) <= 1                                              # text lines up with the bar
     finally:
         gate.set()
     pump(500)
