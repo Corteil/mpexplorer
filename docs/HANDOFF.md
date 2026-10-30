@@ -11,7 +11,8 @@ table (`key_bytes`) and `--tk`/`MPEXPLORER_UI` are gone. The Tk-specific lessons
 ## Status after the 2026-10-29 Pi session (read this first)
 Done from a Claude Code session on the Pi 5 with the Tildagon (MicroPython 1.28.0) on `/dev/ttyACM0`. Everything below is
 merged to `main` and CI was green at `9524f1e`. It was done through scripts, the fake board and GUI tests on a private
-Xvfb display; **no GUI session with the owner**, so the GUI items under "Not yet done" are untried by hand.
+Xvfb display; it had **no GUI session with the owner**. On 2026-10-30 the owner checked the new GUI items by hand on the real display and
+badge and reported them OK (see below); the hardware checklist (START HERE step 4) was still being worked through.
 
 What was done:
 - **Benchmark run** (START HERE step 3): verdict SLOW. Tables and the causes are in `docs/HARDWARE.md`; what it means for
@@ -34,7 +35,7 @@ What was done:
 - **Send time button** (toolbar, next to Connect): same action as Device > "Set board time now". The toolbar now
   wraps onto a second row when the window is narrow (GTK `FlowBox` of two groups, Port..Send time and Upload..Delete),
   so the window's minimum width is set by the panes (about 995 px in GTK), and at the 1180 px
-  default the toolbar shows two rows (one row needs about 1460 px). Tested under Xvfb only: not yet seen on the real display.
+  default the toolbar shows two rows (one row needs about 1460 px). Checked under Xvfb, then confirmed OK by the owner on the real display (2026-10-30).
 - **Restart on disconnect** (Preferences > "Restart the board when disconnecting or quitting", `general.reset_on_disconnect`,
   off by default): connecting interrupts the badge OS (Ctrl-C), and a plain disconnect (Ctrl-B) leaves its screen frozen; with
   the option on, `RawREPL.close(reset=True)` sends Ctrl-B Ctrl-D so the badge restarts. **Confirmed by the owner on the
@@ -43,7 +44,7 @@ What was done:
 - **Toolbar icons**: toolbar, pane bars, editor, console and status bar use theme icons (PiXflat) with
   hover hints that carry the shortcut; `icon_button`/`set_icon` in `gtkui/common.py` fall back to the old text label if the theme
   lacks an icon. Connect swaps its icon with the state. At 1180 px the toolbar now fits on one row. Rendered under Xvfb with
-  `gtk-icon-theme-name=PiXflat` (Xvfb has no settings daemon, so set it in the script); not yet seen on the real display.
+  `gtk-icon-theme-name=PiXflat` (Xvfb has no settings daemon, so set it in the script); confirmed OK by the owner on the real display (2026-10-30).
 - **Sync dialog** (`gtkui/dialogs.py` `SyncDialog`, `sync.py`): shows From/To (with Host/Device and the paths), the target's free space
   (`Plan.dst_free`, gathered on the worker; red when the ticked files will not fit), what is ignored (`Plan.exclude`), a live
   summary, and every item with a tick box. Unticked items are not transferred (`apply_plan(..., selected=...)`); folders stay
@@ -75,21 +76,22 @@ What was done:
   (opens after the delay, never for quick/quiet/inline jobs, Hide, Cancel, Close); the owner has not yet seen it with real transfers.
 - **Transfer bar** (GTK only): the progress bar sits over the status or transfer line (file, `1.2 MB of 3.0 MB (40%)`, speed,
   time left: `Progress.describe()`/`eta()` in `ops.py`, tested), with Cancel beside the bar, stretched to the height of both; the bar is centred at about 60% of the width
-  (34 px here, the same as a toolbar button). Rendered under Xvfb with a simulated job; not yet seen with a real transfer.
+  (34 px here, the same as a toolbar button). Rendered under Xvfb with a simulated job; confirmed OK by the owner with real transfers (2026-10-30).
   (The Tk GUI tests were flaky when run after the GTK ones, about 4 runs in 10; the owner said Tk could go, so it was removed
   instead of chased.)
 - **Badge status screen** (`mpexplorer/badgescreen.py`, `docs/TODO.md` 2d): while connected, the Tildagon's frozen screen shows a
   status page (CONNECTED, this computer's name, device folder, free space, current activity, connect time). Drawn through the raw
   REPL with `display.get_ctx()`/`display.end_frame(ctx)` (RAM only), by a `JobRunner.hook` that runs on the worker thread around
   every non-quiet job and by `folder_changed`. Preferences > "Show a status screen on the badge..." (`general.badge_screen`, on
-  by default). Verified on the real Tildagon (idle and busy pages, screenshots with `badge-screengrab/grab.py`); not driven by
-  real transfers through the GUI yet. Boards without the display API are detected on the first draw and skipped.
+  by default). Verified on the real Tildagon (idle and busy pages, screenshots with `badge-screengrab/grab.py`); confirmed
+  OK by the owner during real use (2026-10-30). Boards without the display API are detected on the first draw and skipped.
 - **Adaptive upload mode** (`transport.py`): raw-paste's 128-byte window makes it slower than plain sending on the Tildagon,
   so the first big sends are timed in each mode and plain is kept if 1.25x faster (about 1.6x on uploads, measured with
   interleaved runs); a failed plain send reverts to raw-paste; `tools/bench.py` turns it off (`adaptive=False`).
 
 Not yet done (the owner or the next session): START HERE steps 1, 2 and 4 by hand (settings on Wayland, the GTK hardware
-checklist); try the new GUI items above (Send time, the Preferences options other than restart-on-disconnect, the wrapped toolbar) on the real display and badge, and that a downloaded file really keeps its time; the
+checklist; the owner started on it 2026-10-30). The new GUI items (icons, wrapped toolbar, status bar, badge status page, Send time,
+the Preferences options, a downloaded file keeping its time) were checked by the owner and are OK. Still open: the
 benchmark on a Pico and the 2022 badge, and `os.uname()` from them; decide on an upload-focused agent (check integrity at
 100+ KB/s first); find why the Tildagon's stdout is capped.
 
@@ -253,8 +255,9 @@ with `winfo_rootx()`-style calls: find the window by differencing `grim` screens
   beyond the above, drag between panes, the conflict/sync dialogs with the mouse, the Window menu.
 - Added 2026-10-29: the Tildagon's clock set and read back (UTC); an upload through the adaptive path (128 KB, SHA-256
   checked on the board); the fast listing compared with the full one on `/` and `/apps` (same names, kinds, sizes); the
-  benchmark; 21 GUI tests under Xvfb including the Modified column and the clock setting. NOT verified by hand: the new GUI
-  controls, a downloaded file's time on a real board, the clock setting on a Pico or the 2022 badge.
+  benchmark; 21 GUI tests under Xvfb including the Modified column and the clock setting. The owner then confirmed the new GUI
+  controls and a downloaded file's time on the Tildagon (2026-10-30). NOT verified: the clock setting, the status screen and
+  the benchmark on a Pico or the 2022 badge.
 - NOT verified (mostly): running code in the REPL console, terminal mode, upload/download, saving from the editor, run script, sync and soft reset on a real
   board; whether raw-paste is negotiated on the badge (not traced); Pico / RP2 and the 2022 badge (the DTR change
   below could behave differently there); transfer speed; whether a clean Disconnect restores the badge's own app
