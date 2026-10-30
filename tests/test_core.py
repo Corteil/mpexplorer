@@ -421,3 +421,33 @@ def test_delete_items_can_be_cancelled_part_way(dev, tmp_path):
     with pytest.raises(Cancelled):
         delete_items(d, [root + "/many"], prog)
     assert (tmp_path / "many" / "f0").exists()                              # nothing was removed
+
+
+def test_cancel_runs_the_jobs_on_cancel_hook_so_a_blocked_job_can_end():
+    import threading
+    runner, stop, started, interrupted = JobRunner(), threading.Event(), threading.Event(), []
+
+    def blocked(prog):
+        started.set()
+        stop.wait(10)                           # like exec() waiting for a script that never ends
+        return "ended"
+    job = runner.submit(blocked, None, "Running x.py", on_cancel=lambda: (interrupted.append(1), stop.set()))
+    assert started.wait(2)
+    runner.cancel_all()
+    deadline = time.time() + 3
+    while runner.busy and time.time() < deadline:
+        time.sleep(0.01)
+    assert not runner.busy and interrupted == [1]
+    assert runner.finished.get(timeout=1)[1] == "ended" and job.prog._cancel.is_set()
+
+
+def test_a_failing_on_cancel_hook_does_not_break_cancel():
+    import threading
+    runner, stop, started = JobRunner(), threading.Event(), threading.Event()
+
+    def boom():
+        raise OSError("port closed")
+    runner.submit(lambda prog: (started.set(), stop.wait(5)), None, "x", on_cancel=boom)
+    assert started.wait(2)
+    runner.cancel_all()                         # must not raise
+    stop.set()
