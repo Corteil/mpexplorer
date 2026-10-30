@@ -728,3 +728,40 @@ def test_transfer_popup_cancel_stops_the_job(make_app, monkeypatch):
     assert not app._popup.cancel_btn.get_sensitive()
     pump(600)
     assert len(outcome) == 1 and isinstance(outcome[0], Cancelled) and app._popup is None
+
+
+def test_delete_progress_shows_item_counts_in_the_status_bar_and_the_popup(make_app, monkeypatch):
+    import threading
+    from mpexplorer.gtkui import app as app_module
+    monkeypatch.setattr(app_module, "POPUP_DELAY", 0.3)
+    app = make_app()
+    gate = threading.Event()
+
+    def job(prog):
+        prog.label, prog.items_total, prog.items, prog.items_word = "Deleting old.py", 5, 2, "deleted"
+        gate.wait(5)
+    app.runner.submit(job, label="Deleting ...")
+    pump(800)
+    try:
+        assert app.status.get_text().startswith("Deleting old.py   2 of 5 item(s) deleted (40%)")
+        assert "0 B" not in app.status.get_text() and app.bar.get_fraction() == 0.4
+        popup = app._popup
+        assert popup is not None and popup.file.get_text() == "Deleting old.py"
+        assert popup.text.get_text().startswith("2 of 5 item(s) deleted (40%)") and popup.bar.get_fraction() == 0.4
+    finally:
+        gate.set()
+    pump(400)
+
+
+def test_a_job_with_no_total_shows_no_fake_numbers(make_app):
+    import threading
+    app = make_app()
+    gate = threading.Event()
+    app.runner.submit(lambda prog: gate.wait(5), label="Deleting ...")
+    pump(500)
+    try:
+        assert app.status.get_text() == "Deleting ..."                      # not "Deleting ...   0 B   0 B/s"
+        assert app.bar.get_fraction() == 0                                  # (the bar pulses instead)
+    finally:
+        gate.set()
+    pump(300)
