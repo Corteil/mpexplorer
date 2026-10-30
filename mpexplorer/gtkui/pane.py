@@ -10,6 +10,7 @@ class Pane(Gtk.Frame):
         super().__init__(label=title)
         self.app = app
         self.title = title
+        self.detail = ""           # what the pane is attached to, e.g. '/dev/ttyACM2  Pico 2 (RP2350)'
         self.backend = None
         self.cwd = ""
         self._good = ""
@@ -64,21 +65,25 @@ class Pane(Gtk.Frame):
         t.connect("drag-begin", lambda _w, _c: app.set_drag_source(self))
         t.connect("drag-data-get", lambda _w, _c, sel, _i, _t: sel.set(sel.get_target(), 8, b"items"))
         t.connect("drag-data-received", self._dropped)
-        self._set_label(title + " (not connected)")
+        self._set_label(self._caption(" (not connected)"))
 
     # -- state -------------------------------------------------------------
+    def _caption(self, state=""):
+        """'Device: /dev/ttyACM2  Pico 2 (RP2350)' (or just 'Host'), then the state in brackets if there is one."""
+        return self.title + (": " + self.detail if self.detail else "") + state
+
     def _set_label(self, text):
         self.set_label(text)
 
     def set_location(self, backend, path):
         self.backend, self.cwd, self._good = backend, path, ""
-        self._set_label(self.title if backend else self.title + " (not connected)")
+        self._set_label(self._caption() if backend else self._caption(" (not connected)"))
         self.refresh()
 
     def set_paused(self, paused):
         self.paused = paused
         if self.backend:
-            self._set_label(self.title + (" (terminal active - paused)" if paused else ""))
+            self._set_label(self._caption(" (terminal active - paused)" if paused else ""))
             if not paused:
                 self.refresh()
 
@@ -86,7 +91,8 @@ class Pane(Gtk.Frame):
         self.paused = False
         self.backend = None
         self._entries = []
-        self._set_label(self.title + " (not connected)")
+        self.detail = ""
+        self._set_label(self._caption(" (not connected)"))
         self.path_entry.set_text("")
         self._render()
 

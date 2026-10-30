@@ -12,7 +12,7 @@ from ..errors import BackendError, Cancelled
 from ..jobs import JobRunner
 from ..badgescreen import BadgeScreen
 from ..ops import ConflictPolicy, copy_tree, delete_items, is_within, move_item, total_size, unique_name
-from ..ports import board_id, device_of, list_ports
+from ..ports import board_id, device_of, list_ports, short_model
 from ..remember import device_start, host_start, port_choice, remember_board_name, remember_folder, remember_port
 from ..settings import Settings
 from ..transport import RawREPL
@@ -400,6 +400,7 @@ class App(Gtk.Window):
         """The connection is up: show the board, and remember the port, its model (and later its folders)."""
         self.device = dev
         remember_board_name(self.settings, board, machine)
+        self.right.detail = "  ".join(x for x in (port, short_model(machine) if machine else "") if x)
         self.board = board
         self.session = ConsoleSession(dev.repl)
         remember_port(self.settings, port)
