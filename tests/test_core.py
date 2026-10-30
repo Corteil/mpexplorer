@@ -360,5 +360,6 @@ def test_progress_describes_the_transfer(monkeypatch):
     clock["t"] = p.started + 2.0                                                              # 512 B/s
     assert p.fraction() == 0.25 and p.eta() == pytest.approx(6.0)
     assert p.describe() == "main.py   1.0 KB of 4.0 KB (25%)   512 B/s   6 s left"
+    assert p.describe(with_label=False) == "1.0 KB of 4.0 KB (25%)   512 B/s   6 s left"
     p.total = 0
     assert p.describe() == "main.py   1.0 KB   512 B/s" and p.eta() is None

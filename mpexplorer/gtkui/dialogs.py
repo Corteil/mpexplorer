@@ -6,7 +6,7 @@ from ..backends import human, human_duration
 from ..errors import Cancelled
 from ..sync import apply_plan, build_plan
 from ..transport import DeviceError
-from .common import GLib, Gtk, monospace_view, scrolled
+from .common import Gdk, GLib, Gtk, monospace_view, scrolled
 
 LABELS = {"mkdir": "Create folder", "copy": "Copy", "delete": "Delete", "delete-group": "Delete"}
 
@@ -453,6 +453,67 @@ class SyncDialog(Gtk.Dialog):
             for x in acts:
                 if x.kind in make and below(x, a):
                     self.sel[(x.kind, x.rel)] = on
+
+
+class TransferPopup(Gtk.Window):
+    """A small non-modal progress window for a file job that is taking a while: what it is doing, a centred bar, the
+    transfer line, and Cancel. The app opens it after a second and closes it when the job ends."""
+
+    def __init__(self, app, job):
+        super().__init__(title="Working ...", transient_for=app)
+        self.app, self.job = app, job
+        self.set_type_hint(Gdk.WindowTypeHint.DIALOG)
+        self.set_position(Gtk.WindowPosition.CENTER_ON_PARENT)
+        self.set_focus_on_map(False)                        # do not pull the keyboard away from the main window
+        self.set_default_size(720, 160)
+        self.set_icon(app.get_icon())
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8, margin=12)
+        self.add(box)
+        grid = Gtk.Grid(column_homogeneous=True, row_spacing=4)
+        grid.attach(Gtk.Label(label=""), 0, 0, 1, 4)        # equal side columns: 20% | 60% | 20%
+        grid.attach(Gtk.Label(label=""), 4, 0, 1, 4)
+        self.heading = Gtk.Label(xalign=0, ellipsize=3, hexpand=True)
+        self.bar = Gtk.ProgressBar(hexpand=True)
+        self.file = Gtk.Label(xalign=0, ellipsize=3, hexpand=True)          # the file being copied
+        self.text = Gtk.Label(xalign=0, ellipsize=3, hexpand=True)          # done of total, speed, time left
+        grid.attach(self.heading, 1, 0, 3, 1)
+        grid.attach(self.bar, 1, 1, 3, 1)
+        grid.attach(self.file, 1, 2, 3, 1)
+        grid.attach(self.text, 1, 3, 3, 1)
+        box.pack_start(grid, True, True, 0)
+        buttons = Gtk.Box(spacing=6)
+        self.cancel_btn = Gtk.Button(label="Cancel")
+        self.cancel_btn.connect("clicked", lambda _b: self._cancel())
+        hide = Gtk.Button(label="Hide")
+        hide.set_tooltip_text("Close this window; the job keeps running (see the status bar)")
+        hide.connect("clicked", lambda _b: self.dismiss())
+        buttons.pack_end(self.cancel_btn, False, False, 0)
+        buttons.pack_end(hide, False, False, 0)
+        box.pack_start(buttons, False, False, 0)
+        self.connect("delete-event", lambda *_: self.dismiss() or True)
+        self.update()
+        self.show_all()
+
+    def update(self):
+        p = self.job.prog
+        self.heading.set_markup("<b>%s</b>" % GLib.markup_escape_text(self.job.status))
+        self.bar.set_fraction(p.fraction())
+        self.file.set_text(p.label)
+        self.text.set_text(p.describe(with_label=False))
+
+    def _cancel(self):
+        self.cancel_btn.set_sensitive(False)
+        self.cancel_btn.set_label("Cancelling ...")
+        self.app.runner.cancel_all()
+
+    def dismiss(self):
+        """Close the window but leave the job running; it is not shown again for this job."""
+        self.app._popup_dismissed = True
+        self.close_window()
+
+    def close_window(self):
+        self.app._popup = None
+        self.destroy()
 
 
 class OutputWindow(Gtk.Window):

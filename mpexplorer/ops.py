@@ -35,9 +35,9 @@ class Progress:
         rate = self.rate()
         return (self.total - self.done) / rate if self.total > self.done and self.done and rate > 0 else None
 
-    def describe(self):
+    def describe(self, with_label=True):
         """The transfer line: file, bytes done of total, percent, speed, time left."""
-        parts = [self.label] if self.label else []
+        parts = [self.label] if self.label and with_label else []
         if self.total:
             parts.append("%s of %s (%d%%)" % (human(self.done), human(self.total), self.fraction() * 100))
         else:

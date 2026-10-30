@@ -630,3 +630,101 @@ def test_sync_dialog_progress_bar_is_centred_at_60_percent_with_its_text_under_i
         assert abs(text.x - bar.x) <= 1 and text.y > bar.y
     finally:
         dialog.destroy()
+
+
+def _slow_job(gate):
+    def job(prog):
+        prog.label, prog.total, prog.done = "main.py", 4096, 1024
+        gate.wait(5)
+    return job
+
+
+def test_transfer_popup_opens_after_the_delay_and_closes_with_the_job(make_app, monkeypatch):
+    import threading
+    from mpexplorer.gtkui import app as app_module
+    monkeypatch.setattr(app_module, "POPUP_DELAY", 0.4)
+    app = make_app()
+    gate = threading.Event()
+    app.runner.submit(_slow_job(gate), label="Copying ...", status="Uploading main.py")
+    pump(150)
+    assert app._popup is None                                              # not yet: the job is still young
+    pump(700)
+    popup = app._popup
+    try:
+        assert popup is not None and popup.get_visible() and not popup.get_modal()
+        assert popup.heading.get_text() == "Uploading main.py" and popup.bar.get_fraction() == 0.25
+        assert popup.file.get_text() == "main.py" and popup.text.get_text().startswith("1.0 KB of 4.0 KB (25%)")
+        grid, bar = popup.bar.get_parent().get_allocation(), popup.bar.get_allocation()
+        text = popup.text.get_allocation()
+        assert 0.55 < bar.width / grid.width < 0.65 and abs((bar.x + bar.width / 2) - (grid.x + grid.width / 2)) <= 3
+        assert abs(text.x - bar.x) <= 1 and abs(popup.file.get_allocation().x - bar.x) <= 1
+    finally:
+        gate.set()
+    pump(500)
+    assert app._popup is None and app._popup_job is None                    # it went with the job
+
+
+def test_transfer_popup_stays_away_from_quick_quiet_and_inline_jobs(make_app, monkeypatch):
+    import threading
+    from mpexplorer.gtkui import app as app_module
+    app = make_app()
+    app.runner.submit(lambda prog: None, label="Copying ...")                 # finishes at once, default delay of 1 s
+    pump(400)
+    assert app._popup is None
+    monkeypatch.setattr(app_module, "POPUP_DELAY", 0.2)
+    for kwargs in ({"quiet": True}, {"inline": True}):
+        gate = threading.Event()
+        app.runner.submit(_slow_job(gate), label="Working ...", **kwargs)
+        pump(700)
+        try:
+            assert app._popup is None, kwargs
+        finally:
+            gate.set()
+        pump(300)
+
+
+def test_transfer_popup_can_be_hidden_without_stopping_the_job(make_app, monkeypatch):
+    import threading
+    from mpexplorer.gtkui import app as app_module
+    monkeypatch.setattr(app_module, "POPUP_DELAY", 0.2)
+    app = make_app()
+    gate = threading.Event()
+    job = app.runner.submit(_slow_job(gate), label="Copying ...")
+    pump(600)
+    try:
+        assert app._popup is not None
+        app._popup.dismiss()
+        assert app._popup is None and app.runner.current is job              # closed, but the job runs on
+        pump(500)
+        assert app._popup is None                                            # and it is not opened again for this job
+    finally:
+        gate.set()
+    pump(300)
+    gate2 = threading.Event()
+    app.runner.submit(_slow_job(gate2), label="Copying ...")                  # the next job gets its own popup
+    pump(600)
+    try:
+        assert app._popup is not None
+    finally:
+        gate2.set()
+    pump(300)
+
+
+def test_transfer_popup_cancel_stops_the_job(make_app, monkeypatch):
+    from mpexplorer.errors import Cancelled
+    from mpexplorer.gtkui import app as app_module
+    monkeypatch.setattr(app_module, "POPUP_DELAY", 0.2)
+    app = make_app()
+    outcome = []
+
+    def job(prog):
+        prog.total = 100
+        for _ in range(500):
+            prog.check()                                                      # raises Cancelled once cancelled
+            time.sleep(0.01)
+    app.runner.submit(job, lambda res, exc: outcome.append(exc), "Copying ...")
+    pump(600)
+    app._popup.cancel_btn.clicked()
+    assert not app._popup.cancel_btn.get_sensitive()
+    pump(600)
+    assert len(outcome) == 1 and isinstance(outcome[0], Cancelled) and app._popup is None
