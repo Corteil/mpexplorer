@@ -14,8 +14,9 @@ show up as `/dev/ttyACM1` (Pico, RP2040) and `/dev/ttyACM2` (Pico 2, RP2350); th
 `os.uname()` and `tools/bench.py` ran on both through the stock raw REPL; tables and notes are in `docs/HARDWARE.md`. Short version:
 uploads 30 KB/s (Pico) and 58 KB/s (Pico 2) in raw-paste, which beats plain there (the opposite of the Tildagon); downloads 67 and
 101 KB/s; verdict "agent mode not needed". `tools/bench.py` now skips a size that does not fit in the free flash (the Pico filled up
-and left a garbled directory entry; its flash was reformatted with `os.VfsLfs2.mkfs`). **Not done:** the GTK app has not been run
-against a Pico (connect, list, transfer, editor, console, terminal), and the 2022 badge is untried.
+and left a garbled directory entry; its flash was reformatted with `os.VfsLfs2.mkfs`). The owner then used the GTK app on both
+Picos by hand (moved `blink.py` to each and renamed it to `main.py`; console, terminal and editor all worked). **Not done:** the 2022
+badge is untried.
 
 ## Status after the 2026-10-29 Pi session (read this first)
 Done from a Claude Code session on the Pi 5 with the Tildagon (MicroPython 1.28.0) on `/dev/ttyACM0`. Everything below is
