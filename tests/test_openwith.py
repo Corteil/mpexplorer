@@ -461,3 +461,22 @@ def test_polling_an_unchanged_file_does_not_restart_the_wait(tmp_path):
         clock.t += 0.3                      # the manager looks every 0.5 s while a save is waiting
         w.notice()
     assert w.ready()                        # 1.5 s since the save: it settled although it was polled throughout
+
+
+def test_app_template_turns_desktop_commands_into_templates():
+    assert openwith.app_template("geany %F") == "geany {file}"
+    assert openwith.app_template("gimp-2.10 %U") == "gimp-2.10 {file}"
+    assert openwith.app_template("viewer --icon %i -c %c %f") == "viewer --icon -c {file}"
+    assert openwith.app_template("sh -c 'echo 100%%' %f") == "sh -c 'echo 100%' {file}"
+    assert openwith.app_template("thonny") == "thonny"                                  # path appended later
+    assert openwith.expand_command(openwith.app_template('"my app" %f'), "/a b.py") == ["my app", "/a b.py"]
+    with pytest.raises(ValueError):
+        openwith.app_template("")
+
+
+def test_remember_handler_by_extension_and_custom(settings):
+    assert openwith.remember_handler(settings, "Main.PY", "custom:geany", ("geany", "geany {file}")) == ".py"
+    assert openwith.handler_for(settings, "x.py") == "custom:geany"
+    assert openwith.parse_handler(settings, "custom:geany") == ("command", "geany {file}")
+    assert openwith.remember_handler(settings, "Makefile", "editor") is None            # no extension: not saved
+    assert settings.get("open_with.by_extension") == {".py": "custom:geany"}

@@ -951,7 +951,7 @@ def test_open_with_external_editor_uploads_saves_and_cleans_up(make_app, tmp_pat
     app.edits.launch = lambda argv: launched.append(argv) or type("P", (), {"poll": lambda self: None})()
     app.edits.ask_conflict = lambda name: "skip"                    # a real dialog would block the test
     app.connected(DeviceBackend(RawREPL(FakeSerial())), str(board), "/dev/ttyACM0", "303a:4001:AAA")
-    app.open_external(app.right, str(board / "main.py"))
+    app.open_external(app.right, str(board / "main.py"), "geany {file}")
     pump(400)
     assert len(launched) == 1 and launched[0][0] == "geany"
     cached = launched[0][1]
@@ -973,5 +973,53 @@ def test_host_file_opens_directly_in_the_external_editor(make_app, tmp_path):
     app = make_app()
     launched = []
     app.edits.launch = lambda argv: launched.append(argv)
-    app.open_external(app.left, str(tmp_path / "a b.py"))
+    app.open_external(app.left, str(tmp_path / "a b.py"), "geany {file}")
     assert launched == [["geany", str(tmp_path / "a b.py")]]
+
+
+def test_open_with_dispatches_on_the_saved_handler(make_app, tmp_path, monkeypatch):
+    (tmp_path / "a b.py").write_text("x\n")
+    (tmp_path / "notes.txt").write_text("y\n")
+    app = make_app()
+    app.settings.set("open_with.by_extension", {".py": "custom:viewer"})
+    app.settings.set("open_with.custom", {"viewer": "viewer --new {file}"})
+    launched, editor = [], []
+    app.edits.launch = lambda argv: launched.append(argv)
+    monkeypatch.setattr(app, "open_file", lambda pane, path, size: editor.append(path))
+    app.open_default(app.left, str(tmp_path / "a b.py"), 2)                 # saved for .py: the custom command
+    app.open_default(app.left, str(tmp_path / "notes.txt"), 2)              # nothing saved for .txt: built-in editor
+    assert launched == [["viewer", "--new", str(tmp_path / "a b.py")]]
+    assert editor == [str(tmp_path / "notes.txt")]
+    errors = []
+    monkeypatch.setattr("mpexplorer.gtkui.app.error", lambda parent, title, text: errors.append(text))
+    app.open_with(app.left, str(tmp_path / "notes.txt"), 2, "custom:gone")   # a stale setting is reported, not raised
+    assert len(errors) == 1 and "gone" in errors[0] and len(launched) == 1
+
+
+def test_choose_open_with_remembers_the_choice_for_the_file_type(make_app, tmp_path, monkeypatch):
+    (tmp_path / "a.py").write_text("x\n")
+    app = make_app()
+    launched = []
+    app.edits.launch = lambda argv: launched.append(argv)
+    picks = iter([("custom:geany", ("geany", "geany {file}"), True),
+                  ("custom:thonny", ("thonny", "thonny {file}"), False)])
+    monkeypatch.setattr("mpexplorer.gtkui.app.ask_open_with", lambda parent, name, can_run: next(picks))
+    app.choose_open_with(app.left, str(tmp_path / "a.py"), 2)
+    app.choose_open_with(app.left, str(tmp_path / "a.py"), 2)               # not remembered: the first choice stays
+    assert [a[0] for a in launched] == ["geany", "thonny"]
+    assert app.settings.get("open_with.by_extension") == {".py": "custom:geany"}
+    assert app.settings.get("open_with.custom") == {"geany": "geany {file}", "thonny": "thonny {file}"}
+
+
+def test_open_with_dialog_lists_apps_and_returns_the_choice(make_app):
+    from mpexplorer.gtkui import dialogs
+    app = make_app()
+    assert dialogs.installed_apps("a.py") is not None                       # whatever this machine has installed
+    GLib = dialogs.GLib
+    GLib.timeout_add(200, lambda: (app_dialog_ok(), False)[1])
+
+    def app_dialog_ok():
+        for w in dialogs.Gtk.Window.list_toplevels():
+            if isinstance(w, dialogs.Gtk.Dialog) and w.get_title() == "Open with":
+                w.response(dialogs.Gtk.ResponseType.OK)
+    assert dialogs.ask_open_with(app, "a.py", True) == ("editor", None, False)      # the first row is preselected

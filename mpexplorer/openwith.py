@@ -63,6 +63,42 @@ def parse_handler(settings, handler):
     raise ValueError("unknown way of opening a file: %r" % handler)
 
 
+def app_template(commandline):
+    """An installed app's desktop-file command ('geany %F') -> a template for expand_command ('geany {file}').
+
+    The %f/%F/%u/%U field codes become {file}; the other codes (%i, %c, %k and the like) are dropped, and %% is a
+    literal percent. A command without a file code gets the path appended by expand_command."""
+    out = []
+    for arg in shlex.split(commandline):
+        if arg in ("%f", "%F", "%u", "%U"):
+            out.append("{file}")
+            continue
+        arg = re.sub(r"%[a-zA-Z]", "", arg.replace("%%", "\0"))
+        if arg:
+            out.append(arg.replace("\0", "%"))
+    if not out:
+        raise ValueError("the application has no command")
+    return " ".join(shlex.quote(a) if a != "{file}" else a for a in out)
+
+
+def remember_handler(settings, name, handler, custom=None):
+    """Make `handler` the default for files like `name` (by extension; a name without one is not remembered).
+
+    `custom` = (short name, command template) is stored under open_with.custom for a 'custom:<name>' handler.
+    Returns the key used, or None if the file has no extension."""
+    key = posixpath.splitext(name)[1].lower()
+    if custom:
+        table = settings.get("open_with.custom")
+        table[custom[0]] = custom[1]
+        settings.set("open_with.custom", table)
+    if not key:
+        return None
+    table = settings.get("open_with.by_extension")
+    table[key] = handler
+    settings.set("open_with.by_extension", table)
+    return key
+
+
 # -- the private cache copy -----------------------------------------------
 def cache_path(root, board, devpath):
     """<root>/<board>/<device path>, for a device file. ValueError if the path could climb out of the cache."""

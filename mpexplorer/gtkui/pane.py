@@ -158,7 +158,7 @@ class Pane(Gtk.Frame):
         if e and e.is_dir:
             self.go(sel[0][1])
         elif e:
-            self.app.open_file(self, sel[0][1], e.size)
+            self.app.open_default(self, sel[0][1], e.size)
 
     # -- display -----------------------------------------------------------
     def sort_by(self, key):
