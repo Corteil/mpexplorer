@@ -251,15 +251,17 @@ class App(Gtk.Window):
         return bar
 
     def _build_statusbar(self):
-        bar = Gtk.Box(spacing=6, margin_start=4, margin_end=4)
-        self.status = Gtk.Label(label="Ready", xalign=0, ellipsize=3)       # 3 = end
-        bar.pack_start(self.status, True, True, 0)
-        self.bar = Gtk.ProgressBar()
-        self.bar.set_size_request(260, -1)
-        bar.pack_start(self.bar, False, False, 0)
-        bar.pack_start(icon_button("process-stop", "Cancel the running job", self.runner.cancel_all, "Cancel"),
+        """Progress bar and Cancel on their own row, with the status or transfer text under them."""
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2, margin_start=4, margin_end=4)
+        top = Gtk.Box(spacing=6)
+        self.bar = Gtk.ProgressBar(valign=Gtk.Align.CENTER)
+        top.pack_start(self.bar, True, True, 0)
+        top.pack_start(icon_button("process-stop", "Cancel the running job", self.runner.cancel_all, "Cancel"),
                        False, False, 0)
-        return bar
+        box.pack_start(top, False, False, 0)
+        self.status = Gtk.Label(label="Ready", xalign=0, ellipsize=3)       # 3 = end
+        box.pack_start(self.status, False, False, 0)
+        return box
 
     def context_menu(self):
         m = Gtk.Menu()
@@ -714,10 +716,13 @@ class App(Gtk.Window):
         job = self.runner.current
         if job and not job.quiet:
             p = job.prog
-            self.bar.set_fraction(min(1.0, p.done / p.total) if p.total else 0)
-            self.set_status("%s  %s / %s  (%s/s)" % (p.label, human(p.done), human(p.total), human(p.rate())))
+            self.bar.set_fraction(p.fraction())
+            self.bar.set_show_text(bool(p.total))
+            self.bar.set_text("%d%%" % (p.fraction() * 100))
+            self.set_status(p.describe())
         elif not job:
             self.bar.set_fraction(0)
+            self.bar.set_show_text(False)
         return True
 
 
