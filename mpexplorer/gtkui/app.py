@@ -19,6 +19,7 @@ from ..ports import board_id, device_of, list_ports, short_model
 from ..remember import device_start, host_start, port_choice, remember_board_name, remember_folder, remember_port
 from ..settings import Settings
 from ..transport import RawREPL
+from ..watchdog import Watchdog
 from .common import (ICON, Gdk, GdkPixbuf, GLib, Gtk, ask_yes_no, button, error, fmt_time, icon_button, info, prompt,
                      set_icon)
 from .console import ConsoleWindow
@@ -91,10 +92,12 @@ class App(Gtk.Window):
         self.right.clear()
         self.connect("delete-event", lambda *_: self._quit() or False)
         self.connect("configure-event", self._configured)
-        self.connect("destroy", lambda _w: (self._stop_status_timer(), Gtk.main_quit()))
+        self.connect("destroy", lambda _w: (self._stop_status_timer(), self.watchdog.stop(), Gtk.main_quit()))
         self.show_all()
         if self.settings.problems:
             self.set_status("Settings: " + self.settings.problems[0], keep=True)       # a warning stays
+        self.watchdog = Watchdog()
+        self.watchdog.start()
         GLib.timeout_add(100, self._poll)
 
     # -- ui construction ---------------------------------------------------
@@ -770,6 +773,7 @@ class App(Gtk.Window):
 
     # -- main loop tick ----------------------------------------------------
     def _poll(self):
+        self.watchdog.beat()
         try:
             self.edits.tick()
         except Exception as e:           # a broken tick must not stop the poller
