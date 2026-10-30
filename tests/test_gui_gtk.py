@@ -614,3 +614,19 @@ def test_inline_jobs_do_not_use_the_main_status_bar(make_app):
     finally:
         gate.set()
     pump(300)
+
+
+def test_sync_dialog_progress_bar_is_centred_at_60_percent_with_its_text_under_it(make_app, tmp_path):
+    app = make_app()
+    dialog = _review(app, _sync_plan(tmp_path))
+    try:
+        dialog.review.hide()                                  # hold the dialog in its progress state
+        dialog.progress_box.show_all()
+        pump(400)
+        grid, bar = dialog.progress_box.get_allocation(), dialog.bar.get_allocation()
+        text = dialog.progress_text.get_allocation()
+        assert 0.55 < bar.width / grid.width < 0.65
+        assert abs((bar.x + bar.width / 2) - (grid.x + grid.width / 2)) <= 3
+        assert abs(text.x - bar.x) <= 1 and text.y > bar.y
+    finally:
+        dialog.destroy()

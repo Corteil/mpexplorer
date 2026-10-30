@@ -157,11 +157,14 @@ class SyncDialog(Gtk.Dialog):
         self.extra.attach(self.ignoring, 1, 1, 1, 1)
         box.pack_start(self.extra, False, False, 0)
 
-        self.progress_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)       # comparing and transferring
-        self.bar = Gtk.ProgressBar()
-        self.progress_text = Gtk.Label(xalign=0, ellipsize=3)           # 3 = end
-        self.progress_box.pack_start(self.bar, False, False, 0)
-        self.progress_box.pack_start(self.progress_text, False, False, 0)
+        # comparing and transferring: a centred bar (60% of the width) with its text under it, like the main window's
+        self.progress_box = Gtk.Grid(column_homogeneous=True, row_spacing=4)
+        self.progress_box.attach(Gtk.Label(label=""), 0, 0, 1, 2)          # equal side columns: 20% | 60% | 20%
+        self.progress_box.attach(Gtk.Label(label=""), 4, 0, 1, 2)
+        self.bar = Gtk.ProgressBar(hexpand=True)
+        self.progress_text = Gtk.Label(xalign=0, ellipsize=3, hexpand=True)           # 3 = end
+        self.progress_box.attach(self.bar, 1, 0, 3, 1)
+        self.progress_box.attach(self.progress_text, 1, 1, 3, 1)
         box.pack_start(self.progress_box, False, False, 6)
 
         self.result = Gtk.Label(xalign=0, wrap=True, use_markup=True)   # the outcome
