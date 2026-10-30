@@ -95,8 +95,8 @@ def test_list_ports_labels_boards_and_skips_onboard_uarts(monkeypatch):
              P("/dev/ttyACM0", 0x303A, 0x1001, "7AC00000", product="TiLDAGON"),
              P("/dev/ttyACM2", 0x2E8A, 0x0005, "15EDD94F06289842", description="Board in FS mode - Board CDC")]
     monkeypatch.setattr("serial.tools.list_ports.comports", lambda: found)
-    assert ports.list_ports() == ["/dev/ttyACM2  Raspberry Pi Pico / Pico 2 (MicroPython)  #06289842",
-                                  "/dev/ttyACM0  TiLDAGON  #7ac00000"]
+    assert ports.list_ports() == ["/dev/ttyACM2  Pico / Pico 2  #9842",
+                                  "/dev/ttyACM0  TiLDAGON  #0000"]
     assert ports.device_of(ports.list_ports()[0]) == "/dev/ttyACM2"
 
 
@@ -114,6 +114,13 @@ def test_connecting_teaches_the_port_list_the_exact_model(monkeypatch, tmp_path)
     assert "Pico / Pico 2" in ports.list_ports(settings.get("boards.names"))[0]
     remember_board_name(settings, "2e8a:0005:15EDD94F06289842", " Raspberry Pi Pico2 with RP2350\n")
     named = ports.list_ports(settings.get("boards.names"))
-    assert named == ["/dev/ttyACM2  Raspberry Pi Pico2 with RP2350  #06289842"]
+    assert named == ["/dev/ttyACM2  Pico 2 (RP2350)  #9842"]
     remember_board_name(settings, "2e8a:0005:15EDD94F06289842", "")                    # no answer: keep what we knew
     assert "RP2350" in ports.list_ports(settings.get("boards.names"))[0]
+
+
+def test_short_model():
+    assert ports.short_model("Raspberry Pi Pico with RP2040") == "Pico (RP2040)"
+    assert ports.short_model("Raspberry Pi Pico2 with RP2350") == "Pico 2 (RP2350)"
+    assert ports.short_model("TiLDAGON with ESP32S3") == "TiLDAGON (ESP32S3)"
+    assert ports.short_model("Unknown") == "Unknown"
