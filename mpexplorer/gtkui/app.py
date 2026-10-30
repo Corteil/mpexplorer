@@ -660,7 +660,7 @@ class App(Gtk.Window):
                 SyncDialog(self, plan)
         self.runner.submit(lambda prog: build_plan(s_be, s_dir, d_be, d_dir, prog), done, "Comparing folders ...")
 
-    def run_sync(self, plan, include_delete):
+    def run_sync(self, plan, include_delete, selected=None):
         def done(_res, exc):
             self._refresh_all()
             if isinstance(exc, Cancelled):
@@ -670,7 +670,7 @@ class App(Gtk.Window):
                 error(self, "Sync failed", str(exc))
             else:
                 self.set_status("Sync complete")
-        self.runner.submit(lambda prog: apply_plan(plan, prog, include_delete), done, "Syncing ...")
+        self.runner.submit(lambda prog: apply_plan(plan, prog, include_delete, selected), done, "Syncing ...")
 
     def free_space(self):
         if self.device and self._need_backend(self.right):

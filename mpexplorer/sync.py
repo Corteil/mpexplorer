@@ -27,6 +27,8 @@ class Plan:
     actions: list = field(default_factory=list)
     notes: list = field(default_factory=list)
     unchanged: int = 0
+    dst_free: int = None        # free bytes on the destination (None = unknown)
+    exclude: tuple = ()         # name patterns that were left out of the comparison
 
     def of(self, kind):
         return [a for a in self.actions if a.kind == kind]
@@ -61,8 +63,23 @@ def walk(be, root, exclude, prog=None):
     return out
 
 
+def free_space(be, path):
+    """Free bytes where `path` is, or would be created (the nearest existing parent); None if unknown."""
+    try:
+        while path:
+            if be.stat(path) is not None:
+                return be.free_space(path)
+            parent = be.parent(path)
+            if parent == path:
+                break
+            path = parent
+    except Exception:
+        pass
+    return None
+
+
 def build_plan(src_be, src, dst_be, dst, prog=None, use_checksum=True, exclude=DEFAULT_EXCLUDE):
-    plan = Plan(src_be, src, dst_be, dst)
+    plan = Plan(src_be, src, dst_be, dst, exclude=tuple(exclude))
     s_items = walk(src_be, src, exclude, prog)
     d_items = walk(dst_be, dst, exclude, prog)
     if dst_be.stat(dst) is None:
@@ -101,13 +118,20 @@ def build_plan(src_be, src, dst_be, dst, prog=None, use_checksum=True, exclude=D
     for rel in sorted(set(d_items) - set(s_items), key=lambda r: (-r.count("/"), r)):
         e = d_items[rel]
         plan.actions.append(Action("delete", rel, e.is_dir, e.size, "extra"))
+    plan.dst_free = free_space(dst_be, dst)
     return plan
 
 
-def apply_plan(plan, prog, include_delete=False):
-    """Run the plan: folders, then files (via a temp name so a cancel never loses the old copy), then deletes."""
-    mkdirs = sorted(plan.of("mkdir"), key=lambda a: a.rel.count("/") if a.rel else -1)
-    copies = plan.of("copy")
+def apply_plan(plan, prog, include_delete=False, selected=None):
+    """Run the plan: folders, then files (via a temp name so a cancel never loses the old copy), then deletes.
+
+    selected: a set of (kind, rel) to run; anything else is skipped. None runs everything (deletes only with
+    include_delete).
+    """
+    def chosen(a):
+        return selected is None or (a.kind, a.rel) in selected
+    mkdirs = sorted((a for a in plan.of("mkdir") if chosen(a)), key=lambda a: a.rel.count("/") if a.rel else -1)
+    copies = [a for a in plan.of("copy") if chosen(a)]
     prog.total = sum(a.size for a in copies)
     for a in mkdirs:
         prog.check()
@@ -122,7 +146,7 @@ def apply_plan(plan, prog, include_delete=False):
             plan.dst_be.remove(dst)             # FAT cannot rename over an existing file
         plan.dst_be.rename(tmp, dst)
     if include_delete:
-        for a in plan.of("delete"):                  # already ordered deepest first
+        for a in (a for a in plan.of("delete") if chosen(a)):       # already ordered deepest first
             prog.check()
             p = join_rel(plan.dst_be, plan.dst, a.rel)
             (plan.dst_be.rmdir if a.is_dir else plan.dst_be.remove)(p)
