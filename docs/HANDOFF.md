@@ -41,7 +41,7 @@ What was done:
   lacks an icon. Connect swaps its icon with the state. At 1180 px the toolbar now fits on one row. Rendered under Xvfb with
   `gtk-icon-theme-name=PiXflat` (Xvfb has no settings daemon, so set it in the script); not yet seen on the real display.
 - **Transfer bar** (GTK only): the progress bar sits over the status or transfer line (file, `1.2 MB of 3.0 MB (40%)`, speed,
-  time left: `Progress.describe()`/`eta()` in `ops.py`, tested), with Cancel at the right stretched to the height of both
+  time left: `Progress.describe()`/`eta()` in `ops.py`, tested), with Cancel beside the bar, stretched to the height of both; the bar is centred at about 60% of the width
   (34 px here, the same as a toolbar button). Rendered under Xvfb with a simulated job; not yet seen with a real transfer.
   Tk's status bar is unchanged. The Tk GUI tests are flaky when run after the GTK ones (one test, about 4 runs in 10); the
   owner said Tk can be removed, so this was not chased further.

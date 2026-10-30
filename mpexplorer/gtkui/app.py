@@ -251,18 +251,19 @@ class App(Gtk.Window):
         return bar
 
     def _build_statusbar(self):
-        """Progress bar over the status text on the left; Cancel on the right, as tall as the two together."""
-        row = Gtk.Box(spacing=6, margin_start=4, margin_end=4)
-        col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
-        self.bar = Gtk.ProgressBar(valign=Gtk.Align.CENTER)
-        col.pack_start(self.bar, False, False, 0)
-        self.status = Gtk.Label(label="Ready", xalign=0, ellipsize=3)       # 3 = end
-        col.pack_start(self.status, False, False, 0)
-        row.pack_start(col, True, True, 0)
+        """A centred progress bar (60% of the width) with the status text under it, lined up with the bar's left edge;
+        Cancel beside the bar's right end, as tall as the bar and the text together."""
+        grid = Gtk.Grid(column_homogeneous=True, row_spacing=2, column_spacing=6, margin_start=4, margin_end=4)
+        grid.attach(Gtk.Label(label=""), 0, 0, 1, 2)                       # equal side columns: 20% | 60% | 20%
+        self.bar = Gtk.ProgressBar(valign=Gtk.Align.CENTER, hexpand=True)
+        grid.attach(self.bar, 1, 0, 3, 1)
+        self.status = Gtk.Label(label="Ready", xalign=0, ellipsize=3, hexpand=True)       # 3 = end
+        grid.attach(self.status, 1, 1, 3, 1)
         cancel = icon_button("process-stop", "Cancel the running job", self.runner.cancel_all, "Cancel")
+        cancel.set_halign(Gtk.Align.START)
         cancel.set_valign(Gtk.Align.FILL)       # stretches to the height of the bar and the text beside it
-        row.pack_start(cancel, False, False, 0)
-        return row
+        grid.attach(cancel, 4, 0, 1, 2)
+        return grid
 
     def context_menu(self):
         m = Gtk.Menu()
