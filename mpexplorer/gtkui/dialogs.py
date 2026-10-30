@@ -1,7 +1,10 @@
 """Conflict prompt, sync dialogs and script output windows."""
+import time
 from collections import Counter
 
-from ..backends import human
+from ..backends import human, human_duration
+from ..errors import Cancelled
+from ..sync import apply_plan, build_plan
 from ..transport import DeviceError
 from .common import GLib, Gtk, monospace_view, scrolled
 
@@ -64,9 +67,6 @@ class SyncTargetDialog(Gtk.Dialog):
         box.pack_start(row, False, False, 0)
         self.result = Gtk.Label(xalign=0, wrap=True, use_markup=True)
         box.pack_start(self.result, False, False, 0)
-        later = Gtk.Label(label="Next you will see what would change; nothing is copied until you press Sync.",
-                          xalign=0, wrap=True, sensitive=False)
-        box.pack_start(later, False, False, 0)
         self.add_button("Cancel", Gtk.ResponseType.CANCEL)
         self.go = self.add_button("Continue", Gtk.ResponseType.OK)
         self.set_default_response(Gtk.ResponseType.OK)
@@ -126,58 +126,62 @@ def confirm_mirror_delete(parent, label, path, count, tops):
 
 
 class SyncDialog(Gtk.Dialog):
-    """What a folder sync would do: source, target, free space, and every item with a tick box to leave it out."""
+    """One window for the whole sync: comparing (with its progress), the review with a tick box per item, then the
+    transfer (with its progress) and the result. Pass `plan` to start at the review (tests)."""
 
-    def __init__(self, app, plan):
-        super().__init__(title="Sync folders", transient_for=app)
-        self.app, self.plan = app, plan
-        self.sel = {(a.kind, a.rel): True for a in plan.actions}       # ticked = will run
-        self.groups = {}                                               # many deletions: top-level folder -> [actions]
-        deletes = plan.of("delete")
-        if len(deletes) > MAX_DELETE_ROWS:
-            for a in deletes:
-                self.groups.setdefault(a.rel.split("/")[0], []).append(a)
-            self.sel.update({("delete-group", top): True for top in self.groups})
-        self.set_default_size(800, 580)
+    def __init__(self, app, src_be, src, dst_be, dst, plan=None):
+        super().__init__(title="Sync folders", transient_for=app, modal=True)
+        self.app, self.src_be, self.src, self.dst_be, self.dst = app, src_be, src, dst_be, dst
+        self.plan, self.sel, self.groups = None, {}, {}
+        self.job, self.phase, self.started = None, "scanning", 0.0
+        self.set_default_size(720, 230)
         box = self.get_content_area()
         box.set_spacing(6)
         box.set_border_width(10)
 
         grid = Gtk.Grid(column_spacing=10, row_spacing=3)
-        for i, (title, text) in enumerate((
-                ("From", "%s:  %s" % (plan.src_be.label, plan.src)),
-                ("To", "%s:  %s" % (plan.dst_be.label, plan.dst)))):
+        for i, (title, text) in enumerate((("From", "%s:  %s" % (src_be.label, src)),
+                                           ("To", "%s:  %s" % (dst_be.label, dst)))):
             grid.attach(Gtk.Label(label=title, xalign=1, sensitive=False), 0, i, 1, 1)
             path = Gtk.Label(label=text, xalign=0, selectable=True, hexpand=True)
             path.set_ellipsize(1)       # 1 = start: keep the end of a long path
             grid.attach(path, 1, i, 1, 1)
-        self.space = Gtk.Label(xalign=0, use_markup=True)
-        grid.attach(Gtk.Label(label="Space", xalign=1, sensitive=False), 0, 2, 1, 1)
-        grid.attach(self.space, 1, 2, 1, 1)
-        if plan.exclude:
-            grid.attach(Gtk.Label(label="Ignoring", xalign=1, sensitive=False), 0, 3, 1, 1)
-            grid.attach(Gtk.Label(label=", ".join(plan.exclude), xalign=0), 1, 3, 1, 1)
         box.pack_start(grid, False, False, 0)
-        for note in plan.notes:
-            box.pack_start(Gtk.Label(label=note, xalign=0, wrap=True), False, False, 0)
+        self.extra = Gtk.Grid(column_spacing=10, row_spacing=3)         # space and ignored names, known after comparing
+        self.space = Gtk.Label(xalign=0, use_markup=True)
+        self.extra.attach(Gtk.Label(label="Space", xalign=1, sensitive=False), 0, 0, 1, 1)
+        self.extra.attach(self.space, 1, 0, 1, 1)
+        self.ignoring = Gtk.Label(xalign=0)
+        self.ignoring_caption = Gtk.Label(label="Ignoring", xalign=1, sensitive=False)
+        self.extra.attach(self.ignoring_caption, 0, 1, 1, 1)
+        self.extra.attach(self.ignoring, 1, 1, 1, 1)
+        box.pack_start(self.extra, False, False, 0)
 
-        n_del = len(deletes)
-        self.mirror = Gtk.CheckButton(
-            label="Also delete %d item(s) that exist only at the target (mirror)" % n_del)
-        self.mirror.set_sensitive(bool(n_del))
+        self.progress_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)       # comparing and transferring
+        self.bar = Gtk.ProgressBar()
+        self.progress_text = Gtk.Label(xalign=0, ellipsize=3)           # 3 = end
+        self.progress_box.pack_start(self.bar, False, False, 0)
+        self.progress_box.pack_start(self.progress_text, False, False, 0)
+        box.pack_start(self.progress_box, False, False, 6)
+
+        self.result = Gtk.Label(xalign=0, wrap=True, use_markup=True)   # the outcome
+        box.pack_start(self.result, False, False, 6)
+
+        self.review = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        self.notes = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        self.review.pack_start(self.notes, False, False, 0)
+        self.mirror = Gtk.CheckButton()
         self.mirror.connect("toggled", lambda _c: self._fill())
-        box.pack_start(self.mirror, False, False, 2)
+        self.review.pack_start(self.mirror, False, False, 2)
         self.summary = Gtk.Label(xalign=0, wrap=True)
-        box.pack_start(self.summary, False, False, 2)
-
+        self.review.pack_start(self.summary, False, False, 2)
         tools = Gtk.Box(spacing=6)
         tools.pack_start(Gtk.Label(label="Untick anything you do not want to transfer:", xalign=0), False, False, 0)
         for label, on in (("Select all", True), ("Select none", False)):
             b = Gtk.Button(label=label)
             b.connect("clicked", lambda _b, on=on: self._set_all(on))
             tools.pack_end(b, False, False, 0)
-        box.pack_start(tools, False, False, 0)
-
+        self.review.pack_start(tools, False, False, 0)
         self.store = Gtk.ListStore(bool, str, str, str, str, str, str)      # ticked, action, path, size, why, kind, rel
         self.tree = Gtk.TreeView(model=self.store)
         toggle = Gtk.CellRendererToggle()
@@ -188,16 +192,158 @@ class SyncDialog(Gtk.Dialog):
             col.set_min_width(width)
             col.set_resizable(True)
             self.tree.append_column(col)
-        box.pack_start(scrolled(self.tree), True, True, 0)
+        self.review.pack_start(scrolled(self.tree), True, True, 0)
+        box.pack_start(self.review, True, True, 0)
 
-        self.add_button("Cancel", Gtk.ResponseType.CANCEL)
+        self.cancel_btn = self.add_button("Cancel", Gtk.ResponseType.CANCEL)
         self.sync_btn = self.add_button("Sync", Gtk.ResponseType.OK)
+        self.sync_btn.set_sensitive(False)
         self.set_default_response(Gtk.ResponseType.OK)
-        self._fill()
         self.connect("response", self._response)
+        self.connect("delete-event", self._delete)
+        self.connect("destroy", self._destroyed)
         self.show_all()
+        for part in (self.extra, self.result, self.review):
+            part.hide()
+        self.resize(720, 230)
+        GLib.timeout_add(100, self._tick)
+        if plan is not None:
+            self._scanned(plan, None)
+        else:
+            self.job = app.runner.submit(lambda prog: build_plan(src_be, src, dst_be, dst, prog), self._scanned,
+                                         "Comparing folders ...", inline=True)
 
-    # -- what is shown and ticked --------------------------------------------------------------------------
+    # -- phases ---------------------------------------------------------------------------------------------
+    def _tick(self):
+        """Every 100 ms: show what the running job is doing (this dialog owns its progress, not the status bar)."""
+        if self.phase == "closed":
+            return False
+        if self.job is not None:
+            p = self.job.prog
+            if self.phase == "scanning":
+                self.bar.pulse()
+                self.progress_text.set_text(p.label or "Starting ...")
+            elif self.phase == "transferring":
+                self.bar.set_fraction(p.fraction())
+                self.progress_text.set_text(p.describe())
+        return True
+
+    def _scanned(self, plan, exc):
+        self.job = None
+        if self.phase == "closed":
+            return
+        if isinstance(exc, Cancelled):
+            self.app.set_status("Sync cancelled")
+            self.destroy()
+        elif exc:
+            self.app.set_status("Sync failed")
+            self._finish("Could not compare the folders: %s" % exc, error=True)
+        elif not plan.actions:
+            self.app.set_status("Folders are already in sync")
+            self._finish("Nothing to do: the folders already match.")
+        else:
+            self._show_plan(plan)
+
+    def _show_plan(self, plan):
+        self.plan, self.phase = plan, "review"
+        self.sel = {(a.kind, a.rel): True for a in plan.actions}       # ticked = will run
+        deletes = plan.of("delete")
+        self.groups = {}
+        if len(deletes) > MAX_DELETE_ROWS:                             # too many to list one by one
+            for a in deletes:
+                self.groups.setdefault(a.rel.split("/")[0], []).append(a)
+            self.sel.update({("delete-group", top): True for top in self.groups})
+        self.ignoring.set_text(", ".join(plan.exclude))
+        for note in plan.notes:
+            self.notes.pack_start(Gtk.Label(label=note, xalign=0, wrap=True), False, False, 0)
+        self.mirror.set_label("Also delete %d item(s) that exist only at the target (mirror)" % len(deletes))
+        self.mirror.set_sensitive(bool(deletes))
+        self._fill()
+        self.progress_box.hide()
+        self.extra.show_all()
+        self.notes.show_all()
+        self.review.show()
+        for w in (self.ignoring, self.ignoring_caption):
+            w.set_visible(bool(plan.exclude))
+        self.resize(800, 580)
+
+    def start_transfer(self, mirror, selected):
+        plan = self.plan
+        self.phase, self.started = "transferring", time.monotonic()
+        self.review.hide()
+        self.sync_btn.hide()
+        self.bar.set_fraction(0)
+        self.progress_box.show_all()
+        self.resize(720, 230)
+        copies = [a for a in plan.of("copy") if ("copy", a.rel) in selected]
+        self._summary = (len(copies), sum(a.size for a in copies),
+                         sum(k[0] == "delete" for k in selected) if mirror else 0)
+        self.job = self.app.runner.submit(lambda prog: apply_plan(plan, prog, mirror, selected), self._applied,
+                                          "Syncing ...", inline=True)
+
+    def _applied(self, _res, exc):
+        self.job = None
+        self.app._refresh_all()
+        if self.phase == "closed":
+            return
+        if isinstance(exc, Cancelled):
+            self.app.set_status("Sync cancelled")
+            self._finish("Cancelled. Some files may already have been copied; run the sync again to finish.")
+        elif exc:
+            self.app.set_status("Sync failed")
+            self._finish("Sync failed: %s" % exc, error=True)
+        else:
+            files, size, deleted = self._summary
+            text = "Done: %d file(s) (%s) copied" % (files, human(size))
+            if deleted:
+                text += ", %d item(s) deleted" % deleted
+            self.app.set_status("Sync complete")
+            self._finish("%s, in %s." % (text, human_duration(time.monotonic() - self.started)))
+
+    def _finish(self, text, error=False):
+        self.phase = "done"
+        self.progress_box.hide()
+        self.review.hide()
+        self.sync_btn.hide()
+        self.cancel_btn.set_label("Close")
+        self.cancel_btn.set_sensitive(True)
+        markup = GLib.markup_escape_text(text)
+        self.result.set_markup('<span foreground="#c01c28">%s</span>' % markup if error else markup)
+        self.result.show()
+        self.resize(720, 230)
+
+    def _cancel_request(self):
+        self.cancel_btn.set_sensitive(False)
+        self.cancel_btn.set_label("Cancelling ...")
+        self.app.runner.cancel_all()
+
+    def _response(self, _d, res):
+        if res != Gtk.ResponseType.OK:
+            if self.phase in ("scanning", "transferring"):
+                self._cancel_request()              # the dialog closes or reports once the job has stopped
+            else:
+                self.destroy()
+            return
+        if self.phase != "review":
+            return
+        mirror, selected = self.mirror.get_active(), self._selected()
+        deleting = [k[1] for k in selected if k[0] == "delete"]
+        if deleting:
+            tops = Counter(rel.split("/")[0] for rel in deleting).most_common(6)
+            if not confirm_mirror_delete(self, self.plan.dst_be.label, self.plan.dst, len(deleting), tops):
+                return                              # back to the review, nothing happens
+        self.start_transfer(mirror, selected)
+
+    def _delete(self, *_):
+        if self.phase in ("scanning", "transferring"):
+            self._cancel_request()
+            return True                             # stay open until the job stops
+        return False
+
+    def _destroyed(self, _w):
+        self.phase = "closed"
+
+    # -- the review: what is listed and ticked --------------------------------------------------------------
     def _rows(self):
         """(kind, rel, action text, path, size text, why) for every listed row."""
         for a in self.plan.actions:
@@ -262,7 +408,7 @@ class SyncDialog(Gtk.Dialog):
             space = GLib.markup_escape_text("%s needed, %s free" % (human(need), human(free)))
         self.space.set_markup(space)
         self.summary.set_markup("<b>%s</b>" % GLib.markup_escape_text(",  ".join(parts)))
-        self.sync_btn.set_sensitive(bool(chosen))
+        self.sync_btn.set_sensitive(bool(chosen) and self.phase == "review")
 
     def _set_all(self, on):
         for row in self.store:
@@ -304,18 +450,6 @@ class SyncDialog(Gtk.Dialog):
             for x in acts:
                 if x.kind in make and below(x, a):
                     self.sel[(x.kind, x.rel)] = on
-
-    def _response(self, _d, res):
-        mirror, selected = self.mirror.get_active(), self._selected()
-        if res == Gtk.ResponseType.OK:
-            deleting = [k[1] for k in selected if k[0] == "delete"]
-            if deleting:
-                tops = Counter(rel.split("/")[0] for rel in deleting).most_common(6)
-                if not confirm_mirror_delete(self, self.plan.dst_be.label, self.plan.dst, len(deleting), tops):
-                    return                  # back to the dialog, nothing happens
-        self.destroy()
-        if res == Gtk.ResponseType.OK:
-            self.app.run_sync(self.plan, mirror, selected)
 
 
 class OutputWindow(Gtk.Window):

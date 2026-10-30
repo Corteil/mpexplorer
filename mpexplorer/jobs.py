@@ -6,8 +6,9 @@ from .ops import Progress
 
 
 class Job:
-    def __init__(self, fn, on_done, label, quiet, status=None):
+    def __init__(self, fn, on_done, label, quiet, status=None, inline=False):
         self.fn, self.on_done, self.label, self.quiet = fn, on_done, label, quiet
+        self.inline = inline        # shows its own progress (a dialog), so the main status bar leaves it alone
         self.status = status or label.rstrip(" .")      # short text for the badge's screen
         self.prog = Progress()
         self.prog.label = label
@@ -22,8 +23,8 @@ class JobRunner(threading.Thread):
         self.hook = None        # optional hook(job, "start"|"end", exc), called on the worker thread around each job
         self.start()
 
-    def submit(self, fn, on_done=None, label="", quiet=False, status=None):
-        job = Job(fn, on_done, label, quiet, status)
+    def submit(self, fn, on_done=None, label="", quiet=False, status=None, inline=False):
+        job = Job(fn, on_done, label, quiet, status, inline)
         self.q.put(job)
         return job
 

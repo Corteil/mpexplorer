@@ -352,6 +352,12 @@ def _sync_plan(tmp_path):
     return build_plan(be, str(src), be, str(dst))
 
 
+def _review(app, plan):
+    """A sync dialog that starts at the review of this plan (the real one compares first)."""
+    from mpexplorer.gtkui.dialogs import SyncDialog
+    return SyncDialog(app, plan.src_be, plan.src, plan.dst_be, plan.dst, plan=plan)
+
+
 def _tick(dialog, kind, rel):
     return next(r[0] for r in dialog.store if (r[5], r[6]) == (kind, rel))
 
@@ -362,10 +368,9 @@ def _click(dialog, kind, rel):
 
 
 def test_sync_dialog_shows_both_folders_and_the_space_and_lets_items_be_unticked(make_app, tmp_path):
-    from mpexplorer.gtkui.dialogs import SyncDialog
     app = make_app()
     plan = _sync_plan(tmp_path)
-    dialog = SyncDialog(app, plan)
+    dialog = _review(app, plan)
     try:
         texts = [w.get_text() for w in dialog.get_content_area().get_children()[0].get_children()
                  if isinstance(w, Gtk.Label)]
@@ -388,7 +393,7 @@ def test_sync_dialog_shows_both_folders_and_the_space_and_lets_items_be_unticked
         assert not dialog.sync_btn.get_sensitive()
         dialog._set_all(True)
         sent = []
-        app.run_sync = lambda plan, mirror, selected: sent.append((mirror, selected))
+        dialog.start_transfer = lambda mirror, selected: sent.append((mirror, selected))
         dialog.mirror.set_active(True)
         # and one deletion left out
         _click(dialog, "delete", "extra.txt")
@@ -400,11 +405,10 @@ def test_sync_dialog_shows_both_folders_and_the_space_and_lets_items_be_unticked
 
 
 def test_sync_dialog_warns_when_the_target_is_too_small(make_app, tmp_path):
-    from mpexplorer.gtkui.dialogs import SyncDialog
     app = make_app()
     plan = _sync_plan(tmp_path)
     plan.dst_free = 3                                         # smaller than the files to copy
-    dialog = SyncDialog(app, plan)
+    dialog = _review(app, plan)
     try:
         assert "not enough" in dialog.space.get_text()
         plan.dst_free = None
@@ -455,12 +459,12 @@ def test_mirror_deletion_needs_a_confirmation(make_app, tmp_path, monkeypatch):
     from mpexplorer.gtkui import dialogs
     app = make_app()
     sent, asked = [], []
-    app.run_sync = lambda plan, mirror, selected: sent.append(selected)
     plan = _sync_plan(tmp_path)
     for answer in (False, True):
         monkeypatch.setattr(dialogs, "confirm_mirror_delete",
                             lambda parent, label, path, count, tops, a=answer: asked.append((count, tops)) or a)
-        dialog = dialogs.SyncDialog(app, plan)
+        dialog = _review(app, plan)
+        dialog.start_transfer = lambda mirror, selected: sent.append(selected)
         dialog.mirror.set_active(True)
         dialog.response(Gtk.ResponseType.OK)
         if not answer:
@@ -474,9 +478,9 @@ def test_no_confirmation_when_nothing_is_deleted(make_app, tmp_path, monkeypatch
     from mpexplorer.gtkui import dialogs
     app = make_app()
     sent = []
-    app.run_sync = lambda plan, mirror, selected: sent.append(selected)
     monkeypatch.setattr(dialogs, "confirm_mirror_delete", lambda *a: pytest.fail("asked although nothing is deleted"))
-    dialog = dialogs.SyncDialog(app, _sync_plan(tmp_path))
+    dialog = _review(app, _sync_plan(tmp_path))
+    dialog.start_transfer = lambda mirror, selected: sent.append(selected)
     dialog.response(Gtk.ResponseType.OK)                                                 # mirror is off
     assert len(sent) == 1 and not any(k[0] == "delete" for k in sent[0])
 
@@ -494,7 +498,7 @@ def test_many_deletions_are_listed_by_folder_and_can_be_unticked(make_app, tmp_p
             (dst / top / ("f%d" % i)).write_text("x")
     be = LocalBackend()
     app = make_app()
-    dialog = dialogs.SyncDialog(app, build_plan(be, str(src), be, str(dst)))
+    dialog = _review(app, build_plan(be, str(src), be, str(dst)))
     try:
         dialog.mirror.set_active(True)
         rows = [(r[5], r[6], r[1]) for r in dialog.store if r[5] == "delete-group"]       # one row per top-level folder
@@ -506,3 +510,107 @@ def test_many_deletions_are_listed_by_folder_and_can_be_unticked(make_app, tmp_p
         assert any(k[1].startswith("small") for k in dialog._selected() if k[0] == "delete")
     finally:
         dialog.destroy()
+
+
+def _wait(cond, secs=8.0):
+    end = time.time() + secs
+    while not cond() and time.time() < end:
+        pump(50)
+    return cond()
+
+
+def test_sync_dialog_compares_inside_itself_then_shows_the_review(make_app, tmp_path):
+    from mpexplorer.backends import LocalBackend
+    from mpexplorer.gtkui.dialogs import SyncDialog
+    app = make_app()
+    src, dst = tmp_path / "src", tmp_path / "dst"
+    src.mkdir()
+    dst.mkdir()
+    (src / "a.py").write_text("a")
+    be = LocalBackend()
+    dialog = SyncDialog(app, be, str(src), be, str(dst))
+    try:
+        assert dialog.phase == "scanning" and dialog.progress_box.get_visible() and not dialog.review.get_visible()
+        assert not dialog.sync_btn.get_sensitive()                                    # nothing to sync until compared
+        assert _wait(lambda: dialog.phase == "review")
+        assert dialog.review.get_visible() and not dialog.progress_box.get_visible() and dialog.sync_btn.get_sensitive()
+        assert [(r[5], r[6]) for r in dialog.store] == [("copy", "a.py")]
+        assert app.status.get_text() == "Ready"                                       # main status bar not used
+    finally:
+        dialog.destroy()
+
+
+def test_sync_dialog_says_when_there_is_nothing_to_do(make_app, tmp_path):
+    from mpexplorer.backends import LocalBackend
+    from mpexplorer.gtkui.dialogs import SyncDialog
+    app = make_app()
+    for name in ("src", "dst"):
+        (tmp_path / name).mkdir()
+        (tmp_path / name / "same.txt").write_text("same")
+    be = LocalBackend()
+    dialog = SyncDialog(app, be, str(tmp_path / "src"), be, str(tmp_path / "dst"))
+    try:
+        assert _wait(lambda: dialog.phase == "done")
+        assert "Nothing to do" in dialog.result.get_text() and dialog.cancel_btn.get_label() == "Close"
+        assert not dialog.sync_btn.get_visible()
+    finally:
+        dialog.destroy()
+
+
+def test_sync_dialog_transfers_inside_itself_and_reports_the_result(make_app, tmp_path):
+    app = make_app()
+    plan = _sync_plan(tmp_path)
+    dialog = _review(app, plan)
+    try:
+        dialog._set_all(True)
+        _click(dialog, "copy", "b.txt")                                               # leave one file out
+        dialog.response(Gtk.ResponseType.OK)
+        assert dialog.phase == "transferring" and dialog.progress_box.get_visible() and not dialog.review.get_visible()
+        assert _wait(lambda: dialog.phase == "done")
+        text = dialog.result.get_text()
+        assert text.startswith("Done: 3 file(s)") and "copied" in text and dialog.cancel_btn.get_label() == "Close"
+        assert (tmp_path / "dst" / "a.py").exists() and (tmp_path / "dst" / "lib" / "m.py").exists()
+        assert not (tmp_path / "dst" / "b.txt").exists() and app.status.get_text() == "Sync complete"
+        dialog.response(Gtk.ResponseType.CANCEL)                                      # "Close"
+        assert dialog.phase == "closed"
+    finally:
+        if dialog.phase != "closed":
+            dialog.destroy()
+
+
+def test_sync_dialog_shows_the_scan_and_the_transfer_progress_itself(make_app, tmp_path):
+    from types import SimpleNamespace
+    from mpexplorer.ops import Progress
+    app = make_app()
+    dialog = _review(app, _sync_plan(tmp_path))
+    try:
+        prog = Progress()
+        prog.label = "Comparing lib/m.py"
+        dialog.job, dialog.phase = SimpleNamespace(prog=prog), "scanning"
+        dialog._tick()
+        assert dialog.progress_text.get_text() == "Comparing lib/m.py"               # what is being scanned
+        prog.label, prog.total, prog.done = "m.py", 4096, 1024
+        dialog.phase = "transferring"
+        dialog._tick()
+        assert dialog.bar.get_fraction() == 0.25
+        assert dialog.progress_text.get_text().startswith("m.py   1.0 KB of 4.0 KB (25%)")
+    finally:
+        dialog.job = None
+        dialog.destroy()
+
+
+def test_inline_jobs_do_not_use_the_main_status_bar(make_app):
+    import threading
+    app = make_app()
+    gate = threading.Event()
+
+    def job(prog):
+        prog.label, prog.total, prog.done = "x", 100, 50
+        gate.wait(5)
+    app.runner.submit(job, label="Comparing folders ...", inline=True)
+    pump(400)
+    try:
+        assert app.bar.get_fraction() == 0 and app.status.get_text() == "Ready"
+    finally:
+        gate.set()
+    pump(300)
