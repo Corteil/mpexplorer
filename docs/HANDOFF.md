@@ -31,9 +31,10 @@ changed/new files; with mirror-delete off nothing was deleted; with only some de
 the full mirror removed the rest and left the board identical to the source, with no `.mpx-part` leftovers. **Then by hand (owner, 2026-10-30):**
 first-run setup (settings file cleared, backup kept as `settings.json.bak`) passed, and the sync dialog passed on the Pico using the
 steps above (sync to a new board folder, resync, edit `notes.txt` and delete `data/64k.bin` with mirror-delete off and then on). The
-owner reported it as "sync passed" without itemising each step, so the target confirm, mirror-delete confirm, tick boxes and in-dialog
-progress are recorded as passing together, not one by one. Not reported: the transfer popup / delete item counts / "Ready" status
-(steps 1 and 6), and the 2022 badge.
+owner then confirmed all six steps of the hand checklist were checked and passed: the transfer popup and "Ready" status (upload of
+`data/`), the sync dialog (target confirm, tick boxes, in-dialog progress), a resync that found nothing to do, a changed file with
+mirror-delete off, mirror-delete on with its confirmation (an unticked delete survives), and the delete item count on the board. Not
+itemised by the owner beyond "all steps passed". Not done: the 2022 badge.
 
 ## Status after the 2026-10-29 Pi session (read this first)
 Done from a Claude Code session on the Pi 5 with the Tildagon (MicroPython 1.28.0) on `/dev/ttyACM0`. Everything below is
@@ -121,8 +122,8 @@ checklist; the owner started on it 2026-10-30). The new GUI items (icons, wrappe
 the Preferences options, a downloaded file keeping its time) were checked by the owner and are OK. Still open: the
 benchmark and `os.uname()` on the 2022 badge (a Pico and a Pico 2 were done, see below); decide on an upload-focused agent (check integrity at
 100+ KB/s first); find why the Tildagon's stdout is capped. Built later on 2026-10-30, shaped by the owner's feedback but not yet
-confirmed finished by hand: the transfer popup, delete item counts and the status bar going back to "Ready" during real transfers
-(the sync dialog on real folders passed on a Pico 2026-10-30, see above).
+confirmed finished by hand: all of it (sync dialog, transfer popup, delete item counts, "Ready" status) passed on a Pico on
+2026-10-30, see above. Only the 2022 badge and the Tildagon re-check of these remain.
 
 Practical notes from this session:
 - The system Python has no pytest or ruff: `python3 -m venv --system-site-packages <scratch>/venv && <scratch>/venv/bin/pip
