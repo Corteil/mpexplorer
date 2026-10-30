@@ -14,7 +14,6 @@ from ..ops import ConflictPolicy, copy_tree, delete_tree, is_within, move_item, 
 from ..ports import board_id, device_of, list_ports
 from ..remember import device_start, host_start, port_choice, remember_folder, remember_port
 from ..settings import Settings
-from ..sync import apply_plan, build_plan
 from ..transport import RawREPL
 from .common import ICON, Gdk, GdkPixbuf, GLib, Gtk, ask_yes_no, error, fmt_time, icon_button, info, prompt, set_icon
 from .console import ConsoleWindow
@@ -653,29 +652,7 @@ class App(Gtk.Window):
             error(self, "Sync", "The two folders must be separate (neither inside the other).")
             return
 
-        def done(plan, exc):
-            if exc:
-                if not isinstance(exc, Cancelled):
-                    error(self, "Sync", str(exc))
-                self.set_status("Sync cancelled" if isinstance(exc, Cancelled) else "Sync failed")
-            elif not plan.actions:
-                self.set_status("Folders are already in sync")
-                info(self, "Sync", "Nothing to do: the folders already match.")
-            else:
-                SyncDialog(self, plan)
-        self.runner.submit(lambda prog: build_plan(s_be, s_dir, d_be, d_dir, prog), done, "Comparing folders ...")
-
-    def run_sync(self, plan, include_delete, selected=None):
-        def done(_res, exc):
-            self._refresh_all()
-            if isinstance(exc, Cancelled):
-                self.set_status("Sync cancelled")
-            elif exc:
-                self.set_status("Sync failed")
-                error(self, "Sync failed", str(exc))
-            else:
-                self.set_status("Sync complete")
-        self.runner.submit(lambda prog: apply_plan(plan, prog, include_delete, selected), done, "Syncing ...")
+        SyncDialog(self, s_be, s_dir, d_be, d_dir)
 
     def free_space(self):
         if self.device and self._need_backend(self.right):
@@ -721,7 +698,7 @@ class App(Gtk.Window):
             req["result"] = ask_conflict(self, req["name"])
             req["event"].set()
         job = self.runner.current
-        if job and not job.quiet:
+        if job and not job.quiet and not job.inline:
             p = job.prog
             self.bar.set_fraction(p.fraction())
             self.set_status(p.describe())
