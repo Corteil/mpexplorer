@@ -456,6 +456,10 @@ class App(Gtk.Window):
     def _quit(self):
         self.save_state()
         self.runner.cancel_all()
+        for _ in range(20):                         # an interrupted script needs a moment to let go of the serial line
+            if not self.runner.busy:
+                break
+            time.sleep(0.1)
         if self.device:
             try:
                 reset = self.settings.get("general.reset_on_disconnect")
@@ -661,7 +665,7 @@ class App(Gtk.Window):
             return
         be, path = pane.backend, sel[0][1]
         self.runner.submit(lambda prog: be.run(path), lambda out, exc: OutputWindow(self, path, out, exc),
-                           "Running " + path, quiet=True)
+                           "Running " + path, quiet=True, on_cancel=be.repl.interrupt)     # Cancel / Quit send Ctrl-C
 
     def open_console(self):
         if not self.session:

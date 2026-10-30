@@ -909,3 +909,23 @@ def test_device_pane_label_names_the_port_and_board(make_app, tmp_path):
     # the model is not known (no answer to os.uname): just the port
     app.connected(DeviceBackend(RawREPL(FakeSerial())), str(tmp_path), "/dev/ttyACM0", "303a:4001:AAA")
     assert app.right.get_label() == "Device: /dev/ttyACM0"
+
+
+def test_run_script_can_be_interrupted_by_cancel(make_app, monkeypatch):
+    app = make_app()
+    calls, submitted = [], []
+
+    class Repl:
+        interrupt = staticmethod(lambda: calls.append("ctrl-c"))
+
+    class Board:
+        key, repl = "device", Repl()
+    app.right.backend = Board()
+    monkeypatch.setattr(app.right, "selected", lambda: [("main.py", "/main.py")])
+    monkeypatch.setattr(app.runner, "submit", lambda *a, **k: submitted.append(k))
+    app.run_script()
+    assert len(submitted) == 1
+    assert submitted[0]["on_cancel"] is Repl.interrupt              # Cancel and Quit stop an endless script
+    submitted[0]["on_cancel"]()
+    assert calls == ["ctrl-c"]
+    app.right.backend = None
