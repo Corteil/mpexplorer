@@ -684,3 +684,45 @@ def test_the_tools_are_in_the_menu(setup):
     tools = [i for i in menu.get_children() if i.get_label() == "Tools"][0].get_submenu()
     assert [i.get_label() for i in tools.get_children()] == [
         "Sync folders...", "Install firmware...", "Back up or restore flash...", "Erase flash..."]
+
+
+@pytest.mark.parametrize("cls", [dialog.FirmwareDialog, dialog.BackupDialog, dialog.EraseDialog])
+def test_the_bootloader_button_is_only_for_a_running_board(setup, cls):
+    make, drives, *_ = setup
+    d = make(cls=cls)
+    assert not d.boot_btn.get_visible()             # already a drive
+    drives[0] = RUNNING
+    d.scan()
+    wait_until(lambda: d.boot_btn.get_sensitive() and d.boot_btn.get_visible())
+
+
+def test_the_bootloader_button_moves_the_tool_to_the_new_drive(setup, monkeypatch):
+    make, drives, errors, *_ = setup
+    drive = drives[0]
+    drives[0] = RUNNING
+    d = make(cls=dialog.EraseDialog)
+    wait_until(lambda: d.boot_btn.get_sensitive())
+
+    def fake(port):
+        drives[0] = drive                           # the port goes, and the drive arrives
+        return drive
+    monkeypatch.setattr(fw, "enter_bootloader", fake)
+    d._response(d, Gtk.ResponseType.YES)
+    assert d.running and not d.boot_btn.get_sensitive()
+    wait_until(lambda: not d.running)
+    assert not errors and d.drive() == drive and not d.boot_btn.get_visible()
+    assert drive.path in d.note.get_text() and d.erase_btn.get_sensitive()
+
+
+def test_a_failed_bootloader_request_is_reported_and_the_board_stays_selected(setup, monkeypatch):
+    make, drives, errors, *_ = setup
+    drives[0] = RUNNING
+
+    def fails(port):
+        raise fw.FirmwareError("The board did not appear as a drive.")
+    monkeypatch.setattr(fw, "enter_bootloader", fails)
+    d = make(cls=dialog.BackupDialog)
+    wait_until(lambda: d.boot_btn.get_sensitive())
+    d.put_in_bootloader()
+    wait_until(lambda: not d.running)
+    assert errors == ["The board did not appear as a drive."] and d.drive().path == RUNNING.path

@@ -266,3 +266,44 @@ def test_uf2_erase_returns_the_drive_that_came_back(tmp_path, monkeypatch):
     answers = iter([[], [back]])
     monkeypatch.setattr(fw, "detect", lambda: next(answers))
     assert fw.erase_uf2(image, drive, poll=0) == back
+
+
+class BootRepl:
+    def __init__(self, on_exec=None):
+        self.on_exec, self.code = on_exec, None
+
+    def exec(self, code, timeout=0):
+        self.code = code
+        if self.on_exec:
+            raise self.on_exec
+
+    def close(self, reset=False):
+        assert not reset                            # a reset now would undo it
+        if self.on_exec:
+            raise OSError("gone")
+
+
+@pytest.mark.parametrize("lost", [None, OSError("device disconnected"), TransportError("no reply")])
+def test_entering_the_bootloader_finds_the_new_drive_even_as_the_port_vanishes(monkeypatch, lost):
+    old = fw.BootDrive("/m/old", "m", "RP2350", "rp2350")
+    new = fw.BootDrive("/m/new", "m", "RPI-RP2", "rp2040")
+    answers = iter([[old], [old], [old, new]])
+    monkeypatch.setattr(fw, "detect", lambda: next(answers))
+    repl = BootRepl(lost)
+    assert fw.enter_bootloader("/dev/x", poll=0, open_board=opener(repl)) == new
+    assert "machine.bootloader()" in repl.code
+
+
+def test_a_board_that_does_not_enter_the_bootloader_says_what_to_do(monkeypatch):
+    monkeypatch.setattr(fw, "detect", lambda: [])
+    with pytest.raises(fw.FirmwareError, match="Hold BOOTSEL"):
+        fw.enter_bootloader("/dev/x", timeout=0, open_board=opener(BootRepl()))
+
+
+def test_a_busy_port_is_reported_when_entering_the_bootloader(monkeypatch):
+    monkeypatch.setattr(fw, "detect", lambda: [])
+
+    def busy(port):
+        raise OSError("busy")
+    with pytest.raises(fw.FirmwareError, match="connected in the app"):
+        fw.enter_bootloader("/dev/x", open_board=busy)
