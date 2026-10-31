@@ -64,7 +64,8 @@ class Badge:
 
 BADGES = {
     "TILDAGON": Badge(("ESP32-S3-PICO-1", 8, 2, True), (0x16D0, 0x120E), True, "Tildagon (2024, 2026)", True,
-                      "power it off from its menu, then hold boop while plugging it in. Keep holding for a few seconds"),
+                      "power it off from its menu, then hold boop while plugging it in. Keep holding for a few "
+                      "seconds"),
     "TIDAL": Badge(("ESP32-S3", 8, None, True), (0x16D0, 0x1114), False, "TiDAL (2022 badge)", False,
                    "hold the bottom right button, tap bottom-left, then release both"),
 }
