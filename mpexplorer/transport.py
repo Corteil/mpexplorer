@@ -49,15 +49,34 @@ class RawREPL:
         self.lock = threading.RLock()
 
     @classmethod
-    def open(cls, port, baud=115200, paste=None, adaptive=True):
+    def open(cls, port, baud=115200, paste=None, adaptive=True, rts=False):
         import serial
         ser = serial.serial_for_url(port, baudrate=baud, timeout=0.1, do_not_open=True)
         # RTS asserted can reset ESP32-S3 boards. DTR must be asserted: the Tildagon's USB CDC corrupts
         # any output over ~256 bytes while DTR is low.
+        # (The 2022 badge is the exception: it says nothing unless RTS is asserted too; see `rts` and Preferences.)
         ser.dtr = True
-        ser.rts = False
+        ser.rts = bool(rts)
         ser.open()
         return cls(ser, paste=paste, adaptive=adaptive)
+
+    @classmethod
+    def open_board(cls, port, rts=False, **kw):
+        """Open a port and enter the raw REPL; returns (repl, rts_used).
+
+        Starts with the remembered RTS setting (low for an unknown board, which is what the Tildagon needs). A board
+        that stays silent is tried again with the other setting: the 2022 badge only answers with RTS asserted. The
+        caller remembers rts_used. If neither works the first error is raised."""
+        first = None
+        for flag in (bool(rts), not rts):
+            repl = cls.open(port, rts=flag, **kw)
+            try:
+                repl.enter_raw()
+                return repl, flag
+            except TransportError as e:
+                repl.close()
+                first = first or e
+        raise first
 
     def _trace(self, kind, text):
         if self.trace:

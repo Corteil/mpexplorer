@@ -218,6 +218,7 @@ def main():
     ap.add_argument("--sizes", default="64,256,1024", help="comma separated file sizes in KB")
     ap.add_argument("--files", type=int, default=200, help="files in the listing test")
     ap.add_argument("--force", action="store_true", help="reuse %s if it already exists" % BENCH_DIR)
+    ap.add_argument("--rts", action="store_true", help="assert RTS as well as DTR (the 2022 badge needs it)")
     ap.add_argument("--no-reset", action="store_true", help="do not soft-reset the board at the end")
     args = ap.parse_args()
     sizes = [int(s) for s in args.sizes.split(",") if s.strip()]
@@ -230,7 +231,7 @@ def main():
         port = ports[0].split("  ")[0]
     print("Host: %s, Python %s; port %s" % (platform.platform(), platform.python_version(), port))
     try:
-        info, rows = run_benchmark(lambda paste: RawREPL.open(port, paste=paste, adaptive=False), sizes, args.files,
+        info, rows = run_benchmark(lambda paste: RawREPL.open(port, paste=paste, adaptive=False, rts=args.rts), sizes, args.files,
                                    force=args.force, reset=not args.no_reset)
     except BackendError as e:
         sys.exit("Benchmark stopped: %s" % e)

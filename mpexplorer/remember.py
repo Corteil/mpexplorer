@@ -63,3 +63,16 @@ def remember_board_name(settings, board, machine):
         if names.get(segment(board)) != machine:
             names[segment(board)] = machine
             settings.set("boards.names", names)
+
+
+def remember_board_rts(settings, board, rts):
+    """Keep whether this board only answers with RTS asserted (learned at connect, see transport.open_board)."""
+    if not board:
+        return
+    table = settings.get("boards.rts")
+    if rts and not table.get(segment(board)):
+        table[segment(board)] = True
+        settings.set("boards.rts", table)
+    elif not rts and segment(board) in table:
+        del table[segment(board)]               # it answers without RTS now: stop forcing it
+        settings.set("boards.rts", table)
