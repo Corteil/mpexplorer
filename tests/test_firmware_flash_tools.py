@@ -30,7 +30,7 @@ class FlashRepl:
 
     def exec(self, code, timeout=0):
         if "print(n)" in code:
-            return ("%d\r\n%s\r\n" % (self.size_mb, self.machine)).encode()
+            return ("%d\r\n%s\r\n1.29.0\r\n" % (self.size_mb, self.machine)).encode()
         self.reads += 1
         offset, n = map(int, re.search(r"0x10000000\+(\d+),(\d+)", code).groups())
         piece = self.flash[offset:offset + n]
@@ -228,3 +228,41 @@ def test_running_picos_are_listed_after_boards_in_a_bootloader(monkeypatch):
     monkeypatch.setattr(fw, "detect", lambda m: [])
     monkeypatch.setattr(fw, "detect_rom", lambda: [ROM])
     assert [d.method for d in fw.detect_all()] == ["esptool", "repl"]
+
+
+def test_read_running_says_what_the_board_is_and_resets_it():
+    repl = FlashRepl(flash_of(2), "Raspberry Pi Pico with RP2040")
+    got = fw.read_running("/dev/x", open_board=opener(repl))
+    assert got == fw.RunningInfo("Raspberry Pi Pico with RP2040", "1.29.0", 2) and repl.closed is True
+
+
+def test_read_running_on_a_busy_port_says_it_may_be_connected():
+    def busy(port):
+        raise OSError("busy")
+    with pytest.raises(fw.FirmwareError, match="connected in the app"):
+        fw.read_running("/dev/x", open_board=busy)
+
+
+@pytest.mark.parametrize("drive, running, label", [
+    (fw.BootDrive("/dev/a", "m", "MicroPython", None, "repl"), None, "MicroPython board at /dev/a"),
+    (fw.BootDrive("/dev/a", "m", "MicroPython", None, "repl"), "cannot read", "MicroPython board at /dev/a"),
+    (fw.BootDrive("/dev/a", "m", "MicroPython", None, "repl"), fw.RunningInfo("Raspberry Pi Pico with RP2040", "1", 2),
+     "Pico (RP2040) at /dev/a"),
+    (ROM, None, "Tildagon at /dev/fake"),
+    (fw.BootDrive("/dev/b", "m", "E", "esp32s3", "esptool"), None, "ESP32-S3 at /dev/b"),
+    (fw.BootDrive("/m/d", "m", "RP2350", "rp2350"), None, "RP2350 at /m/d"),
+    (fw.BootDrive("/m/d", "m", "X", None), None, "Unsupported (X) at /m/d"),
+])
+def test_device_labels(drive, running, label):
+    assert fw.device_label(drive, running) == label
+
+
+def test_uf2_erase_returns_the_drive_that_came_back(tmp_path, monkeypatch):
+    drive = uf2_drive(tmp_path)
+    image = nuke(tmp_path)
+    back = fw.BootDrive("/m/new", "m", "RPI-RP2", "rp2040")
+    monkeypatch.setattr(fw, "_copy_to_drive", lambda *a: None)
+    monkeypatch.setattr(fw, "wait_gone", lambda d: True)
+    answers = iter([[], [back]])
+    monkeypatch.setattr(fw, "detect", lambda: next(answers))
+    assert fw.erase_uf2(image, drive, poll=0) == back

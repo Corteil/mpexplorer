@@ -13,6 +13,7 @@ import time
 from dataclasses import dataclass
 
 from .errors import BackendError, Cancelled
+from .ports import short_model
 from .transport import RawREPL, TransportError
 
 INFO_FILE = "INFO_UF2.TXT"
@@ -106,6 +107,13 @@ class Uf2Info:
 class EspInfo:
     cpu: str
     size: int
+
+
+@dataclass
+class RunningInfo:
+    machine: str
+    release: str
+    flash_mb: int | None
 
 
 @dataclass
@@ -450,6 +458,7 @@ for m in (1,2,4,8,16):
         break
 print(n)
 print(os.uname().machine)
+print(os.uname().release)
 """
 _REPL_READ = """
 import uctypes,binascii,hashlib
@@ -457,6 +466,62 @@ c=bytes(uctypes.bytearray_at(0x10000000+%d,%d))
 print(binascii.b2a_base64(c).decode().strip())
 print(binascii.hexlify(hashlib.sha256(c).digest()).decode())
 """
+
+
+def read_running(port, open_board=RawREPL.open_board):
+    """What a running RP2 board is. This stops its program and soft-resets it, which restarts its main.py."""
+    try:
+        repl, _ = open_board(port)
+    except (TransportError, OSError) as e:
+        raise FirmwareError("Cannot read %s: is it connected in the app? (%s)" % (port, e))
+    try:
+        lines = repl.exec(_REPL_SIZE, timeout=10).decode().strip().splitlines()
+        return RunningInfo(lines[1], lines[2], int(lines[0]) or None)
+    except (TransportError, ValueError, IndexError) as e:
+        raise FirmwareError("Cannot read %s: %s" % (port, e))
+    finally:
+        repl.close(reset=True)
+
+
+def device_label(drive, running=None):
+    """The device list's text: what the board is, then where."""
+    if drive.method == "repl":
+        name = short_model(running.machine) if isinstance(running, RunningInfo) else "MicroPython board"
+    elif drive.method == "esptool":
+        chip = drive.esp_chip
+        name = {"TILDAGON": "Tildagon", "TIDAL": "TiDAL (2022 badge)"}.get(chip.badge if chip else None, "ESP32-S3")
+    else:
+        name = CHIP_NAMES.get(drive.chip, "Unsupported (%s)" % drive.board_id)
+    return "%s at %s" % (name, drive.path)
+
+
+def device_details(drive, running=None):
+    """(name, value) lines for the device's details panel."""
+    if drive.method == "repl":
+        lines = [("State", "running MicroPython"), ("Port", drive.path)]
+        if isinstance(running, RunningInfo):
+            lines += [("Board", running.machine), ("MicroPython", running.release)]
+            if running.flash_mb:
+                lines.append(("Flash", "%d MB" % running.flash_mb))
+        elif running:
+            lines.append(("Details", running))
+        else:
+            lines.append(("Details", "reading (this restarts its program)"))
+        return lines
+    if drive.method == "esptool":
+        lines = [("State", "in its ROM bootloader"), ("Port", drive.path)]
+        chip = drive.esp_chip
+        if chip:
+            lines += [("Chip", chip.type), ("Flash", "%s MB" % chip.flash_mb if chip.flash_mb else "unknown"),
+                      ("PSRAM", "%d MB" % chip.psram_mb if chip.psram_mb else "none")]
+            if chip.badge:
+                lines.append(("Reads as", "%s, though another board with this chip would read the same" % chip.badge))
+        return lines
+    lines = [("State", "in BOOTSEL (USB drive)"), ("Drive", drive.path), ("Model", drive.model),
+             ("Board ID", drive.board_id)]
+    if drive.chip:
+        lines.append(("Exact board", "cannot be read in BOOTSEL: only the chip"))
+    return lines
 
 
 def backup_repl(port, path, on_progress=None, cancelled=None, open_board=RawREPL.open_board):
@@ -528,8 +593,9 @@ def erase_uf2(image, drive, on_progress=None, cancelled=None, timeout=90.0, poll
         raise FirmwareError("The board did not start the erase. It is still in its bootloader.")
     end = time.monotonic() + timeout
     while time.monotonic() < end:
-        if any(d.chip == drive.chip and d.path not in before for d in detect()):
-            return
+        back = next((d for d in detect() if d.chip == drive.chip and d.path not in before), None)
+        if back:
+            return back
         time.sleep(poll)
     raise FirmwareError("The board did not come back after the erase. Unplug it and check it with BOOTSEL held.")
 

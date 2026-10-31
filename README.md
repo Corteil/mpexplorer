@@ -38,7 +38,7 @@ mpexplorer
 ```
 Plug the board in, press **Scan**, pick the port, **Connect**.
 
-Tools > Firmware and flash installs firmware, backs up the flash and erases it. A badge or other ESP32-S3 needs
+The Tools menu can install firmware, back up or restore the flash, and erase it. A badge or other ESP32-S3 needs
 `pipx install esptool`; a Pico or Pico 2 needs nothing extra.
 
 The interface is GTK 3 through PyGObject (`python3-gi`, already on Raspberry Pi OS); `--system-site-packages` lets
