@@ -92,7 +92,7 @@ fall back to defaults and never block startup.
 - Real MicroPython layer: the same round trip through `rawrepl_shim.py`.
 - GUI by hand on the Pi 5 (the chooser, a real external editor): add rows to `docs/HARDWARE.md`.
 
-**Phase 4 (partly, 2026-10-31):** hex and image viewers (`gtkui/viewer.py`, `viewers.hexdump`; hex up to 256 KB, image up to 2 MB, read-only), listed in the chooser. Tested under Xvfb on host files only; not tried by hand or on a board.
+**Phase 4 (partly, 2026-10-31):** hex and image viewers (`gtkui/viewer.py`, `viewers.hexdump`; hex up to 256 KB, image up to 2 MB, read-only), listed in the chooser. Tested under Xvfb on host files; the owner then tried both viewers by hand on 2026-10-31 and reported them working (which files and boards not itemised).
 
 ## Phases
 1. `openwith.py` + tests (settings, lookup, commands, watcher). 2. Device download/launch/upload loop for one custom
