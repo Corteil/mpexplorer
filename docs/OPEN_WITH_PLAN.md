@@ -93,7 +93,7 @@ fall back to defaults and never block startup.
 
 **Phase 4 (partly, 2026-10-31):** hex and image viewers (`gtkui/viewer.py`, `viewers.hexdump`; hex up to 256 KB, image up to 2 MB, read-only), listed in the chooser. Tested under Xvfb on host files; the owner then tried both viewers by hand on 2026-10-31 and reported them working (which files and boards not itemised).
 
-**File types preferences page (2026-10-31):** Edit > Preferences > File types lists each saved extension and its program, with Add / Change / Remove (saved at once; custom commands are kept). Core helpers `normalize_extension`, `forget_handler`, `describe_handler` in `openwith.py`. Tested under Xvfb; not tried by hand.
+**File types preferences page (2026-10-31):** Edit > Preferences > File types lists each saved extension and its program, with Add / Change / Remove (saved at once; custom commands are kept). Core helpers `normalize_extension`, `forget_handler`, `describe_handler` in `openwith.py`. Tested under Xvfb; the owner then tried it by hand on 2026-10-31 and reported it working (not itemised).
 
 ## Phases
 1. `openwith.py` + tests (settings, lookup, commands, watcher). 2. Device download/launch/upload loop for one custom
