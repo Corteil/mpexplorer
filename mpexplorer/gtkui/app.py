@@ -63,6 +63,7 @@ class App(Gtk.Window):
         self.clipboard = Clipboard()
         self.local = LocalBackend()
         self.edits = EditManager(self.runner, cache_dir(), self._edit_say, self._edit_conflict, self._refresh_all)
+        self.edits.set_paused(not self.settings.get("open_with.auto_upload"))
         self.device = None
         self.session = None
         self.console = None
@@ -171,6 +172,9 @@ class App(Gtk.Window):
                 p._render()
         elif key == "general.device_mtimes":
             self.right.refresh()
+        elif key == "open_with.auto_upload":
+            self.edits.set_paused(not value)
+            self._sync_pause_button()
 
     def preferences(self):
         dlg = PreferencesDialog(self)
@@ -279,7 +283,13 @@ class App(Gtk.Window):
         """A centred progress bar (60% of the width) with the status text under it, lined up with the bar's left edge;
         Cancel beside the bar's right end, as tall as the bar and the text together."""
         grid = Gtk.Grid(column_homogeneous=True, row_spacing=2, column_spacing=6, margin_start=4, margin_end=4)
-        grid.attach(Gtk.Label(label=""), 0, 0, 1, 2)                       # equal side columns: 20% | 60% | 20%
+        self.pause_btn = Gtk.ToggleButton(label="Pause", halign=Gtk.Align.END, valign=Gtk.Align.FILL,
+                                          no_show_all=True, tooltip_text="Pause uploads: hold saves made in "
+                                          "an external editor; they are sent when you release it")
+        self.pause_btn.connect("toggled", self._pause_toggled)
+        side = Gtk.Box()                                                   # always shown, so the column keeps its width
+        side.pack_start(self.pause_btn, True, True, 0)
+        grid.attach(side, 0, 0, 1, 2)                                      # equal side columns: 20% | 60% | 20%
         self.bar = Gtk.ProgressBar(valign=Gtk.Align.CENTER, hexpand=True)
         grid.attach(self.bar, 1, 0, 3, 1)
         self.status = Gtk.Label(label="Ready", xalign=0, ellipsize=3, hexpand=True)       # 3 = end
@@ -289,6 +299,22 @@ class App(Gtk.Window):
         cancel.set_valign(Gtk.Align.FILL)       # stretches to the height of the bar and the text beside it
         grid.attach(cancel, 4, 0, 1, 2)
         return grid
+
+    def _pause_toggled(self, btn):
+        paused = btn.get_active()
+        if paused == self.edits.paused:
+            return
+        self.edits.set_paused(paused)
+        self.set_status("Uploads paused: saves wait until you release the button" if paused
+                        else "Uploads resumed")
+
+    def _sync_pause_button(self):
+        """Shown while edit sessions are open (or uploads are held); mirrors the manager's state."""
+        show = bool(self.edits.sessions) or self.edits.paused
+        if self.pause_btn.get_visible() != show:
+            self.pause_btn.set_visible(show)
+        if self.pause_btn.get_active() != self.edits.paused:
+            self.pause_btn.set_active(self.edits.paused)
 
     def context_menu(self):
         m = Gtk.Menu()
@@ -851,6 +877,7 @@ class App(Gtk.Window):
         self.watchdog.beat()
         try:
             self.edits.tick()
+            self._sync_pause_button()
         except Exception as e:           # a broken tick must not stop the poller
             self.set_status("Internal error: %s" % e)
         for job, res, exc in self.runner.drain():

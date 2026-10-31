@@ -500,3 +500,29 @@ def test_forget_and_describe_handlers(settings):
     assert openwith.forget_handler(settings, ".bin") is True
     assert openwith.forget_handler(settings, ".bin") is False
     assert settings.get("open_with.by_extension") == {".py": "custom:geany"}
+
+
+def test_paused_saves_wait_then_go_up_when_released(rig, dev, bd):
+    put(dev, bd + "/main.py", b"v1\n")
+    rig.edit()
+    rig.mgr.set_paused(True)
+    labels = len(rig.runner.labels)
+    rig.save(b"v2 half done\n")
+    rig.clock.t += 30
+    rig.mgr.tick()
+    assert len(rig.runner.labels) == labels and read(dev, bd + "/main.py") == b"v1\n"      # held, not lost
+    assert rig.mgr.sessions[0].watcher.pending
+    rig.mgr.set_paused(False)
+    rig.clock.t += 1                                                    # the manager looks at most every 0.5 s
+    rig.mgr.tick()
+    assert read(dev, bd + "/main.py") == b"v2 half done\n"
+
+
+def test_pause_covers_files_opened_later_and_flush_does_not_send_held_saves(rig, dev, bd):
+    put(dev, bd + "/a.py", b"a1\n")
+    rig.mgr.set_paused(True)
+    rig.edit("a.py")
+    assert rig.mgr.sessions[0].watcher.paused
+    open(rig.mgr.sessions[0].watcher.local, "wb").write(b"a2\n")
+    assert rig.mgr.flush(dev, "bd1") == ["a.py"] and read(dev, bd + "/a.py") == b"a1\n"
+    assert rig.mgr.close_board("bd1") == ["a.py"]                      # kept in the cache, the user is told

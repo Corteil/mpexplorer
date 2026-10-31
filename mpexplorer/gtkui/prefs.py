@@ -11,6 +11,7 @@ GENERAL = [
     ("general.badge_screen", "Show a status screen on the badge while connected (from the next connect)"),
     ("general.reset_on_disconnect", "Restart the board when disconnecting or quitting (brings a badge's screen back)"),
     ("general.set_board_clock", "Set the board's clock (UTC) to this computer's time when connecting"),
+    ("open_with.auto_upload", "Upload saves of device files edited in other programs automatically"),
     ("general.device_mtimes", "Show modified times for device files (slow: about 40 ms per file on a Tildagon)"),
 ]
 

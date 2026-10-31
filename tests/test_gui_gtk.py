@@ -1089,3 +1089,31 @@ def test_shift_enter_and_file_menu_choose_a_program(make_app, tmp_path, monkeypa
     assert asked == [str(tmp_path / "notes.txt")] * 2
     plain = types.SimpleNamespace(keyval=common.Gdk.KEY_Return, state=0)
     assert app.left._key(None, plain) is False                          # plain Enter still opens the default
+
+
+def test_pause_button_follows_edit_sessions_and_holds_uploads(make_app):
+    app = make_app()
+    app._sync_pause_button()
+    assert not app.pause_btn.get_visible()                              # nothing being edited
+    app.edits.sessions.append(types.SimpleNamespace(watcher=types.SimpleNamespace(paused=False)))
+    app._sync_pause_button()
+    assert app.pause_btn.get_visible() and not app.pause_btn.get_active()
+    pump(300)
+    assert 0.55 < app.bar.get_allocation().width / app.bar.get_parent().get_allocation().width < 0.65   # layout kept
+    app.pause_btn.set_active(True)
+    assert app.edits.paused and app.edits.sessions[0].watcher.paused
+    app.settings.set("open_with.auto_upload", True)                     # the preference does not undo the button
+    app.pause_btn.set_active(False)
+    assert not app.edits.paused and not app.edits.sessions[0].watcher.paused
+    app.edits.sessions.clear()
+    app._sync_pause_button()
+    assert not app.pause_btn.get_visible()
+
+
+def test_auto_upload_preference_starts_uploads_held(make_app):
+    app = make_app(open_with__auto_upload=False)
+    assert app.edits.paused
+    app._sync_pause_button()
+    assert app.pause_btn.get_visible() and app.pause_btn.get_active()
+    app.settings.set("open_with.auto_upload", True)
+    assert not app.edits.paused and not app.pause_btn.get_active()
