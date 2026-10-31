@@ -13,12 +13,28 @@ from mpexplorer.transport import TransportError
 ROM = fw.BootDrive("/dev/fake", "ESP32-S3 ROM bootloader", "ESP32-S3", "esp32s3", "esptool")
 
 
+TILDAGON = fw.EspChip("ESP32-S3-PICO-1", 8, 2)
+BREAKOUT = fw.EspChip("ESP32-S3", 16, 8)
+CHECKED = fw.BootDrive("/dev/fake", "m", "ESP32-S3", "esp32s3", "esptool", TILDAGON)
+# as printed by esptool 5.6.0 for a real Tildagon
+FLASH_ID = """esptool v5.6.0
+Connected to ESP32-S3 on /dev/ttyACM0:
+Chip type:          ESP32-S3-PICO-1 (LGA56) (revision v0.2)
+Features:           Wi-Fi, BT 5 (LE), Dual Core + LP Core, 240MHz, Embedded Flash 8MB (GD), Embedded PSRAM 2MB (AP_3v3)
+Crystal frequency:  40MHz
+Manufacturer: c8
+Device: 4017
+Detected flash size: 8MB
+Staying in bootloader.
+"""
+
+
 @pytest.fixture(autouse=True)
 def private_cache(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
 
 
-def esp_image(chip=9, flash=fw.ESP_FLASH_8MB, table=True, app=True, size=0x10100, magic=0xE9):
+def esp_image(chip=9, flash=3, table=True, app=True, size=0x10100, magic=0xE9):
     data = bytearray(size)
     if size >= 16:
         data[0], data[3] = magic, flash << 4 | 0xF
@@ -45,7 +61,7 @@ def test_check_accepts_a_merged_image(tmp_path):
     (dict(magic=0), "not an ESP firmware"),
     (dict(size=4), "not an ESP firmware"),
     (dict(chip=0), "not for the ESP32-S3"),
-    (dict(flash=2), "not for 8 MB"),
+    (dict(flash=4), "is for 16 MB of flash; this chip has 8 MB"),
     (dict(table=False), "not a complete image"),       # an app-only micropython.bin
     (dict(app=False), "not a complete image"),
     (dict(size=0x8000), "not a complete image"),
@@ -169,6 +185,7 @@ def test_detect_rom_lists_only_the_rom_usb_id(monkeypatch):
 
 def steps(monkeypatch, ports=None, wait_error=None):
     order = []
+    monkeypatch.setattr(fw, "read_esp_chip", lambda port: TILDAGON)
     monkeypatch.setattr(fw, "tildagon_ports", lambda: order.append("ports") or set())
     monkeypatch.setattr(fw, "flash_esptool", lambda *a: order.append("flash"))
 
@@ -184,13 +201,28 @@ def steps(monkeypatch, ports=None, wait_error=None):
 
 def test_install_and_verify_for_a_badge(monkeypatch):
     order = steps(monkeypatch)
-    assert fw.install_and_verify("img", ROM).port == "/dev/new" and order == ["ports", "flash", "wait"]
+    assert fw.install_and_verify("img", CHECKED).port == "/dev/new" and order == ["ports", "flash", "wait"]
 
 
-def test_a_badge_that_does_not_come_back_says_to_replug_it(monkeypatch):
+def test_a_badge_that_does_not_come_back_says_to_replug_it_or_what_else_it_may_be(monkeypatch):
     steps(monkeypatch, wait_error=True)
-    with pytest.raises(fw.FirmwareError, match="Unplug it"):
-        fw.install_and_verify("img", ROM)
+    with pytest.raises(fw.FirmwareError, match="unplug it .*another board with the same chip"):
+        fw.install_and_verify("img", CHECKED)
+
+
+def test_a_board_swapped_after_the_check_is_not_written(monkeypatch):
+    order = steps(monkeypatch)
+    monkeypatch.setattr(fw, "read_esp_chip", lambda port: BREAKOUT)
+    with pytest.raises(fw.FirmwareError, match="has changed. Nothing was written"):
+        fw.install_and_verify("img", CHECKED)
+    assert order == []
+
+
+def test_another_board_is_written_but_not_waited_for_as_a_tildagon(monkeypatch):
+    order = steps(monkeypatch)
+    monkeypatch.setattr(fw, "read_esp_chip", lambda port: BREAKOUT)
+    drive = fw.BootDrive("/dev/fake", "m", "ESP32-S3", "esp32s3", "esptool", BREAKOUT)
+    assert fw.install_and_verify("img", drive).port == "" and order == ["ports", "flash"]
 
 
 class Repl:
@@ -211,3 +243,49 @@ def test_identify_errors_are_still_transport_safe():
         raise TransportError("silent")
     with pytest.raises(fw.FirmwareError, match="did not answer"):
         fw.identify("/dev/x", "esp32s3", timeout=0, open_board=open_board)
+
+
+def test_reads_a_real_tildagons_output_as_a_tildagon():
+    chip = fw.parse_esp_chip(FLASH_ID)
+    assert chip == TILDAGON and chip.looks_like_tildagon() and chip.text == "ESP32-S3-PICO-1, 8 MB flash, 2 MB PSRAM"
+
+
+@pytest.mark.parametrize("chip", [
+    fw.EspChip("ESP32-S3", 8, 2),                   # a module, not the badge's PICO-1
+    fw.EspChip("ESP32-S3-PICO-1", 4, 2),
+    fw.EspChip("ESP32-S3-PICO-1", 8, None),
+    fw.EspChip("ESP32-S3-PICO-1", None, 2),
+])
+def test_other_chips_do_not_look_like_a_tildagon(chip):
+    assert not chip.looks_like_tildagon()
+
+
+def test_a_breakout_with_no_psram_parses_and_says_so():
+    chip = fw.parse_esp_chip("Chip type: ESP32-S3 (QFN56)\nFeatures: Wi-Fi\nDetected flash size: 16MB\n")
+    assert chip == fw.EspChip("ESP32-S3", 16, None) and "no PSRAM" in chip.text
+
+
+def test_output_that_does_not_name_the_chip_is_an_error():
+    with pytest.raises(fw.FirmwareError, match="did not say"):
+        fw.parse_esp_chip("Connecting...\n")
+
+
+def test_read_chip_stays_in_the_rom_and_writes_nothing(tmp_path):
+    log = tmp_path / "args.txt"
+    tool = fake_tool(tmp_path, "open(%r, 'w').write(' '.join(args))\nprint(%r)\n" % (str(log), FLASH_ID))
+    assert fw.read_esp_chip("/dev/fake", tool=tool) == TILDAGON
+    args = log.read_text()
+    assert "--before no-reset --after no-reset --no-stub flash-id" in args and "write" not in args
+
+
+def test_read_chip_failing_asks_if_it_is_in_its_bootloader(tmp_path):
+    tool = fake_tool(tmp_path, "print('fatal: no reply')\nsys.exit(2)\n")
+    with pytest.raises(fw.FirmwareError, match="in its bootloader"):
+        fw.read_esp_chip("/dev/fake", tool=tool)
+
+
+def test_an_image_is_checked_against_the_flash_this_chip_really_has(tmp_path):
+    path = write(tmp_path, esp_image(flash=3))
+    with pytest.raises(fw.FirmwareError, match="is for 8 MB of flash; this chip has 4 MB"):
+        fw.check_esp_image(path, 4 * 1024 * 1024)
+    assert fw.check_esp_image(write(tmp_path, esp_image(flash=2), "small.bin")).cpu == "Xtensa"

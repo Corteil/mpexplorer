@@ -340,10 +340,54 @@ def test_a_badge_in_its_rom_is_offered_the_tildagon_and_needs_esptool(setup, mon
     def missing():
         raise fw.FirmwareError(fw.INSTALL_ESPTOOL)
     monkeypatch.setattr(fw, "find_esptool", missing)
+    monkeypatch.setattr(fw, "read_esp_chip", lambda port: fw.EspChip("ESP32-S3-PICO-1", 8, 2))
     d = make()
     assert d.board_box.get_active_text() == "ESP32-S3 at /dev/ttyACM0"
-    site_ready(d)
     assert "pipx install esptool" in d.note.get_text() and not d.install_btn.get_sensitive()
     monkeypatch.setattr(fw, "find_esptool", lambda: ["esptool"])
     d._drive_changed()
+    site_ready(d)
     assert "T-merged.bin" in d.note.get_text() and d.install_btn.get_sensitive()
+
+
+def rom_with(monkeypatch, drives, chip):
+    drives[0] = fw.BootDrive("/dev/ttyACM0", "ESP32-S3 ROM bootloader", "ESP32-S3", "esp32s3", "esptool")
+    monkeypatch.setattr(FakeCatalog, "BOARDS", [Board("TILDAGON", "Tildagon", "EMF Camp")])
+    monkeypatch.setattr(fw, "find_esptool", lambda: ["esptool"])
+    monkeypatch.setattr(fw, "read_esp_chip", chip)
+
+
+def test_a_breakout_is_not_offered_the_tildagon_and_says_what_it_found(setup, monkeypatch):
+    make, drives, *_ = setup
+    rom_with(monkeypatch, drives, lambda port: fw.EspChip("ESP32-S3", 16, 8))
+    d = make()
+    wait_until(lambda: "does not match a Tildagon" in d.note.get_text())
+    assert "ESP32-S3, 16 MB flash, 8 MB PSRAM" in d.note.get_text()
+    pump(100)
+    assert not d.boards and not d.install_btn.get_sensitive()
+
+
+def test_a_breakout_can_still_use_a_file_that_fits(setup, monkeypatch):
+    make, drives, _, _, tmp = setup
+    rom_with(monkeypatch, drives, lambda port: fw.EspChip("ESP32-S3", 16, 8))
+    image = bytearray(0x10100)
+    image[0], image[3], image[12], image[0x8000], image[0x8001], image[0x10000] = 0xE9, 0x4F, 9, 0xAA, 0x50, 0xE9
+    path = tmp / "generic.bin"
+    path.write_bytes(image)
+    d = make()
+    wait_until(lambda: d.drive().esp_chip)
+    monkeypatch.setattr(d.chooser, "get_filename", lambda: str(path), raising=False)
+    d.use_file.set_active(True)
+    assert d.install_btn.get_sensitive()            # 16 MB image, 16 MB flash
+
+
+def test_nothing_is_offered_until_the_chip_has_been_read(setup, monkeypatch):
+    make, drives, *_ = setup
+
+    def fails(port):
+        raise fw.FirmwareError("Cannot read the chip on /dev/ttyACM0. Is it in its bootloader?")
+    rom_with(monkeypatch, drives, fails)
+    d = make()
+    assert not d.install_btn.get_sensitive()
+    wait_until(lambda: "Cannot read the chip" in d.note.get_text())
+    assert not d.boards and not d.install_btn.get_sensitive()

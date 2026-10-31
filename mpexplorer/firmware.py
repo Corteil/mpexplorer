@@ -35,8 +35,9 @@ MACHINE_NAMES = {"esp32s3": "ESP32S3"}               # how os.uname().machine sp
 RP2_MICROPYTHON_USB = (0x2E8A, 0x0005)
 ESP32S3_ROM_USB = (0x303A, 0x1001)                   # "USB JTAG/serial debug unit", seen on a real Tildagon
 TILDAGON_USB = (0x16D0, 0x120E)
-ESP_IMAGE_MAGIC, ESP32S3_CHIP_ID, ESP_FLASH_8MB = 0xE9, 9, 3
+ESP_IMAGE_MAGIC, ESP32S3_CHIP_ID = 0xE9, 9
 ESP_PARTITION_TABLE, ESP_APP_OFFSET, ESP_FLASH_BYTES = 0x8000, 0x10000, 8 * 1024 * 1024
+TILDAGON_CHIP = ("ESP32-S3-PICO-1", 8, 2)            # type, MB of flash, MB of PSRAM, as read from a real Tildagon
 ESPTOOL_MAJOR = 5
 ESPTOOL_LOG = "esptool.log"                          # every run's full output, for when the short message is not enough
 INSTALL_ESPTOOL = "Installing on this board needs esptool %d. Install it with: pipx install esptool" % ESPTOOL_MAJOR
@@ -47,12 +48,29 @@ class FirmwareError(BackendError):
 
 
 @dataclass
+class EspChip:
+    type: str
+    flash_mb: int | None
+    psram_mb: int | None
+
+    def looks_like_tildagon(self):
+        """No badge id can be read: a breakout with the same chip and memory looks the same."""
+        return (self.type, self.flash_mb, self.psram_mb) == TILDAGON_CHIP
+
+    @property
+    def text(self):
+        return "%s, %s flash, %s PSRAM" % (self.type, "%d MB" % self.flash_mb if self.flash_mb else "unknown",
+                                           "%d MB" % self.psram_mb if self.psram_mb else "no")
+
+
+@dataclass
 class BootDrive:
     path: str
     model: str
     board_id: str
     chip: str | None            # None: a UF2 bootloader this app has no rule for
     method: str = "uf2"         # uf2: path is a drive; esptool: path is a serial port
+    esp_chip: EspChip | None = None     # read from the chip before anything is offered for it
 
 
 @dataclass
@@ -178,13 +196,13 @@ def check_uf2(path, chip):
     return Uf2Info(found, families[found], total, payload)
 
 
-def check_esp_image(path):
-    """Refuse anything but a complete 8 MB image for an ESP32-S3 badge. An app-only micropython.bin is what the badges'
-    GitHub releases hold: it starts like an image, but written at 0 on a blank chip it would not boot."""
+def check_esp_image(path, flash_bytes=ESP_FLASH_BYTES):
+    """Refuse anything but a complete ESP32-S3 image that fits this flash. An app-only micropython.bin is what the
+    badges' GitHub releases hold: it starts like an image, but written at 0 on a blank chip it would not boot."""
     name = os.path.basename(path)
     try:
         size = os.path.getsize(path)
-        if size > ESP_FLASH_BYTES:
+        if size > flash_bytes:
             raise FirmwareError("%s is larger than the flash (%d bytes)." % (name, size))
         with open(path, "rb") as f:
             data = f.read(ESP_APP_OFFSET + 1)
@@ -194,8 +212,10 @@ def check_esp_image(path):
         raise FirmwareError("%s is not an ESP firmware image." % name)
     if struct.unpack_from("<H", data, 12)[0] != ESP32S3_CHIP_ID:
         raise FirmwareError("%s is not for the ESP32-S3." % name)
-    if data[3] >> 4 != ESP_FLASH_8MB:
-        raise FirmwareError("%s is not for 8 MB of flash." % name)
+    wanted = (1 << (data[3] >> 4)) * 1024 * 1024        # the header's size field: 0 is 1 MB, 3 is 8 MB
+    if wanted > flash_bytes:
+        raise FirmwareError("%s is for %d MB of flash; this chip has %d MB."
+                            % (name, wanted // (1024 * 1024), flash_bytes // (1024 * 1024)))
     if len(data) <= ESP_APP_OFFSET or data[ESP_PARTITION_TABLE:ESP_PARTITION_TABLE + 2] != b"\xaa\x50" \
             or data[ESP_APP_OFFSET] != ESP_IMAGE_MAGIC:
         raise FirmwareError("%s is not a complete image: it needs the bootloader, partition table and app "
@@ -203,8 +223,34 @@ def check_esp_image(path):
     return EspInfo("Xtensa", size)
 
 
-def check_image(path, chip):
-    return check_esp_image(path) if chip == "esp32s3" else check_uf2(path, chip)
+def check_image(path, chip, flash_bytes=ESP_FLASH_BYTES):
+    return check_esp_image(path, flash_bytes) if chip == "esp32s3" else check_uf2(path, chip)
+
+
+def parse_esp_chip(text):
+    """What esptool's flash-id prints; FirmwareError if it does not say what the chip is."""
+    text = re.sub(r"\x1b\[[0-9;]*[A-Za-z]", "", text)
+    kind = re.search(r"Chip type:\s*(\S+)", text)
+    if not kind:
+        raise FirmwareError("esptool did not say what this chip is.\n%s" % text[-300:])
+    flash = re.search(r"Detected flash size:\s*(\d+)MB", text)
+    psram = re.search(r"Embedded PSRAM (\d+)MB", text)
+    return EspChip(kind[1], int(flash[1]) if flash else None, int(psram[1]) if psram else None)
+
+
+def read_esp_chip(port, tool=None):
+    """Ask the ROM what this chip is, without writing or leaving the ROM."""
+    argv = (tool or find_esptool()) + ["--chip", "esp32s3", "--port", port, "--before", "no-reset", "--after",
+                                       "no-reset", "--no-stub", "flash-id"]
+    try:
+        run = subprocess.run(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace",
+                             timeout=30)
+    except (OSError, subprocess.SubprocessError) as e:
+        raise FirmwareError("Cannot read the chip on %s: %s" % (port, e))
+    if run.returncode != 0:
+        raise FirmwareError("Cannot read the chip on %s. Is it in its bootloader?\n%s"
+                            % (port, _esptool_tail(run.stdout.splitlines())))
+    return parse_esp_chip(run.stdout)
 
 
 def _esptool_version(argv):
@@ -244,7 +290,8 @@ def _esptool_tail(lines):
 def flash_esptool(image, drive, on_progress=None, cancelled=None, tool=None, stall=90.0):
     """Write a merged image at offset 0. esptool checks what it wrote. A cancel or failure can leave the flash part
     written; a board in its ROM bootloader stays there, ready for another try."""
-    info = check_esp_image(image)
+    flash_mb = drive.esp_chip.flash_mb if drive.esp_chip else None
+    info = check_esp_image(image, flash_mb * 1024 * 1024 if flash_mb else ESP_FLASH_BYTES)
     if drive.path not in _ports_with(ESP32S3_ROM_USB) and not tool:
         raise FirmwareError("The board at %s has gone. Scan again." % drive.path)
     # no-reset before connecting: the chip is already in its ROM. Watchdog reset after: on a real Tildagon esptool's
@@ -413,15 +460,21 @@ def install_and_verify(image, drive, on_progress=None, on_stage=None, cancelled=
     """The whole install: copy, wait for the restart, then talk to the new firmware. Returns an Installed."""
     stage = on_stage or (lambda text: None)
     if drive.method == "esptool":
+        stage("Checking the chip")
+        if read_esp_chip(drive.path) != drive.esp_chip:     # another board was plugged in after this one was checked
+            raise FirmwareError("The board on %s has changed. Nothing was written. Scan again." % drive.path)
         before = tildagon_ports()
         stage("Writing the firmware")
         flash_esptool(image, drive, on_progress, cancelled)
+        if not drive.esp_chip.looks_like_tildagon():        # no way to tell what other boards appear as when they start
+            return Installed("", "", "")
         stage("Waiting for the badge to start")
         try:
             port = wait_for_new_port(before, timeout=60.0, ports=tildagon_ports)
         except FirmwareError:
-            raise FirmwareError("The firmware was written and checked, but the badge did not come back. "
-                                "Unplug it and plug it in again; it should then start normally.")
+            raise FirmwareError("The firmware was written and checked, but no Tildagon came back. If this is a "
+                                "Tildagon, unplug it and plug it in again. If it is another board with the same chip, "
+                                "it now has Tildagon firmware: put it in its bootloader and install firmware for it.")
         stage("Checking the board on %s" % port)
         return identify(port, drive.chip, timeout=30.0)
     before = rp2_ports()
