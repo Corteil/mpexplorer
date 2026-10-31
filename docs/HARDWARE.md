@@ -47,7 +47,7 @@ Board flash write 102 KB/s vs best upload 10 KB/s: the link is the bottleneck, a
 Decision: agent mode is worth building (a threshold was exceeded).
 
 Notes: the link is the bottleneck (flash writes at about 100 KB/s, uploads arrive at 7-11 KB/s). On this board raw-paste
-uploaded slower than plain (6.9 vs 10.8 KB/s); downloads were equal. Not measured: 2022 badge.
+uploaded slower than plain (6.9 vs 10.8 KB/s); downloads were equal. Measured later on the 2022 badge, see below.
 
 ### Pico, MicroPython 1.28.0, Raspberry Pi 5 (2026-10-30)
 Raspberry Pi Pico (RP2040), `v1.28.0 on 2026-04-06`, about 1400 KB free flash. The 1024 KB step is skipped (not enough room).
@@ -128,11 +128,43 @@ upload 256 KB: 4.4 s in raw-paste mode -> ok; download 256 KB: 2.5 s -> ok; list
 Board flash write 340 KB/s vs best upload 58 KB/s: the link is the bottleneck, an agent could help (uploads only).
 Decision: agent mode is NOT needed for these numbers.
 
+### 2022 badge (TiDAL), MicroPython 1.18.0, Raspberry Pi 5 (2026-10-31)
+`machine='TiDAL with ESP32S3'`, `esp32 1.18.0`, build `afceb56-dirty on 2026-07-25`, USB `16d0:1114`, about 3.9 MB of flash free.
+Run with `python3 tools/bench.py --port /dev/ttyACM1 --rts --no-reset`. **Raw-paste only**: the run stopped at the 200-file listing
+(see below), so the plain-mode pass and the listing times were not measured.
+
+| Test | Time | Speed |
+|---|---|---|
+| flash write (on board) | 1.04 s | 61.8 KB/s |
+| flash read (on board) | 0.12 s | 524.6 KB/s |
+| upload 64 / 256 / 1024 KB | 10.6 / 42.0 / 167.1 s | 6.0 / 6.1 / 6.1 KB/s |
+| download 64 / 256 / 1024 KB | 7.2 / 26.4 / 103.1 s | 8.9 / 9.7 / 9.9 KB/s |
+| copy on board 64 / 256 / 1024 KB | 1.6 / 5.4 / 20.2 s | 39.2 / 47.9 / 50.7 KB/s |
+| SHA-256 on board 64 / 256 / 1024 KB | 0.55 / 0.90 / 2.29 s | 116.6 / 285.7 / 447.3 KB/s |
+
+By the decision rule in `docs/AGENT_PLAN.md` (a 256 KB upload over 10 s) this is slow, like the Tildagon: the limit is the badge's USB
+link, not flash.
+
+What is different about this badge (all seen by hand or in the run above, 2026-10-31):
+- **It stays silent unless RTS is asserted as well as DTR.** With RTS low (what the Tildagon needs) it never answers. mpexplorer now
+  tries RTS low first and, if the board says nothing, RTS high, and remembers the result per board (`boards.rts`; `RawREPL.open_board`).
+  The fallback was checked against a fake board; against this badge only the manual probe (DTR + RTS high) was seen working, not the
+  app's connect.
+- **A soft reset (Ctrl-D) makes it drop off USB** and it does not come back until it is unplugged and re-plugged (seen three times:
+  after a probe, after a clean-up, and during the benchmark's first run). So do not use "Soft reset" or "Restart the board when
+  disconnecting" with it, and run the benchmark with `--no-reset`. Cause not known.
+- **Connecting does not freeze its screen:** the owner saw the badge's own GUI keep working while the benchmark ran (the Tildagon's
+  app freezes in raw REPL).
+- **The 200-file listing test hung.** The benchmark waited with no traffic for over a minute inside `listdir`; after Ctrl-C the reply
+  turned up complete in the next read, followed by a late raw-paste answer (`R\x01\x80\x00\x01`), so the stream had got out of step
+  with the badge. Not explained; the app's own folder listing on this badge has not been tried with a large folder.
+- The benchmark's scratch folder `/_mpx_bench` was left behind and removed by hand afterwards; the badge's files are as they were.
+
 ### Upload mode on the Tildagon (2026-10-29)
 The board's raw-paste window is 128 bytes, so raw-paste stops to wait for the device every 128 bytes (about 8.7 ms per
 window over USB, about 15 KB/s of code text). Plain sending (256-byte blocks, 5 ms apart) moves about 35 KB/s. Uploading
 128 KB, three runs each, interleaved: raw-paste only 16.0 / 16.6 / 17.5 s (about 7.7 KB/s), plain 9.8 / 10.4 / 11.1 s (about
 12.3 KB/s), adaptive 10.8 s. `RawREPL` therefore times its first big sends in each mode and keeps plain only when it is
 at least 1.25x faster (`PLAIN_GAIN`); a failed plain send puts the connection back on raw-paste. Data checked with an
-on-board SHA-256. Not measured: 2022 badge. Downloads are limited by the board's output speed (about 11 KB/s of text,
+on-board SHA-256. Measured later on the 2022 badge, see below. Downloads are limited by the board's output speed (about 11 KB/s of text,
 independent of mode), not by this.

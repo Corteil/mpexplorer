@@ -46,7 +46,7 @@ steps above (sync to a new board folder, resync, edit `notes.txt` and delete `da
 owner then confirmed all six steps of the hand checklist were checked and passed: the transfer popup and "Ready" status (upload of
 `data/`), the sync dialog (target confirm, tick boxes, in-dialog progress), a resync that found nothing to do, a changed file with
 mirror-delete off, mirror-delete on with its confirmation (an unticked delete survives), and the delete item count on the board. Not
-itemised by the owner beyond "all steps passed". Not done: the 2022 badge.
+itemised by the owner beyond "all steps passed". 2022 badge: see docs/HARDWARE.md.
 
 ## Status after the 2026-10-29 Pi session (read this first)
 Done from a Claude Code session on the Pi 5 with the Tildagon (MicroPython 1.28.0) on `/dev/ttyACM0`. Everything below is
