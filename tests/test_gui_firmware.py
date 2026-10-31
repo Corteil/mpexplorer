@@ -703,7 +703,7 @@ def test_the_bootloader_button_moves_the_tool_to_the_new_drive(setup, monkeypatc
     d = make(cls=dialog.EraseDialog)
     wait_until(lambda: d.boot_btn.get_sensitive())
 
-    def fake(port, find=None):
+    def fake(port, find=None, normal_repl=False):
         drives[0] = drive                           # the port goes, and the drive arrives
         return drive
     monkeypatch.setattr(fw, "enter_bootloader", fake)
@@ -718,7 +718,7 @@ def test_a_failed_bootloader_request_is_reported_and_the_board_stays_selected(se
     make, drives, errors, *_ = setup
     drives[0] = RUNNING
 
-    def fails(port, find=None):
+    def fails(port, find=None, normal_repl=False):
         raise fw.FirmwareError("The board did not appear as a drive.")
     monkeypatch.setattr(fw, "enter_bootloader", fails)
     d = make(cls=dialog.BackupDialog)
@@ -780,13 +780,13 @@ def test_a_running_badge_is_sent_to_its_rom_and_the_tool_moves_to_it(setup, monk
     monkeypatch.setattr(fw, "read_esp_chip", lambda port: fw.EspChip("ESP32-S3-PICO-1", 8, 2))
     seen = {}
 
-    def fake(port, find=None):
-        seen.update(port=port, find=find)
+    def fake(port, find=None, normal_repl=False):
+        seen.update(port=port, find=find, normal_repl=normal_repl)
         drives[0] = rom
         return rom
     monkeypatch.setattr(fw, "enter_bootloader", fake)
     d = make(cls=dialog.EraseDialog)
     d.put_in_bootloader()
     wait_until(lambda: not d.running and d.drive() and d.drive().esp_chip)
-    assert seen == {"port": "/dev/ttyACM0", "find": fw.detect_rom} and not errors
+    assert seen == {"port": "/dev/ttyACM0", "find": fw.detect_rom, "normal_repl": True} and not errors
     assert d.board_box.get_active_text() == "Tildagon (2024, 2026) at /dev/ttyACM1"

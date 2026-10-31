@@ -258,12 +258,13 @@ class DeviceDialog(Gtk.Dialog):
 
     def put_in_bootloader(self):
         drive = self.drive()
-        find = fw.detect_rom if drive.method == "badge" else None
+        badge = drive.method == "badge"
 
         def done(found):
             self.prefer = found.path
             return "Now in its bootloader, at %s." % found.path
-        self._start(lambda: fw.enter_bootloader(drive.path, find=find), done)
+        self._start(lambda: fw.enter_bootloader(drive.path, find=fw.detect_rom if badge else None, normal_repl=badge),
+                    done)
 
     # -- running a job -----------------------------------------------------
     def _start(self, work, done):
