@@ -99,6 +99,42 @@ def remember_handler(settings, name, handler, custom=None):
     return key
 
 
+def normalize_extension(text):
+    """'PY', '.Py' or ' .py ' -> '.py'; None for empty text or anything with a slash, space or a lone dot."""
+    text = text.strip().lower()
+    if text.startswith("."):
+        text = text[1:]
+    if not text or any(c in text for c in "/\\ \0."):
+        return None
+    return "." + text
+
+
+def forget_handler(settings, key):
+    """Remove the saved default for an extension (False if there was none). Custom commands are kept."""
+    table = settings.get("open_with.by_extension")
+    if key not in table:
+        return False
+    del table[key]
+    settings.set("open_with.by_extension", table)
+    return True
+
+
+def describe_handler(settings, handler, app_name=None):
+    """A saved handler as words for a list: 'Built-in editor', 'Geany', 'Custom: geany {file}'.
+
+    `app_name(desktop id)` gives an installed app's display name (None or a miss shows the id)."""
+    names = {"editor": "Built-in editor", "run": "Run on the board", "hex": "Hex viewer", "image": "Image viewer"}
+    if handler in names:
+        return names[handler]
+    kind, _, value = handler.partition(":")
+    if kind == "app":
+        return (app_name and app_name(value)) or value
+    if kind == "custom":
+        template = settings.get("open_with.custom").get(value)
+        return "Custom: %s" % template if template else "%s (command missing)" % value
+    return handler
+
+
 # -- the private cache copy -----------------------------------------------
 def cache_path(root, board, devpath):
     """<root>/<board>/<device path>, for a device file. ValueError if the path could climb out of the cache."""
