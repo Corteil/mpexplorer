@@ -19,6 +19,7 @@ if not os.environ.get("DISPLAY") and not os.environ.get("WAYLAND_DISPLAY"):
 try:
     from mpexplorer.gtkui import common
     from mpexplorer.gtkui.app import App
+    from mpexplorer.gtkui.common import GdkPixbuf
     from mpexplorer.gtkui.prefs import PreferencesDialog
 except (ImportError, ValueError) as e:                       # GTK 3 typelib missing
     unavailable("GTK 3 not available: %s" % e)
@@ -975,6 +976,22 @@ def test_host_file_opens_directly_in_the_external_editor(make_app, tmp_path):
     app.edits.launch = lambda argv: launched.append(argv)
     app.open_external(app.left, str(tmp_path / "a b.py"), "geany {file}")
     assert launched == [["geany", str(tmp_path / "a b.py")]]
+
+
+def test_hex_and_image_viewers_open_host_files(make_app, tmp_path):
+    from mpexplorer.gtkui.viewer import Viewer
+    (tmp_path / "blob.bin").write_bytes(bytes(range(40)))
+    pix = GdkPixbuf.Pixbuf.new(GdkPixbuf.Colorspace.RGB, False, 8, 3, 2)
+    pix.savev(str(tmp_path / "p.png"), "png", [], [])
+    app = make_app()
+    app.open_with(app.left, str(tmp_path / "blob.bin"), 40, "hex")
+    pump(300)
+    hexview = [w for w in app.windows if isinstance(w, Viewer)][-1]
+    text = hexview.get_children()[0].get_children()[1].get_child().get_buffer()
+    assert text.get_text(text.get_start_iter(), text.get_end_iter(), True).startswith("00000000  00 01 02")
+    app.open_with(app.left, str(tmp_path / "p.png"), (tmp_path / "p.png").stat().st_size, "image")
+    pump(300)
+    assert "3x2" in [w for w in app.windows if isinstance(w, Viewer)][-1].info.get_text()
 
 
 def test_open_with_dispatches_on_the_saved_handler(make_app, tmp_path, monkeypatch):
