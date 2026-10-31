@@ -491,13 +491,8 @@ class FirmwareDialog(DeviceDialog):
     def update_state(self, drive):
         """Install stays off until a board and a suitable image are both known."""
         self.info = None
-        if drive and drive.method == "badge":
-            self.note.set_text(fw.running_badge_hint(drive))
-            self.install_btn.set_sensitive(False)
-            self.erase.set_sensitive(False)
-            return
-        if drive and drive.method == "repl":
-            self.note.set_text("To install firmware on this board, hold BOOTSEL while plugging it in.")
+        if drive and drive.method in ("repl", "badge"):
+            self.note.set_text(fw.bootloader_hint(drive))
             self.install_btn.set_sensitive(False)
             self.erase.set_sensitive(False)
             return
@@ -664,11 +659,11 @@ class BackupDialog(DeviceDialog):
         if not drive:
             self.note.set_text("")
         elif drive.method == "badge":
-            self.note.set_text(fw.running_badge_hint(drive))
+            self.note.set_text(fw.bootloader_hint(drive))
         elif problem:
             self.note.set_text(problem)
         elif drive.method == "repl":
-            self.note.set_text("Back up, or hold BOOTSEL while plugging it in to restore.")
+            self.note.set_text("This board can be backed up as it is. To restore: %s" % fw.bootloader_hint(drive))
         elif drive.method == "uf2":
             self.note.set_text("In BOOTSEL this board can be restored. Start it normally to back it up.")
         else:
@@ -762,10 +757,8 @@ class EraseDialog(DeviceDialog):
         self.erase_btn.set_sensitive(usable)
         if not drive:
             self.note.set_text("")
-        elif drive.method == "badge":
-            self.note.set_text(fw.running_badge_hint(drive))
-        elif drive.method == "repl":
-            self.note.set_text("To erase this board, hold BOOTSEL while plugging it in.")
+        elif drive.method in ("repl", "badge"):
+            self.note.set_text(fw.bootloader_hint(drive))
         elif problem:
             self.note.set_text(problem)
         elif not drive.chip:
