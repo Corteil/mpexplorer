@@ -1,6 +1,6 @@
 # Install firmware plan
 
-Status (2026-10-31): phase 1 built on branch `firmware-install` (`mpexplorer/firmware.py`, `tests/test_firmware.py`): tested against fake drives; `check_uf2` accepted the real v1.29.0 Pico, Pico 2 and Pico 2 RISC-V UF2s, `detect` found a real RP2040 Pico. Phase 2 built on the same branch: Tools > Install firmware... (`gtkui/firmware.py`, `tests/test_gui_firmware.py`), local UF2 files only; tested under Xvfb with fake drives and a stubbed install. It has no erase box and does not yet record installs in the settings. **Nothing has been written to a real board yet.** Goal: from the app, put MicroPython on a board that has none, or has no working
+Status (2026-10-31): phase 1 built on branch `firmware-install` (`mpexplorer/firmware.py`, `tests/test_firmware.py`): tested against fake drives; `check_uf2` accepted the real v1.29.0 Pico, Pico 2 and Pico 2 RISC-V UF2s, `detect` found a real RP2040 Pico. Phase 2 built on the same branch: Tools > Install firmware... (`gtkui/firmware.py`, `tests/test_gui_firmware.py`), local UF2 files only; tested under Xvfb with fake drives and a stubbed install. It has no erase box and does not yet record installs in the settings. The owner installed v1.29.0 on an RP2040 Pico through the dialog on 2026-10-31 and reported that it worked (whether its files stayed, and Connect, not itemised). Not yet tried on a Pico 2. Goal: from the app, put MicroPython on a board that has none, or has no working
 firmware, then connect to it.
 
 ## Scope
