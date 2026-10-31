@@ -13,6 +13,11 @@ from mpexplorer.transport import TransportError
 ROM = fw.BootDrive("/dev/fake", "ESP32-S3 ROM bootloader", "ESP32-S3", "esp32s3", "esptool")
 
 
+@pytest.fixture(autouse=True)
+def private_cache(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+
+
 def esp_image(chip=9, flash=fw.ESP_FLASH_8MB, table=True, app=True, size=0x10100, magic=0xE9):
     data = bytearray(size)
     if size >= 16:
@@ -77,11 +82,20 @@ def test_flash_passes_the_port_and_offset_and_reports_progress(tmp_path):
     assert seen == [0.105, 0.5, 1.0]
     args = log.read_text()
     assert "--chip esp32s3 --port /dev/fake" in args and args.endswith("write-flash 0 " + image)
+    assert "--before no-reset" in args                  # a reset would drop a badge out of its ROM
+
+
+def test_every_run_leaves_its_full_output_in_a_log(tmp_path):
+    tool = fake_tool(tmp_path, "print('line one')\nprint('fatal: line two')\nsys.exit(2)\n")
+    with pytest.raises(fw.FirmwareError, match="Full output: .*esptool.log"):
+        fw.flash_esptool(write(tmp_path, esp_image()), ROM, tool=tool)
+    text = open(fw.esptool_log_path()).read()
+    assert "write-flash" in text and "line one" in text and "fatal: line two" in text
 
 
 def test_flash_reports_esptool_failing_with_its_message_and_no_colour_codes(tmp_path):
     tool = fake_tool(tmp_path, "print('\\x1b[31mA fatal error occurred: no serial data\\x1b[0m')\nsys.exit(2)\n")
-    with pytest.raises(fw.FirmwareError, match=r"esptool failed\.\nA fatal error occurred: no serial data$"):
+    with pytest.raises(fw.FirmwareError, match=r"esptool failed\.\nA fatal error occurred: no serial data\n"):
         fw.flash_esptool(write(tmp_path, esp_image()), ROM, tool=tool)
 
 
