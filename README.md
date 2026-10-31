@@ -38,6 +38,8 @@ mpexplorer
 ```
 Plug the board in, press **Scan**, pick the port, **Connect**.
 
+Tools > Install firmware needs `pipx install esptool` for a Tildagon; a Pico or Pico 2 needs nothing extra.
+
 The interface is GTK 3 through PyGObject (`python3-gi`, already on Raspberry Pi OS); `--system-site-packages` lets
 pipx see it. `gir1.2-vte-2.91` is only needed for the console's Terminal mode.
 

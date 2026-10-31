@@ -23,6 +23,7 @@ class FirmwareDialog(Gtk.Dialog):
         self.catalog = Catalog()
         self.boards, self.builds, self.shown_builds, self.list_chip, self.list_error = [], [], [], None, ""
         self.load_id, self.closed, self.outcome, self.tool_problem = 0, False, "", ""
+        self.chip_reading, self.chip_error, self.chip_retry = None, "", 0
         self.cancel_event = threading.Event()
         self.set_default_size(560, -1)
         box = self.get_content_area()
@@ -129,6 +130,11 @@ class FirmwareDialog(Gtk.Dialog):
     def _tick(self):
         if not self.running:
             self.scan()
+            if self.chip_error:                 # it may simply have not been in its bootloader yet
+                self.chip_retry += 1
+                if self.chip_retry >= 5:
+                    self.chip_retry, self.chip_error = 0, ""
+                    self._drive_changed()
         return GLib.SOURCE_CONTINUE
 
     def drive(self):
@@ -137,17 +143,39 @@ class FirmwareDialog(Gtk.Dialog):
 
     def _drive_changed(self):
         drive = self.drive()
-        chip = drive.chip if drive else None
-        if chip != self.list_chip:
-            self.list_chip = chip
-            self._load_boards(chip)
         self.tool_problem = ""
         if drive and drive.method == "esptool":
             try:
                 fw.find_esptool()
+                if not drive.esp_chip and not self.chip_error and self.chip_reading != drive.path:
+                    self._read_chip(drive)
             except fw.FirmwareError as e:
                 self.tool_problem = str(e)
+        chip = self._list_for(drive)
+        if chip != self.list_chip:
+            self.list_chip = chip
+            self._load_boards(chip)
         self._check()
+
+    def _list_for(self, drive):
+        """The chip to list boards for. On esptool, only once the chip has been read and matches a board we know."""
+        if not drive:
+            return None
+        if drive.method != "esptool":
+            return drive.chip
+        return drive.chip if drive.esp_chip and drive.esp_chip.looks_like_tildagon() else None
+
+    def _read_chip(self, drive):
+        self.chip_reading = drive.path
+
+        def done(res, exc):
+            self.chip_reading = None
+            if exc:
+                self.chip_error = str(exc)
+            else:
+                drive.esp_chip = res
+            self._drive_changed()
+        self._in_background(lambda: fw.read_esp_chip(drive.path), done)
 
     # -- the site's lists ----------------------------------------------------
     def _load_boards(self, chip):
@@ -227,9 +255,25 @@ class FirmwareDialog(Gtk.Dialog):
         if self.outcome:
             self.note.set_text(self.outcome)
 
+    def _chip_problem(self, drive):
+        """Why nothing can be offered for this ESP chip yet; "" once its details are known."""
+        if not drive or drive.method != "esptool":
+            return ""
+        if self.tool_problem:
+            return self.tool_problem
+        if drive.esp_chip:
+            return ""
+        return self.chip_error or "Reading the chip ..."
+
     def _check_site(self, drive):
+        problem = self._chip_problem(drive)
         if not drive:
             text = "No board in its bootloader yet."
+        elif problem:
+            text = problem
+        elif drive.esp_chip and not drive.esp_chip.looks_like_tildagon():
+            text = ("This ESP32-S3 does not match a Tildagon (found %s). The app has no download for it: "
+                    "use a file made for your board." % drive.esp_chip.text)
         elif not drive.chip:
             text = "No list for this bootloader: use a file instead."
         elif not self.boards:
@@ -247,13 +291,16 @@ class FirmwareDialog(Gtk.Dialog):
 
     def _check_file(self, drive):
         path = self.chooser.get_filename()
+        problem = self._chip_problem(drive)
         if not drive:
             self.note.set_text("No board in its bootloader yet.")
+        elif problem:
+            self.note.set_text(problem)
         elif not path:
             self.note.set_text("Choose a firmware file.")
         else:
             try:
-                self.info = fw.check_image(path, drive.chip)
+                self.info = fw.check_image(path, drive.chip, self._flash_bytes(drive))
                 self.note.set_text("%s: %s firmware for the %s, %s\nSHA-256 %s" % (
                     os.path.basename(path), self.info.cpu, fw.CHIP_NAMES[drive.chip], human(self.info.size),
                     fw.sha256_of(path)))
@@ -261,6 +308,11 @@ class FirmwareDialog(Gtk.Dialog):
             except (fw.FirmwareError, OSError) as e:
                 self.note.set_text("Refused: %s" % e)
         return False
+
+    @staticmethod
+    def _flash_bytes(drive):
+        mb = drive.esp_chip.flash_mb if drive.esp_chip else None
+        return mb * 1024 * 1024 if mb else fw.ESP_FLASH_BYTES
 
     def _response(self, _dlg, response):
         if response == Gtk.ResponseType.OK:
@@ -280,6 +332,9 @@ class FirmwareDialog(Gtk.Dialog):
         build, path = (self.build(), None) if site else (None, self.chooser.get_filename())
         what = "%s for the %s" % (build.label, self.product().label) if site else os.path.basename(path)
         also = "\n\nmpexplorer will disconnect from the current board first." if self.app.device else ""
+        if drive.esp_chip:
+            also = "\n\nThis chip reads as %s. The app cannot tell a badge from another board with the same chip, " \
+                   "so check this is the right board.%s" % (drive.esp_chip.text, also)
         if not ask_yes_no(self, "Install firmware", "Install %s on the %s at %s?\n\nThis replaces the firmware on the "
                           "board in its bootloader. Files on the board usually stay, but copy off anything you "
                           "need first.%s" % (what, fw.CHIP_NAMES[drive.chip], drive.path, also)):
@@ -319,7 +374,7 @@ class FirmwareDialog(Gtk.Dialog):
         stage("Getting %s" % build.filename)
         image = self.catalog.download(build, on_progress=progress, cancelled=self.cancel_event.is_set)
         try:
-            fw.check_image(image, drive.chip)
+            fw.check_image(image, drive.chip, self._flash_bytes(drive))
         except fw.FirmwareError:
             self.catalog.forget(build)          # the next try downloads it again
             raise
@@ -330,6 +385,11 @@ class FirmwareDialog(Gtk.Dialog):
         self.cancel_btn.hide()
         self.bar.hide()
         self.close_btn.set_sensitive(True)
+        if res and not res.port:
+            self.result = res
+            self.note.set_text("Written and checked. This is not a Tildagon, so the app cannot confirm it started: "
+                               "reset the board yourself and Scan for its port.\nSHA-256 %s" % sha)
+            return
         if res:
             self.result = res
             self.note.set_text("Installed: MicroPython %s on %s, now at %s.\nSHA-256 %s" % (
