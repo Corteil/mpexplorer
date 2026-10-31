@@ -78,7 +78,7 @@ label if one is missing on another theme.
 - [x] A chip that does not read as a Tildagon is not offered its image (confirmed on a real Tildagon; not tried on a breakout).
 - [x] Phase 5, 2022 badge: install through the dialog worked on a real badge (2026-10-31, reported by the owner).
 - [ ] Second 2022 badge: does it read the same? Erase on a 2022 badge.
-- [ ] Re-run the Tildagon install on this code (its chip read changed).
+- [x] Tildagon install re-run on this code (2026-10-31, reported working).
 - [ ] Try a real ESP32-S3 breakout: the "does not match" message, then a micropython.org build and the erase option.
 - [ ] Erase option and recording installs in the settings.
 
