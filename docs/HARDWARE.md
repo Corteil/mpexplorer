@@ -157,8 +157,11 @@ What is different about this badge (all seen by hand or in the run above, 2026-1
 - **Connecting does not freeze its screen:** the owner saw the badge's own GUI keep working while the benchmark ran (the Tildagon's
   app freezes in raw REPL).
 - **The 200-file listing test hung.** The benchmark waited with no traffic for over a minute inside `listdir`; after Ctrl-C the reply
-  turned up complete in the next read, followed by a late raw-paste answer (`R\x01\x80\x00\x01`), so the stream had got out of step
-  with the badge. Not explained; the app's own folder listing on this badge has not been tried with a large folder.
+  turned up complete in the next read, followed by a late raw-paste answer (`R\x01\x80\x00\x01`). So the reply did arrive, very
+  late, and the reader was not confused by its size: on a second 2022 badge (2022-06-04 build, 72 KB free, so no files were created)
+  a read-only check printed JSON listings of 27, 100, 200, 400 and 800 entries (up to 20 KB) three times each, all correct, in
+  0.1 to 0.4 s. That leaves the board being slow to list a folder of 200 real files right after the benchmark's 1 MB writes
+  (a guess, not shown): to test it, create the 200 files on a badge with room and time `os.ilistdir` on the board itself.
 - The benchmark's scratch folder `/_mpx_bench` was left behind and removed by hand afterwards; the badge's files are as they were.
 
 ### Upload mode on the Tildagon (2026-10-29)
