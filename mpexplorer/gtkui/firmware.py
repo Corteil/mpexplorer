@@ -10,8 +10,8 @@ from ..firmware_catalog import NUKE_FILE, Build, Catalog, default_build, saved_t
 from .common import GLib, Gtk, ask_yes_no, error
 
 STEPS = ("Pico or Pico 2: hold the BOOTSEL button while plugging it in.\n"
-         "Tildagon: power it off from its menu, then hold boop while plugging USB into USB in. Keep holding for a "
-         "few seconds.\n"
+         "Tildagon or 2026 badge: power it off from its menu, then hold boop while plugging USB into USB in. Keep "
+         "holding for a few seconds.\n"
          "2022 badge: hold the bottom right button, tap bottom-left, then release both.\n"
          "Another ESP32-S3 board: hold its BOOT button while plugging it in.")
 SAME_CHIP = ("The bootloader names the chip, not the board: a Pico and a Pico W read the same but need "
@@ -59,8 +59,8 @@ class DeviceDialog(Gtk.Dialog):
         self.cancel_btn.set_no_show_all(True)
         self.boot_btn = self.add_button("Put in bootloader", Gtk.ResponseType.YES)
         self.boot_btn.set_no_show_all(True)
-        self.boot_btn.set_tooltip_text("Restart this Pico as a BOOTSEL drive, without holding the button. It stops its "
-                                       "program; its files stay.")
+        self.boot_btn.set_tooltip_text("Restart this board in its bootloader, without its buttons. It stops what is "
+                                       "running; its files stay.")
         self.add_action_buttons()
         self.close_btn = self.add_button("Close", Gtk.ResponseType.CLOSE)
         self.connect("response", self._response)
@@ -226,7 +226,7 @@ class DeviceDialog(Gtk.Dialog):
             return
         drive = self.drive()
         self.update_state(drive)
-        self.boot_btn.set_visible(bool(drive) and drive.method == "repl")
+        self.boot_btn.set_visible(bool(drive) and fw.can_enter_bootloader(drive))
         self.boot_btn.set_sensitive(bool(drive) and not self._chip_problem(drive))
         if self.outcome:
             self.note.set_text(self.outcome)
@@ -258,12 +258,13 @@ class DeviceDialog(Gtk.Dialog):
         pass
 
     def put_in_bootloader(self):
-        port = self.drive().path
+        drive = self.drive()
+        find = fw.detect_rom if drive.method == "badge" else None
 
-        def done(drive):
-            self.prefer = drive.path
-            return "Now in its bootloader, at %s." % drive.path
-        self._start(lambda: fw.enter_bootloader(port), done)
+        def done(found):
+            self.prefer = found.path
+            return "Now in its bootloader, at %s." % found.path
+        self._start(lambda: fw.enter_bootloader(drive.path, find=find), done)
 
     # -- running a job -----------------------------------------------------
     def _start(self, work, done):
@@ -492,6 +493,11 @@ class FirmwareDialog(DeviceDialog):
     def update_state(self, drive):
         """Install stays off until a board and a suitable image are both known."""
         self.info = None
+        if drive and drive.method == "badge":
+            self.note.set_text(fw.running_badge_hint(drive))
+            self.install_btn.set_sensitive(False)
+            self.erase.set_sensitive(False)
+            return
         if drive and drive.method == "repl":
             self.note.set_text("To install firmware on this board, hold BOOTSEL while plugging it in.")
             self.install_btn.set_sensitive(False)
@@ -649,7 +655,7 @@ class BackupDialog(DeviceDialog):
 
     def update_state(self, drive):
         problem = self._chip_problem(drive)
-        usable = bool(drive) and not problem
+        usable = bool(drive) and not problem and drive.method != "badge"
         self.backup_btn.set_sensitive(usable and drive.method != "uf2")
         self.restore_btn.set_sensitive(usable and drive.method != "repl" and bool(drive.chip))
         self.backup_btn.set_tooltip_text("A board in BOOTSEL cannot be read: start it normally to back it up"
@@ -658,6 +664,8 @@ class BackupDialog(DeviceDialog):
                                           if drive and drive.method == "repl" else None)
         if not drive:
             self.note.set_text(NO_DEVICE)
+        elif drive.method == "badge":
+            self.note.set_text(fw.running_badge_hint(drive))
         elif problem:
             self.note.set_text(problem)
         elif drive.method == "repl":
@@ -756,6 +764,8 @@ class EraseDialog(DeviceDialog):
         self.erase_btn.set_sensitive(usable)
         if not drive:
             self.note.set_text(NO_DEVICE)
+        elif drive.method == "badge":
+            self.note.set_text(fw.running_badge_hint(drive))
         elif drive.method == "repl":
             self.note.set_text("To erase this board, hold BOOTSEL while plugging it in.")
         elif problem:

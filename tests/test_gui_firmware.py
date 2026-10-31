@@ -703,7 +703,7 @@ def test_the_bootloader_button_moves_the_tool_to_the_new_drive(setup, monkeypatc
     d = make(cls=dialog.EraseDialog)
     wait_until(lambda: d.boot_btn.get_sensitive())
 
-    def fake(port):
+    def fake(port, find=None):
         drives[0] = drive                           # the port goes, and the drive arrives
         return drive
     monkeypatch.setattr(fw, "enter_bootloader", fake)
@@ -718,7 +718,7 @@ def test_a_failed_bootloader_request_is_reported_and_the_board_stays_selected(se
     make, drives, errors, *_ = setup
     drives[0] = RUNNING
 
-    def fails(port):
+    def fails(port, find=None):
         raise fw.FirmwareError("The board did not appear as a drive.")
     monkeypatch.setattr(fw, "enter_bootloader", fails)
     d = make(cls=dialog.BackupDialog)
@@ -726,3 +726,50 @@ def test_a_failed_bootloader_request_is_reported_and_the_board_stays_selected(se
     d.put_in_bootloader()
     wait_until(lambda: not d.running)
     assert errors == ["The board did not appear as a drive."] and d.drive().path == RUNNING.path
+
+
+TILDAGON_RUNNING = fw.BootDrive("/dev/ttyACM0", "Tildagon", "TILDAGON", None, "badge")
+TIDAL_RUNNING = fw.BootDrive("/dev/ttyACM2", "TiDAL", "TIDAL", None, "badge")
+
+
+@pytest.mark.parametrize("cls", [dialog.FirmwareDialog, dialog.BackupDialog, dialog.EraseDialog])
+def test_a_running_badge_is_listed_in_every_tool_says_what_to_do_and_is_not_touched(setup, monkeypatch, cls):
+    make, drives, *_ = setup
+    drives[0] = TILDAGON_RUNNING
+    monkeypatch.setattr(fw, "read_running", lambda port: pytest.fail("read a badge"))
+    monkeypatch.setattr(fw, "read_esp_chip", lambda port: pytest.fail("read a badge"))
+    d = make(cls=cls)
+    assert d.board_box.get_active_text() == "Tildagon (2024, 2026) at /dev/ttyACM0"
+    assert "running normally" in d.details.get_text() and "Put in bootloader" in d.note.get_text()
+    assert d.boot_btn.get_visible() and d.boot_btn.get_sensitive()
+    for name in ("install_btn", "backup_btn", "restore_btn", "erase_btn"):
+        if hasattr(d, name):
+            assert not getattr(d, name).get_sensitive(), name
+
+
+def test_the_2022_badge_gets_its_buttons_not_the_bootloader_button(setup):
+    make, drives, *_ = setup
+    drives[0] = TIDAL_RUNNING
+    d = make()
+    assert d.board_box.get_active_text() == "TiDAL (2022 badge) at /dev/ttyACM2"
+    assert not d.boot_btn.get_visible() and "bottom right" in d.note.get_text()
+
+
+def test_a_running_badge_is_sent_to_its_rom_and_the_tool_moves_to_it(setup, monkeypatch):
+    make, drives, errors, *_ = setup
+    drives[0] = TILDAGON_RUNNING
+    rom = fw.BootDrive("/dev/ttyACM1", "ROM", "ESP32-S3", "esp32s3", "esptool")
+    monkeypatch.setattr(fw, "find_esptool", lambda: ["esptool"])
+    monkeypatch.setattr(fw, "read_esp_chip", lambda port: fw.EspChip("ESP32-S3-PICO-1", 8, 2))
+    seen = {}
+
+    def fake(port, find=None):
+        seen.update(port=port, find=find)
+        drives[0] = rom
+        return rom
+    monkeypatch.setattr(fw, "enter_bootloader", fake)
+    d = make(cls=dialog.EraseDialog)
+    d.put_in_bootloader()
+    wait_until(lambda: not d.running and d.drive() and d.drive().esp_chip)
+    assert seen == {"port": "/dev/ttyACM0", "find": fw.detect_rom} and not errors
+    assert d.board_box.get_active_text() == "Tildagon (2024, 2026) at /dev/ttyACM1"

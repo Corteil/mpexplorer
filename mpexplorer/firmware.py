@@ -57,11 +57,16 @@ class Badge:
     chip: tuple                 # type, MB of flash, MB of PSRAM, embedded flash: as read from a real one
     usb: tuple
     soft_reset: bool            # the 2022 badge drops off USB until replugged after a soft reset
+    label: str
+    boot_from_repl: bool        # machine.bootloader() works (reported by the owner on a 2026 badge; not on a 2022 one)
+    steps: str                  # how to reach the bootloader by hand
 
 
 BADGES = {
-    "TILDAGON": Badge(("ESP32-S3-PICO-1", 8, 2, True), (0x16D0, 0x120E), True),
-    "TIDAL": Badge(("ESP32-S3", 8, None, True), (0x16D0, 0x1114), False),
+    "TILDAGON": Badge(("ESP32-S3-PICO-1", 8, 2, True), (0x16D0, 0x120E), True, "Tildagon (2024, 2026)", True,
+                      "power it off from its menu, then hold boop while plugging USB into USB in"),
+    "TIDAL": Badge(("ESP32-S3", 8, None, True), (0x16D0, 0x1114), False, "TiDAL (2022 badge)", False,
+                   "hold the bottom right button, tap bottom-left, then release both"),
 }
 
 
@@ -191,8 +196,14 @@ def detect_running():
     return [BootDrive(port, "MicroPython", "MicroPython", None, "repl") for port in sorted(rp2_ports())]
 
 
+def detect_running_badges():
+    """Badges in normal use, named by their USB id: nothing is sent to them, so their app keeps running."""
+    return [BootDrive(port, BADGES[name].label, name, None, "badge")
+            for name in BADGES for port in sorted(badge_ports(name))]
+
+
 def detect_all(mounts_file="/proc/self/mounts"):
-    return detect(mounts_file) + detect_rom() + detect_running()
+    return detect(mounts_file) + detect_rom() + detect_running() + detect_running_badges()
 
 
 def check_uf2(path, chip):
@@ -483,10 +494,12 @@ def read_running(port, open_board=RawREPL.open_board):
         repl.close(reset=True)
 
 
-def enter_bootloader(port, timeout=20.0, poll=0.2, open_board=RawREPL.open_board):
-    """Ask a running RP2 board to restart into BOOTSEL, with no button; returns its drive when it appears. It drops off
-    USB as soon as it obeys, so a lost connection here is the expected result, and the drive appearing decides."""
-    before = {d.path for d in detect()}
+def enter_bootloader(port, timeout=20.0, poll=0.2, open_board=RawREPL.open_board, find=None):
+    """Ask a running board to restart into its bootloader, with no button; returns the device when it appears. It drops
+    off USB as soon as it obeys, so a lost connection here is the expected result, and the device appearing decides.
+    find lists what to watch for: UF2 drives unless told otherwise."""
+    find = find or detect
+    before = {d.path for d in find()}
     try:
         repl, _ = open_board(port)
     except (TransportError, OSError) as e:
@@ -501,11 +514,11 @@ def enter_bootloader(port, timeout=20.0, poll=0.2, open_board=RawREPL.open_board
         pass
     end = time.monotonic() + timeout
     while True:
-        new = [d for d in detect() if d.path not in before]
+        new = [d for d in find() if d.path not in before]
         if new:
             return new[0]
         if time.monotonic() >= end:
-            raise FirmwareError("The board did not appear as a drive. Hold BOOTSEL while plugging it in instead.")
+            raise FirmwareError("The board did not reach its bootloader. Use its buttons instead.")
         time.sleep(poll)
 
 
@@ -513,16 +526,32 @@ def device_label(drive, running=None):
     """The device list's text: what the board is, then where."""
     if drive.method == "repl":
         name = short_model(running.machine) if isinstance(running, RunningInfo) else "MicroPython board"
+    elif drive.method == "badge":
+        name = BADGES[drive.board_id].label
     elif drive.method == "esptool":
         chip = drive.esp_chip
-        name = {"TILDAGON": "Tildagon", "TIDAL": "TiDAL (2022 badge)"}.get(chip.badge if chip else None, "ESP32-S3")
+        name = BADGES[chip.badge].label if chip and chip.badge else "ESP32-S3"
     else:
         name = CHIP_NAMES.get(drive.chip, "Unsupported (%s)" % drive.board_id)
     return "%s at %s" % (name, drive.path)
 
 
+def can_enter_bootloader(drive):
+    return drive.method == "repl" or (drive.method == "badge" and BADGES[drive.board_id].boot_from_repl)
+
+
+def running_badge_hint(drive):
+    badge = BADGES[drive.board_id]
+    if badge.boot_from_repl:
+        return "This badge is running normally. Press Put in bootloader, or %s." % badge.steps
+    return "This badge is running normally. To use this tool, %s." % badge.steps
+
+
 def device_details(drive, running=None):
     """(name, value) lines for the device's details panel."""
+    if drive.method == "badge":
+        return [("State", "running normally"), ("Port", drive.path),
+                ("Details", "more can be read once it is in its bootloader")]
     if drive.method == "repl":
         lines = [("State", "running MicroPython"), ("Port", drive.path)]
         if isinstance(running, RunningInfo):
