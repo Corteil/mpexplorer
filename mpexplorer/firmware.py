@@ -483,6 +483,32 @@ def read_running(port, open_board=RawREPL.open_board):
         repl.close(reset=True)
 
 
+def enter_bootloader(port, timeout=20.0, poll=0.2, open_board=RawREPL.open_board):
+    """Ask a running RP2 board to restart into BOOTSEL, with no button; returns its drive when it appears. It drops off
+    USB as soon as it obeys, so a lost connection here is the expected result, and the drive appearing decides."""
+    before = {d.path for d in detect()}
+    try:
+        repl, _ = open_board(port)
+    except (TransportError, OSError) as e:
+        raise FirmwareError("Cannot reach %s: is it connected in the app? (%s)" % (port, e))
+    try:
+        repl.exec("import machine\nmachine.bootloader()", timeout=2.0)
+    except (TransportError, OSError):
+        pass
+    try:
+        repl.close()
+    except (TransportError, OSError):
+        pass
+    end = time.monotonic() + timeout
+    while True:
+        new = [d for d in detect() if d.path not in before]
+        if new:
+            return new[0]
+        if time.monotonic() >= end:
+            raise FirmwareError("The board did not appear as a drive. Hold BOOTSEL while plugging it in instead.")
+        time.sleep(poll)
+
+
 def device_label(drive, running=None):
     """The device list's text: what the board is, then where."""
     if drive.method == "repl":

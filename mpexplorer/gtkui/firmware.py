@@ -31,7 +31,7 @@ class DeviceDialog(Gtk.Dialog):
         self.catalog = Catalog()
         self.load_id, self.closed, self.outcome, self.tool_problem = 0, False, "", ""
         self.chip_reading, self.chip_error, self.chip_retry = None, "", 0
-        self.running_info, self.info_reading, self.filling = {}, None, False
+        self.running_info, self.info_reading, self.filling, self.prefer = {}, None, False, None
         self.cancel_event = threading.Event()
         self.set_default_size(560, -1)
         box = self.get_content_area()
@@ -57,12 +57,17 @@ class DeviceDialog(Gtk.Dialog):
 
         self.cancel_btn = self.add_button("Cancel", Gtk.ResponseType.NONE)
         self.cancel_btn.set_no_show_all(True)
+        self.boot_btn = self.add_button("Put in bootloader", Gtk.ResponseType.YES)
+        self.boot_btn.set_no_show_all(True)
+        self.boot_btn.set_tooltip_text("Restart this Pico as a BOOTSEL drive, without holding the button. It stops its "
+                                       "program; its files stay.")
         self.add_action_buttons()
         self.close_btn = self.add_button("Close", Gtk.ResponseType.CLOSE)
         self.connect("response", self._response)
         self.connect("delete-event", lambda *_a: self.running)      # a job cannot be left unwatched
         self.show_all()
         self.cancel_btn.hide()
+        self.boot_btn.hide()
         self.scan()
         self._picked()
         self.timer = GLib.timeout_add_seconds(1, self._tick)
@@ -108,7 +113,8 @@ class DeviceDialog(Gtk.Dialog):
         self.running_info = {p: i for p, i in self.running_info.items() if p in paths}
         chosen = self.drive()
         self.drives = found
-        self._fill_devices(chosen.path if chosen else None)
+        self._fill_devices(self.prefer or (chosen.path if chosen else None))
+        self.prefer = None
         self._picked()
 
     def _fill_devices(self, chosen):
@@ -218,7 +224,10 @@ class DeviceDialog(Gtk.Dialog):
     def _check(self):
         if self.running or self.result:     # a list can arrive late: it must not touch a running or finished job
             return
-        self.update_state(self.drive())
+        drive = self.drive()
+        self.update_state(drive)
+        self.boot_btn.set_visible(bool(drive) and drive.method == "repl")
+        self.boot_btn.set_sensitive(bool(drive) and not self._chip_problem(drive))
         if self.outcome:
             self.note.set_text(self.outcome)
 
@@ -237,6 +246,8 @@ class DeviceDialog(Gtk.Dialog):
         if response == Gtk.ResponseType.NONE:
             self.cancel_event.set()
             self.cancel_btn.set_sensitive(False)
+        elif response == Gtk.ResponseType.YES:
+            self.put_in_bootloader()
         elif response == Gtk.ResponseType.CLOSE or response == Gtk.ResponseType.DELETE_EVENT:
             if not self.running:
                 self.destroy()
@@ -245,6 +256,14 @@ class DeviceDialog(Gtk.Dialog):
 
     def action(self, response):
         pass
+
+    def put_in_bootloader(self):
+        port = self.drive().path
+
+        def done(drive):
+            self.prefer = drive.path
+            return "Now in its bootloader, at %s." % drive.path
+        self._start(lambda: fw.enter_bootloader(port), done)
 
     # -- running a job -----------------------------------------------------
     def _start(self, work, done):
@@ -258,6 +277,7 @@ class DeviceDialog(Gtk.Dialog):
         self.bar.show()
         for w in self.locked_widgets():
             w.set_sensitive(False)
+        self.boot_btn.set_sensitive(False)
 
         def run():
             try:
