@@ -79,6 +79,7 @@ def ask_open_with(parent, name, can_run):
     choices = [("Built-in editor", "editor", None)]
     if can_run:
         choices.append(("Run on the board", "run", None))
+    choices += [("Hex viewer", "hex", None), ("Image viewer", "image", None)]
     choices += [(n, "app:" + ident, icon) for n, ident, icon in installed_apps(name)]
     lst = Gtk.ListBox(selection_mode=Gtk.SelectionMode.SINGLE)
     for label, _h, icon in choices:

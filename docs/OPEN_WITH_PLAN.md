@@ -8,7 +8,7 @@ program for the extension (`handler_for`), else the built-in editor. Host files 
 sessions. It replaced the fixed "Open with Geany" entry (Geany is in the list). Differences from the plan: our own list dialog instead
 of `Gtk.AppChooserDialog` (so the built-ins and the custom row fit in one list); `app_template()` turns a desktop file's `Exec` line
 into a `{file}` template; `remember_handler()` saves the default. Still missing: Shift+Enter and a File menu entry, the File types
-preferences page, the hex and image viewers (a saved `hex`/`image` handler falls back to the editor with a status message), asking
+preferences page, asking
 before opening an executable-looking file with the system default.
 
 ### What exists (phases 1 and 2)
@@ -91,6 +91,8 @@ fall back to defaults and never block startup.
   disconnect with pending change, cache cleanup. Download/upload round trip through the fake board.
 - Real MicroPython layer: the same round trip through `rawrepl_shim.py`.
 - GUI by hand on the Pi 5 (the chooser, a real external editor): add rows to `docs/HARDWARE.md`.
+
+**Phase 4 (partly, 2026-10-31):** hex and image viewers (`gtkui/viewer.py`, `viewers.hexdump`; hex up to 256 KB, image up to 2 MB, read-only), listed in the chooser. Tested under Xvfb on host files only; not tried by hand or on a board.
 
 ## Phases
 1. `openwith.py` + tests (settings, lookup, commands, watcher). 2. Device download/launch/upload loop for one custom

@@ -26,10 +26,12 @@ from .console import ConsoleWindow
 from .dialogs import (OutputWindow, SyncDialog, TransferPopup, ask_conflict, ask_edit_conflict, ask_open_with,
                       ask_sync_target)
 from .editor import Editor
+from .viewer import Viewer
 from .pane import Pane
 from .prefs import PreferencesDialog
 
 MAX_EDIT_BYTES = 256 * 1024
+MAX_IMAGE_BYTES = 2 * 1024 * 1024
 
 
 def cache_dir():
@@ -697,9 +699,9 @@ class App(Gtk.Window):
             self.open_external(pane, path, value)
         elif value == "run":
             self.run_path(pane, path)
+        elif value in ("hex", "image"):
+            self.view_file(pane, path, size, value)
         else:
-            if value != "editor":
-                self.set_status("The %s viewer is not built yet: opening in the editor" % value)
             self.open_file(pane, path, size)
 
     def _edit_say(self, text):
@@ -734,6 +736,24 @@ class App(Gtk.Window):
                 info(self, "Binary file", "%s is not UTF-8 text, so it is not opened." % path)
                 return
             Editor(self, be, path, text)
+        self.runner.submit(work, done, "Reading " + path, quiet=True)
+
+    def view_file(self, pane, path, size, kind):
+        limit = MAX_IMAGE_BYTES if kind == "image" else MAX_EDIT_BYTES
+        if size > limit:
+            info(self, "Too large", "Files over %s are not opened in the %s viewer." % (human(limit), kind))
+            return
+        be = pane.backend
+
+        def work(prog):
+            with be.open_read(path) as r:
+                return b"".join(iter(lambda: r.read(CHUNK), b""))
+
+        def done(data, exc):
+            if exc:
+                error(self, "Cannot open file", str(exc))
+            else:
+                Viewer(self, be, path, data, kind)
         self.runner.submit(work, done, "Reading " + path, quiet=True)
 
     def write_file(self, be, path, data, on_done):
