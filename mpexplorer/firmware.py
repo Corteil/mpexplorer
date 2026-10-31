@@ -39,6 +39,9 @@ ESP_IMAGE_MAGIC, ESP32S3_CHIP_ID = 0xE9, 9
 ESP_PARTITION_TABLE, ESP_APP_OFFSET, ESP_FLASH_BYTES = 0x8000, 0x10000, 8 * 1024 * 1024
 TILDAGON_CHIP = ("ESP32-S3-PICO-1", 8, 2)            # type, MB of flash, MB of PSRAM, as read from a real Tildagon
 ESPTOOL_MAJOR = 5
+ESPTOOL_STAGES = (("Erasing flash", "Erasing the flash, which can take a while"),
+                  ("Writing at", "Writing the firmware"),
+                  ("Verifying", "Checking what was written"))
 ESPTOOL_LOG = "esptool.log"                          # every run's full output, for when the short message is not enough
 INSTALL_ESPTOOL = "Installing on this board needs esptool %d. Install it with: pipx install esptool" % ESPTOOL_MAJOR
 
@@ -287,7 +290,8 @@ def _esptool_tail(lines):
     return "\n".join(line for line in text.splitlines() if line.strip())[-600:]
 
 
-def flash_esptool(image, drive, on_progress=None, cancelled=None, tool=None, stall=90.0, erase=False):
+def flash_esptool(image, drive, on_progress=None, cancelled=None, tool=None, stall=90.0, erase=False,
+                  on_stage=None):
     """Write a merged image at offset 0, after erasing the whole flash if asked. esptool checks what it wrote. A cancel
     or failure can leave the flash part written; a board in its ROM bootloader stays there, ready for another try."""
     flash_mb = drive.esp_chip.flash_mb if drive.esp_chip else None
@@ -307,7 +311,7 @@ def flash_esptool(image, drive, on_progress=None, cancelled=None, tool=None, sta
         proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     except OSError as e:
         raise FirmwareError("Cannot run esptool: %s" % e)
-    lines, partial, last = [], b"", time.monotonic()
+    lines, partial, last, shown = [], b"", time.monotonic(), None
     log = open(log_path, "wb")
     log.write((" ".join(argv) + "\n").encode())
     try:
@@ -330,6 +334,11 @@ def flash_esptool(image, drive, on_progress=None, cancelled=None, tool=None, sta
             for part in parts:
                 line = part.decode("utf-8", "replace")
                 lines = (lines + [line])[-40:]
+                stage = next((text for mark, text in ESPTOOL_STAGES if mark in line), None)
+                if stage and stage != shown:
+                    shown = stage
+                    if on_stage:
+                        on_stage(stage)
                 m = re.search(r"Writing at .*?(\d+(?:\.\d+)?) ?%", line)
                 if m and on_progress:
                     on_progress(float(m[1]), 100)
@@ -469,8 +478,7 @@ def install_and_verify(image, drive, on_progress=None, on_stage=None, cancelled=
         if read_esp_chip(drive.path) != drive.esp_chip:     # another board was plugged in after this one was checked
             raise FirmwareError("The board on %s has changed. Nothing was written. Scan again." % drive.path)
         before = tildagon_ports()
-        stage("Writing the firmware")
-        flash_esptool(image, drive, on_progress, cancelled, erase=erase)
+        flash_esptool(image, drive, on_progress, cancelled, erase=erase, on_stage=stage)
         if expect_tildagon is None:
             expect_tildagon = drive.esp_chip.looks_like_tildagon()
         if not expect_tildagon:                             # no way to tell what other boards appear as when they start
