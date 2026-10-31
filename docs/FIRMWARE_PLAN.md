@@ -101,8 +101,7 @@ VBUS sense and the VSYS divider there). Needs a W board to test. Until then the 
   the `Board-ID` to filter the list, and ask for the exact board. Other UF2 bootloaders (samd, nrf) are expected to give a more specific `Board-ID`; not checked.
 - That `machine.bootloader()` works as the page says on a running Pico (it would avoid BOOTSEL, phase 6 can start with Picos).
 - BOOTSEL drive mounting: on the Pi's desktop an RP2040 Pico mounted unaided at `/media/pi/RPI-RP2` (`2e8a:0003`, seen 2026-10-31, label `RPI-RP2`). Still to do: `udisksctl mount` when nothing auto-mounts.
-- A fresh Tildagon has an empty file area; does it format and boot alone, or do the badge's apps need the `sponsors-vfs.bin` image
-  the factory provisioning uses (`provision.json`, offset 0x4F0000)? This decides whether fresh install means one write or two.
+- A blank Tildagon should need one write only, from reading the source (2026-10-31), not from erasing a real badge: `sponsors-vfs.bin` is optional. Its files are `boot.py`, a sponsor logos app and empty `backgrounds` and `pattern` folders. The system code is frozen in the firmware, `_boot.py` runs `inisetup.setup()` when the file area will not mount, which formats a blank area as littlefs and writes `boot.py`, and missing `/apps` and `settings.json` are handled. The EMF flasher's normal manifest also writes only the merged image, offering an erase first. Caveat: `inisetup` formats only if the area's first block is blank; otherwise it loops printing "filesystem appears to be corrupted", so an unreadable file area needs an erase. Still to see once on a real erased badge.
 
 ## Tests
 Fake BOOTSEL volume in a temp folder; fake esptool script (progress lines, failure, hang for cancel); bad images (wrong family, wrong size,
