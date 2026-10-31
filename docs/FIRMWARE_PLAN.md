@@ -17,7 +17,7 @@ firmware, then connect to it.
 | Pico | Hold BOOTSEL, plug in | USB drive, `2e8a:0003` | `RPI_PICO-*.uf2` from micropython.org | Copy the UF2 to the drive |
 | Pico 2 | Hold BOOTSEL, plug in | USB drive, `2e8a:000f` | `RPI_PICO2-*.uf2` from micropython.org | Copy the UF2 to the drive |
 | Tildagon | Power off from the menu, hold boop while plugging USB into USB in, keep holding a few seconds (owner and the EMF flasher page; the badge README's bat + boop steps did not apply) | Serial port, ESP32-S3 ROM (`303a:1001`, seen) | `merged-firmware.bin` from `emfcamp.github.io/badge-2024-software` | esptool at offset 0 |
-| 2022 badge | To check | Serial port, ESP32-S3 ROM (expected `303a:1001`) | `merged-firmware.bin` from `emfcamp.github.io/TiDAL-Firmware` | esptool at offset 0 |
+| 2022 badge | Hold bottom right, tap bottom-left, release (TiDAL flasher page; worked on a real badge) | Serial port, ESP32-S3 ROM (`303a:1001`, seen) | `merged-firmware.bin` from `emfcamp.github.io/TiDAL-Firmware` | esptool at offset 0 |
 
 Checked 2026-10-31: the Tildagon image downloads (2,350,928 bytes) and its header is an ESP image for 8 MB DIO flash; the micropython.org
 Pico UF2 links exist (release 1.29.0 is the newest; the two Picos here run 1.28.0); both flasher manifests write one merged image at offset 0. The 2022 image was not downloaded.
@@ -74,6 +74,9 @@ Rules:
 - Erase only when the box is ticked. The merged image and a UF2 leave the file area alone in normal use, but a bootloader cannot tell
   a new board from a used one, so the confirmation says so. A 2022/2024 mix-up cannot be detected: both look identical in the ROM.
 - Record what was installed in the settings: board id, image name, SHA-256.
+
+## 2022 badge (2026-10-31)
+Reads as `ESP32-S3 (QFN56)`, 8 MB embedded flash, no PSRAM, which is a commoner chip than the Tildagon's, so more breakouts can read the same. Normal USB is `16d0:1114`; it must not be soft-reset after an install. Different partition layout from the Tildagon's (file area at 0x410000), so the images must not be swapped: each chip only sees its own. esptool `--no-stub` fails if a stub is already running, so the chip read no longer uses it. Code tested with fakes; **no real write yet**. Its own README says it may enter light sleep at boot, so the restart still needs seeing.
 
 ## Phases
 1. **Pico and Pico 2, logic:** `detect`, `check_image`, UF2 copy, `verify`, tests with a fake drive.

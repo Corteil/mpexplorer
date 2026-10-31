@@ -13,6 +13,7 @@ from .firmware import MAX_IMAGE, FirmwareError
 
 BASE = "https://micropython.org"
 EMF_FLASHER = "https://emfcamp.github.io/badge-2024-software/merged-firmware.bin"
+TIDAL_FLASHER = "https://emfcamp.github.io/TiDAL-Firmware/merged-firmware.bin"
 ALLOWED = (BASE + "/", "https://emfcamp.github.io/")
 FIRMWARE_PATH = "/resources/firmware/"
 TIMEOUT = 20
@@ -55,9 +56,12 @@ class Build:
 
 
 # Boards that micropython.org does not build for. The web flasher's "Latest" is the only full image they publish.
-BADGE_BOARDS = {"esp32s3": [Board("TILDAGON", "Tildagon (2024, 2026)", "EMF Camp")]}
+BADGE_BOARDS = {"esp32s3": [Board("TILDAGON", "Tildagon (2024, 2026)", "EMF Camp"),
+                            Board("TIDAL", "TiDAL (2022)", "EMF Camp")]}
 BADGE_BUILDS = {"TILDAGON": [Build("TILDAGON-merged-firmware.bin", "Latest from the EMF flasher", "", "", False,
-                                   EMF_FLASHER)]}
+                                   EMF_FLASHER)],
+                "TIDAL": [Build("TIDAL-merged-firmware.bin", "Latest from the EMF flasher", "", "", False,
+                                TIDAL_FLASHER)]}
 
 
 def default_build(builds):
@@ -149,9 +153,9 @@ class Catalog:
         os.replace(tmp, path)
         return items, None
 
-    def boards(self, chip, badges=True):
-        """(boards, saved). The badges come first if asked for, and survive the site being out of reach."""
-        first = list(BADGE_BOARDS.get(chip, [])) if badges else []
+    def boards(self, chip, badges=()):
+        """(boards, saved). The badges named come first, and survive the site being out of reach."""
+        first = [b for b in BADGE_BOARDS.get(chip, []) if b.id in badges]
         try:
             site, saved = self._list("boards-%s.json" % chip, "%s/download/?mcu=%s" % (BASE, chip), parse_boards, Board)
         except FirmwareError:

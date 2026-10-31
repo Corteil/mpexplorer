@@ -182,11 +182,13 @@ def test_a_bad_name_from_a_saved_list_cannot_leave_the_cache(tmp_path, name):
 
 def test_the_tildagon_comes_from_the_table_without_the_network(tmp_path):
     c = cat.Catalog(str(tmp_path), Site({}))
-    boards, saved = c.boards("esp32s3")             # the site is out of reach: the badge is still there
+    boards, saved = c.boards("esp32s3", ("TILDAGON",))      # the site is out of reach: the badge is still there
     assert [b.id for b in boards] == ["TILDAGON"] and saved is None
     site = Site({})
     builds, _ = cat.Catalog(str(tmp_path), site).builds("TILDAGON")
     assert cat.default_build(builds).url == cat.EMF_FLASHER and not site.asked
+    builds, _ = cat.Catalog(str(tmp_path), site).builds("TIDAL")
+    assert cat.default_build(builds).url == cat.TIDAL_FLASHER and not site.asked
 
 
 S3_INDEX = """
@@ -206,13 +208,14 @@ S3_PAGE = """
 
 def test_esp32s3_boards_follow_the_badge_and_a_chip_that_differs_gets_no_badge(tmp_path):
     c = cat.Catalog(str(tmp_path), Site({index_url("esp32s3"): S3_INDEX.encode()}))
-    assert [b.id for b in c.boards("esp32s3")[0]] == ["TILDAGON", "ESP32_GENERIC_S3"]
-    assert [b.id for b in c.boards("esp32s3", badges=False)[0]] == ["ESP32_GENERIC_S3"]
+    assert [b.id for b in c.boards("esp32s3", ("TILDAGON",))[0]] == ["TILDAGON", "ESP32_GENERIC_S3"]
+    assert [b.id for b in c.boards("esp32s3", ("TIDAL",))[0]] == ["TIDAL", "ESP32_GENERIC_S3"]
+    assert [b.id for b in c.boards("esp32s3")[0]] == ["ESP32_GENERIC_S3"]
 
 
 def test_a_chip_that_differs_is_told_when_the_site_is_out_of_reach(tmp_path):
     with pytest.raises(FirmwareError, match="Cannot read"):
-        cat.Catalog(str(tmp_path), Site({})).boards("esp32s3", badges=False)
+        cat.Catalog(str(tmp_path), Site({})).boards("esp32s3")
 
 
 def test_esp32s3_builds_are_the_full_bin_and_never_the_uf2_or_app_bin(tmp_path):

@@ -76,7 +76,7 @@ label if one is missing on another theme.
 - [x] Owner installed a downloaded v1.29.0 on a Pico 2 (2026-10-31, reported working).
 - [x] Phase 4, Tildagon: install through the dialog worked on a real badge (2026-10-31, confirmed by the owner); files survive.
 - [x] A chip that does not read as a Tildagon is not offered its image (confirmed on a real Tildagon; not tried on a breakout).
-- [ ] Phase 5: the 2022 badge.
+- [ ] Phase 5, 2022 badge (branch `firmware-tidal`; chip read and backup done on a real one): real install, restart, second badge.
 - [ ] Try a real ESP32-S3 breakout: the "does not match" message, then a micropython.org build and the erase option.
 - [ ] Erase option and recording installs in the settings.
 
