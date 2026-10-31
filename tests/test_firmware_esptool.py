@@ -111,6 +111,20 @@ def test_erase_is_only_asked_for_when_chosen(tmp_path):
     assert log.read_text().endswith("write-flash --erase-all 0 " + image)
 
 
+def test_the_stages_follow_what_esptool_is_doing(tmp_path):
+    # the order and words of esptool 5.6.0's run with an erase, from a real Tildagon
+    tool = fake_tool(tmp_path, "print('Connected to ESP32-S3')\n"
+                               "print('Erasing flash memory (this may take a while)...')\n"
+                               "print('Flash memory erased successfully in 8.6 seconds.')\n"
+                               "for p in (1, 2):\n"
+                               "    print('Writing at 0x00010000 [] %d.0%% ' % p)\n"
+                               "print('Verifying written data...')\n"
+                               "print('Hash of data verified.')\n")
+    seen = []
+    fw.flash_esptool(write(tmp_path, esp_image()), ROM, tool=tool, erase=True, on_stage=seen.append)
+    assert seen == ["Erasing the flash, which can take a while", "Writing the firmware", "Checking what was written"]
+
+
 def test_a_breakout_with_a_tildagons_chip_is_not_waited_for_when_its_own_firmware_was_chosen(monkeypatch):
     order = steps(monkeypatch)
     assert fw.install_and_verify("img", CHECKED, expect_tildagon=False).port == "" and order == ["ports", "flash"]
