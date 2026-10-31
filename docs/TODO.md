@@ -73,6 +73,8 @@ label if one is missing on another theme.
 - [x] Phase 2: Tools > Install firmware... with local files (Xvfb, fake drives).
 - [x] Owner installed v1.29.0 on an RP2040 Pico through the dialog (2026-10-31, reported working; its files survived).
 - [ ] Same on a Pico 2 (also shows its real `INFO_UF2.TXT`).
+- [x] Phase 3: board list and downloads from micropython.org, with a cache (tests and the live site; no real install from a download yet).
+- [ ] Owner installs a downloaded build on a real board.
 - [ ] Erase option and recording installs in the settings.
 
 ## 2c. Agent mode (plan: `docs/AGENT_PLAN.md`)

@@ -21,6 +21,7 @@ except (ImportError, ValueError) as e:
 
 from mpexplorer import firmware as fw
 from mpexplorer.errors import Cancelled
+from mpexplorer.firmware_catalog import Board, Build
 from mpexplorer.settings import Settings
 
 Gtk = common.Gtk
@@ -52,6 +53,30 @@ def uf2(path, family=RP2040, total=4):
     return str(path)
 
 
+class FakeCatalog:
+    """The site, without the network."""
+    BOARDS = [Board("RPI_PICO", "Pico", "Raspberry Pi"), Board("RPI_PICO_W", "Pico W", "Raspberry Pi")]
+    BUILDS = [Build("RPI_PICO-20261030-v1.30.0-preview.1.gabc.uf2", "v1.30.0-preview.1.gabc", "2026-10-30", "", True),
+              Build("RPI_PICO-20260824-v1.29.0.uf2", "v1.29.0", "2026-08-24", "", False),
+              Build("RPI_PICO-20260406-v1.28.0.uf2", "v1.28.0", "2026-04-06", "", False)]
+    image, boards_error, saved, forgotten = None, None, None, []
+
+    def boards(self, chip):
+        if self.boards_error:
+            raise fw.FirmwareError(self.boards_error)
+        return self.BOARDS, self.saved
+
+    def builds(self, board_id):
+        return self.BUILDS, self.saved
+
+    def download(self, build, on_progress=None, cancelled=None):
+        self.asked = build
+        return self.image
+
+    def forget(self, build):
+        self.forgotten = self.forgotten + [build]
+
+
 @pytest.fixture
 def setup(tmp_path, monkeypatch):
     drive_dir = tmp_path / "RPI-RP2"
@@ -61,6 +86,7 @@ def setup(tmp_path, monkeypatch):
     monkeypatch.setattr(fw, "detect", lambda: list(drives))
     # the real function must never run here: it would look for and talk to real boards
     monkeypatch.setattr(fw, "install_and_verify", lambda *a, **k: pytest.fail("install not stubbed"))
+    monkeypatch.setattr(dialog, "Catalog", FakeCatalog)
     monkeypatch.setattr(dialog, "ask_yes_no", lambda *a: True)
     errors = []
     monkeypatch.setattr(dialog, "error", lambda parent, title, text: errors.append(text))
@@ -71,6 +97,7 @@ def setup(tmp_path, monkeypatch):
         d = dialog.FirmwareDialog(app)
         dlgs.append(d)
         if image:
+            d.use_file.set_active(True)
             monkeypatch.setattr(d.chooser, "get_filename", lambda: image, raising=False)
             d._check()
         return d
@@ -85,6 +112,7 @@ def setup(tmp_path, monkeypatch):
 def test_lists_the_board_and_waits_for_a_file(setup):
     make, *_ = setup
     d = make()
+    d.use_file.set_active(True)
     assert d.board_box.get_active_text().startswith("RP2040 at ")
     assert "Choose a firmware" in d.note.get_text() and not d.install_btn.get_sensitive()
 
@@ -93,7 +121,7 @@ def test_says_when_no_board_is_there_and_finds_one_plugged_in_later(setup):
     make, drives, *_ = setup
     drive = drives.pop()
     d = make()
-    assert "No board" in d.note.get_text()
+    assert "No board" in d.note.get_text() and not d.install_btn.get_sensitive()
     drives.append(drive)
     d.scan()
     assert d.drive() == drive
@@ -202,3 +230,102 @@ def test_install_and_verify_runs_the_steps_in_order(tmp_path, monkeypatch):
     drive = fw.BootDrive("/x", "m", "RPI-RP2", "rp2040")
     assert fw.install_and_verify("img", drive).port == "/dev/b"
     assert order == ["ports", "install", {"/dev/a"}]
+
+
+def site_ready(d, product=0):
+    wait_until(lambda: d.boards)
+    d.product_box.set_active(product)
+    wait_until(lambda: d.build())
+
+
+def test_the_site_list_is_for_the_found_chip_and_no_board_is_chosen_for_you(setup):
+    make, *_ = setup
+    d = make()
+    wait_until(lambda: d.boards)
+    assert d.product() is None and not d.install_btn.get_sensitive() and "Choose your board" in d.note.get_text()
+
+
+def test_the_default_version_is_the_latest_release_and_the_rest_are_opt_in(setup):
+    make, *_ = setup
+    d = make()
+    site_ready(d)
+    assert d.build().version == "v1.29.0" and len(d.shown_builds) == 1 and d.install_btn.get_sensitive()
+    assert "RPI_PICO-20260824-v1.29.0.uf2" in d.note.get_text()
+    d.all_builds.set_active(True)
+    assert len(d.shown_builds) == 3 and d.build().version == "v1.29.0"
+    assert "(latest)" in d.build_box.get_active_text()
+
+
+def test_no_list_says_why_and_a_file_can_still_be_used(setup, monkeypatch):
+    make, _, _, _, tmp = setup
+    monkeypatch.setattr(FakeCatalog, "boards_error", "Cannot read the site")
+    d = make()
+    wait_until(lambda: "Cannot read the site" in d.note.get_text())
+    assert not d.install_btn.get_sensitive()
+    monkeypatch.setattr(d.chooser, "get_filename", lambda: uf2(tmp / "good.uf2"), raising=False)
+    d.use_file.set_active(True)
+    assert d.install_btn.get_sensitive()
+
+
+def test_an_offline_list_says_so(setup, monkeypatch):
+    make, *_ = setup
+    monkeypatch.setattr(FakeCatalog, "saved", 1000000000.0)
+    d = make()
+    site_ready(d)
+    assert "Offline: using the list saved on" in d.note.get_text() and d.install_btn.get_sensitive()
+
+
+def test_install_from_the_site_downloads_checks_then_installs(setup, monkeypatch):
+    make, _, errors, _, tmp = setup
+    image = uf2(tmp / "site.uf2")
+    calls = []
+
+    def fake(path, drive, on_progress, on_stage, cancelled):
+        calls.append(path)
+        return fw.Installed("/dev/ttyACM9", "1.29.0", "Raspberry Pi Pico with RP2040")
+    monkeypatch.setattr(fw, "install_and_verify", fake)
+    d = make()
+    site_ready(d)
+    d.catalog.image = image
+    d.install()
+    wait_until(lambda: not d.running)
+    assert calls == [image] and d.catalog.asked.version == "v1.29.0" and not errors
+    assert fw.sha256_of(image) in d.note.get_text()
+
+
+def test_a_list_that_arrives_late_cannot_reenable_install_or_hide_the_result(setup, monkeypatch):
+    make, _, _, _, tmp = setup
+    monkeypatch.setattr(fw, "install_and_verify", lambda *a, **k: time.sleep(0.2) or fw.Installed("p", "1", "RP2040"))
+    d = make(uf2(tmp / "good.uf2"))
+    d.install()
+    d._boards_loaded((FakeCatalog.BOARDS, None), None)
+    assert d.running and not d.install_btn.get_sensitive()
+    wait_until(lambda: not d.running)
+    d._boards_loaded((FakeCatalog.BOARDS, None), None)
+    assert "Installed" in d.note.get_text() and not d.install_btn.get_sensitive()
+
+
+def test_a_bad_download_is_forgotten_and_never_written(setup):
+    make, _, errors, _, tmp = setup
+    d = make()
+    site_ready(d)
+    d.catalog.image = uf2(tmp / "wrong.uf2", family=ARM)
+    d.install()                                     # the fixture's stub fails the test if the install starts
+    wait_until(lambda: not d.running)
+    assert len(errors) == 1 and "not for the" in errors[0]
+    assert [b.version for b in d.catalog.forgotten] == ["v1.29.0"]
+
+
+def test_a_failed_install_from_the_site_can_be_tried_again(setup, monkeypatch):
+    make, _, errors, _, tmp = setup
+
+    def fake(*a, **k):
+        raise fw.FirmwareError("The board did not restart")
+    monkeypatch.setattr(fw, "install_and_verify", fake)
+    d = make()
+    site_ready(d)
+    d.catalog.image = uf2(tmp / "site.uf2")
+    d.install()
+    wait_until(lambda: not d.running)
+    assert errors and d.site_rows.get_sensitive()
+    wait_until(lambda: d.boards)
