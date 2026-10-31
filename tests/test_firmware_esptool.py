@@ -82,7 +82,7 @@ def test_flash_passes_the_port_and_offset_and_reports_progress(tmp_path):
     assert seen == [0.105, 0.5, 1.0]
     args = log.read_text()
     assert "--chip esp32s3 --port /dev/fake" in args and args.endswith("write-flash 0 " + image)
-    assert "--before no-reset" in args                  # a reset would drop a badge out of its ROM
+    assert "--before no-reset --after watchdog-reset" in args      # what worked on a real Tildagon
 
 
 def test_every_run_leaves_its_full_output_in_a_log(tmp_path):

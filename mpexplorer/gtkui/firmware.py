@@ -36,7 +36,7 @@ class FirmwareDialog(Gtk.Dialog):
         self.board_box.connect("changed", lambda _b: self._drive_changed())
         grid.attach(self.board_box, 1, 0, 1, 1)
 
-        self.use_site = Gtk.RadioButton(label="Download from micropython.org")
+        self.use_site = Gtk.RadioButton(label="Download it")
         self.use_file = Gtk.RadioButton(label="Use a file on this computer", group=self.use_site)
         self.use_site.connect("toggled", lambda _b: self._source_changed())
         grid.attach(self.use_site, 1, 1, 1, 1)
