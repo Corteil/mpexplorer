@@ -15,8 +15,8 @@ STEPS = ("To put a board in its bootloader:\n"
          "2022 badge: %s.\n"
          "Another ESP32-S3 board: %s." % (fw.PICO_STEPS, fw.BADGES["TILDAGON"].steps, fw.BADGES["TIDAL"].steps,
                                           fw.ESP32_STEPS))
-SAME_CHIP = ("The bootloader names the chip, not the board: a Pico and a Pico W read the same but need "
-             "different firmware. Choose your exact board.")
+PICK_RP2 = ("Choose your exact board: the bootloader only shows the chip, and a Pico and a Pico W need different "
+            "firmware.")
 NO_DEVICE = "No device found yet.\n\n" + STEPS
 
 
@@ -386,7 +386,6 @@ class FirmwareDialog(DeviceDialog):
                                      "first time MicroPython goes on an ESP32 board.")
         self.erase.get_child().set_line_wrap(True)
         box.pack_start(self.erase, False, False, 0)
-        box.pack_start(Gtk.Label(label=SAME_CHIP, xalign=0, wrap=True, sensitive=False), False, False, 0)
 
     def add_action_buttons(self):
         self.connect_btn = self.add_button("Connect", Gtk.ResponseType.APPLY)
@@ -523,7 +522,7 @@ class FirmwareDialog(DeviceDialog):
         elif not self.boards:
             text = self.list_error or "Reading the board list ..."
         elif not self.product():
-            text = "Choose your board. %s %s" % (self._not_a_badge(drive), self.list_error)
+            text = "%s %s" % (self._pick_board(drive), self.list_error)
         elif not self.build():
             text = self.list_error or ("Reading the versions ..." if not self.builds else "No release for this board: "
                                        "tick the box below Version to see other builds.")
@@ -534,10 +533,13 @@ class FirmwareDialog(DeviceDialog):
         return False
 
     @staticmethod
-    def _not_a_badge(drive):
+    def _pick_board(drive):
+        if drive.method == "uf2":
+            return PICK_RP2
         if drive.esp_chip and not drive.esp_chip.badge:
-            return "This chip does not match a badge, so none is listed (found %s)." % drive.esp_chip.text
-        return ""
+            return "Choose your board. This chip does not match a badge, so none is listed (found %s)." \
+                % drive.esp_chip.text
+        return "Choose your board."
 
     def _check_file(self, drive):
         path = self.chooser.get_filename()
