@@ -1100,11 +1100,16 @@ def test_pause_button_follows_edit_sessions_and_holds_uploads(make_app):
     assert app.pause_btn.get_visible() and not app.pause_btn.get_active()
     pump(300)
     assert 0.55 < app.bar.get_allocation().width / app.bar.get_parent().get_allocation().width < 0.65   # layout kept
+    assert app.pause_btn.get_label() == "Pause"
     app.pause_btn.set_active(True)
+    assert app.pause_btn.get_label() == "Resume"                        # the button offers the opposite action
+    pump(300)
+    assert 0.55 < app.bar.get_allocation().width / app.bar.get_parent().get_allocation().width < 0.65
     assert app.edits.paused and app.edits.sessions[0].watcher.paused
     app.settings.set("open_with.auto_upload", True)                     # the preference does not undo the button
     app.pause_btn.set_active(False)
     assert not app.edits.paused and not app.edits.sessions[0].watcher.paused
+    assert app.pause_btn.get_label() == "Pause"
     app.edits.sessions.clear()
     app._sync_pause_button()
     assert not app.pause_btn.get_visible()
@@ -1114,6 +1119,6 @@ def test_auto_upload_preference_starts_uploads_held(make_app):
     app = make_app(open_with__auto_upload=False)
     assert app.edits.paused
     app._sync_pause_button()
-    assert app.pause_btn.get_visible() and app.pause_btn.get_active()
+    assert app.pause_btn.get_visible() and app.pause_btn.get_active() and app.pause_btn.get_label() == "Resume"
     app.settings.set("open_with.auto_upload", True)
-    assert not app.edits.paused and not app.pause_btn.get_active()
+    assert not app.edits.paused and not app.pause_btn.get_active() and app.pause_btn.get_label() == "Pause"
