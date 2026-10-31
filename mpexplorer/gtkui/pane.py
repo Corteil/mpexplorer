@@ -202,6 +202,9 @@ class Pane(Gtk.Frame):
         app = self.app
         actions = {"Delete": app.delete, "F2": app.rename, "F5": self.refresh, "F7": app.new_folder,
                    "BackSpace": self.up}
+        if k in ("Return", "KP_Enter") and ev.state & Gdk.ModifierType.SHIFT_MASK and not ctrl:
+            app.open_with_selected()
+            return True
         if ctrl:
             actions = {"c": lambda: app.copy("copy"), "x": lambda: app.copy("cut"), "v": app.paste,
                        "a": self.select_all}

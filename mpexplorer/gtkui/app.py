@@ -122,6 +122,8 @@ class App(Gtk.Window):
         add(f, "Connect", self.connect_device)
         add(f, "Disconnect", self.disconnect)
         f.append(Gtk.SeparatorMenuItem())
+        add(f, "Open with...    Shift+Enter", self.open_with_selected)
+        f.append(Gtk.SeparatorMenuItem())
         add(f, "New folder    F7", self.new_folder)
         add(f, "New file", self.new_file)
         f.append(Gtk.SeparatorMenuItem())
@@ -301,7 +303,7 @@ class App(Gtk.Window):
             add("Open", self.active._open)
             entry = self.active.entry(sel[0][0])
             if entry and not entry.is_dir:
-                add("Open with...", lambda: self.choose_open_with(self.active, sel[0][1], entry.size))
+                add("Open with...", self.open_with_selected)
         other = self.other_pane(self.active)
         add("Send to %s" % other.title, lambda: self.transfer(self.active, other))
         m.append(Gtk.SeparatorMenuItem())
@@ -669,6 +671,16 @@ class App(Gtk.Window):
     def open_default(self, pane, path, size):
         """Double-click / Enter: the program saved for this file type, else the built-in editor."""
         self.open_with(pane, path, size, handler_for(self.settings, posixpath.basename(path)))
+
+    def open_with_selected(self):
+        """File menu / Shift+Enter / context menu: choose the program for the one selected file."""
+        pane = self.active
+        sel = pane.selected()
+        entry = pane.entry(sel[0][0]) if len(sel) == 1 else None
+        if entry is None or entry.is_dir:
+            info(self, "Open with", "Select one file first.")
+            return
+        self.choose_open_with(pane, sel[0][1], entry.size)
 
     def choose_open_with(self, pane, path, size):
         name = posixpath.basename(path)
