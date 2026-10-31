@@ -1,7 +1,7 @@
 # Plan: "Open with..." - choose the program that opens a file
 
 Status (2026-10-30): phases 1 and 2 are built and merged (`main` = `3ec4b95`). **Phase 3 is built on branch `open-with-chooser`
-(not merged, not tried by hand):** right-click > **Open with...** opens a dialog (`ask_open_with` in `gtkui/dialogs.py`) listing the
+(not merged; the owner tried it by hand on 2026-10-31 and reported it working, not itemised):** right-click > **Open with...** opens a dialog (`ask_open_with` in `gtkui/dialogs.py`) listing the
 built-in editor, "Run on the board" (device `.py`), every installed desktop app for the file's content type (`Gio.AppInfo`, with
 icons) and a custom command row (`geany {file}`), plus "Always use this for .ext files". Double-click / Enter now uses the saved
 program for the extension (`handler_for`), else the built-in editor. Host files launch directly; device files are edit-in-place
