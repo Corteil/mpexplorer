@@ -71,8 +71,8 @@ label if one is missing on another theme.
 ## 2e. Install firmware (plan: `docs/FIRMWARE_PLAN.md`)
 - [x] Phase 1: UF2 detection, image checks, copy and identify (`firmware.py`), fake drives only.
 - [x] Phase 2: Tools > Install firmware... with local files (Xvfb, fake drives).
-- [x] Owner installed v1.29.0 on an RP2040 Pico through the dialog (2026-10-31, reported working).
-- [ ] Same on a Pico 2 (also shows its real `INFO_UF2.TXT`); confirm that files stay.
+- [x] Owner installed v1.29.0 on an RP2040 Pico through the dialog (2026-10-31, reported working; its files survived).
+- [ ] Same on a Pico 2 (also shows its real `INFO_UF2.TXT`).
 - [ ] Erase option and recording installs in the settings.
 
 ## 2c. Agent mode (plan: `docs/AGENT_PLAN.md`)
