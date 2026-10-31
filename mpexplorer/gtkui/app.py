@@ -156,8 +156,8 @@ class App(Gtk.Window):
         add(d, "Set board time now", self.set_board_clock)
         add(d, "Soft reset", self.soft_reset)
         t = menu("Tools")
-        add(t, "Sync this folder to the other pane...", self.sync_folders)
-        add(t, "Install firmware...", self.install_firmware)
+        add(t, "Sync folders...", self.sync_folders)
+        add(t, "Firmware and flash...", self.install_firmware)
         w = menu("Window")
         w.connect("show", lambda m: self._fill_window_menu(m))
         return bar

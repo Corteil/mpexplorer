@@ -453,3 +453,93 @@ def test_a_2022_badge_is_offered_its_own_firmware_not_the_tildagons(setup, monke
     d = make()
     wait_until(lambda: d.boards)
     assert [b.id for b in d.boards] == ["TIDAL", "ESP32_GENERIC_S3"] and d.product() is None
+
+
+def test_a_running_pico_can_only_be_backed_up(setup):
+    make, drives, *_ = setup
+    drives[0] = fw.BootDrive("/dev/ttyACM1", "MicroPython", "MicroPython", None, "repl")
+    d = make()
+    assert d.board_box.get_active_text() == "Running MicroPython at /dev/ttyACM1"
+    assert d.backup_btn.get_sensitive() and not d.erase_btn.get_sensitive() and not d.install_btn.get_sensitive()
+    assert "hold BOOTSEL" in d.note.get_text()
+
+
+def test_a_uf2_drive_can_be_erased_but_not_backed_up(setup):
+    make, *_ = setup
+    d = make()
+    assert d.erase_btn.get_sensitive() and not d.backup_btn.get_sensitive()
+    assert "start it normally" in d.backup_btn.get_tooltip_text()
+
+
+def test_tools_wait_for_the_esp_chip_to_be_read(setup, monkeypatch):
+    make, drives, *_ = setup
+
+    def fails(port):
+        raise fw.FirmwareError("Cannot read the chip")
+    rom_with(monkeypatch, drives, fails)
+    d = make()
+    wait_until(lambda: "Cannot read the chip" in d.note.get_text())
+    assert not d.backup_btn.get_sensitive() and not d.erase_btn.get_sensitive()
+
+
+def test_backing_up_a_running_pico_reports_where_it_went(setup, monkeypatch):
+    make, drives, errors, _, tmp = setup
+    drives[0] = fw.BootDrive("/dev/ttyACM1", "MicroPython", "MicroPython", None, "repl")
+    out = tmp / "b.uf2"
+
+    def fake(port, path, progress, cancelled):
+        out.write_bytes(b"data")
+        return fw.Backup(path, 4, "Raspberry Pi Pico with RP2040")
+    monkeypatch.setattr(fw, "backup_repl", fake)
+    d = make()
+    monkeypatch.setattr(d, "_ask_backup_path", lambda drive: str(out))
+    d.backup()
+    wait_until(lambda: not d.running)
+    assert not errors and str(out) in d.note.get_text() and fw.sha256_of(str(out)) in d.note.get_text()
+
+
+def test_cancelling_the_file_box_starts_nothing(setup, monkeypatch):
+    make, drives, *_ = setup
+    drives[0] = fw.BootDrive("/dev/ttyACM1", "MicroPython", "MicroPython", None, "repl")
+    monkeypatch.setattr(fw, "backup_repl", lambda *a: pytest.fail("started"))
+    d = make()
+    monkeypatch.setattr(d, "_ask_backup_path", lambda drive: None)
+    d.backup()
+    assert not d.running
+
+
+@pytest.mark.parametrize("answers", [[False], [True, False]])
+def test_erase_asks_twice_and_either_no_stops_it(setup, monkeypatch, answers):
+    make, *_ = setup
+    replies = iter(answers)
+    monkeypatch.setattr(dialog, "ask_yes_no", lambda *a: next(replies))
+    monkeypatch.setattr(fw, "erase_uf2", lambda *a: pytest.fail("erased"))
+    d = make()
+    d.erase_flash()
+    assert not d.running
+
+
+def test_erasing_a_uf2_board_gets_the_tool_checks_it_and_says_it_is_empty(setup, monkeypatch):
+    make, _, errors, _, tmp = setup
+    tool = tmp / "nuke.uf2"
+    tool.write_bytes(b"tool")
+    ran = []
+    monkeypatch.setattr(FakeCatalog, "erase_tool", lambda self, p, c: str(tool), raising=False)
+    monkeypatch.setattr(fw, "check_nuke_uf2", lambda path: ran.append("checked"))
+    monkeypatch.setattr(fw, "erase_uf2", lambda image, drive, p, c: ran.append(image))
+    d = make()
+    d.erase_flash()
+    wait_until(lambda: not d.running)
+    assert ran == ["checked", str(tool)] and not errors and "no firmware now" in d.note.get_text()
+
+
+def test_a_bad_erase_tool_is_dropped_and_nothing_is_erased(setup, monkeypatch):
+    make, _, errors, _, tmp = setup
+    tool = tmp / "nuke.uf2"
+    tool.write_bytes(b"tool")
+    monkeypatch.setattr(FakeCatalog, "erase_tool", lambda self, p, c: str(tool), raising=False)
+    monkeypatch.setattr(fw, "erase_uf2", lambda *a: pytest.fail("erased"))
+    d = make()
+    d.erase_flash()
+    wait_until(lambda: not d.running)
+    assert len(errors) == 1 and d.catalog.forgotten[-1].filename == "flash_nuke.uf2"
