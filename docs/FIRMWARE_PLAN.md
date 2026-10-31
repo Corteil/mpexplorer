@@ -76,7 +76,7 @@ Rules:
 - Record what was installed in the settings: board id, image name, SHA-256.
 
 ## 2022 badge (2026-10-31)
-Reads as `ESP32-S3 (QFN56)`, 8 MB embedded flash, no PSRAM, which is a commoner chip than the Tildagon's, so more breakouts can read the same. Normal USB is `16d0:1114`; it must not be soft-reset after an install. Different partition layout from the Tildagon's (file area at 0x410000), so the images must not be swapped: each chip only sees its own. esptool `--no-stub` fails if a stub is already running, so the chip read no longer uses it. Code tested with fakes; **no real write yet**. Its own README says it may enter light sleep at boot, so the restart still needs seeing.
+Reads as `ESP32-S3 (QFN56)`, 8 MB embedded flash, no PSRAM, which is a commoner chip than the Tildagon's, so more breakouts can read the same. Normal USB is `16d0:1114`; it must not be soft-reset after an install. Different partition layout from the Tildagon's (file area at 0x410000), so the images must not be swapped: each chip only sees its own. esptool `--no-stub` fails if a stub is already running, so the chip read no longer uses it. The owner installed through the dialog on a real one (2026-10-31, reported working). Not yet tried: the second 2022 badge, or erase on this badge.
 
 ## Phases
 1. **Pico and Pico 2, logic:** `detect`, `check_image`, UF2 copy, `verify`, tests with a fake drive.
