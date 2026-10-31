@@ -20,7 +20,10 @@ VARIANT_NAMES = {"RISCV": "RISC-V"}
 _CARD = re.compile(r'<a class="board-card" href="([A-Z0-9][A-Za-z0-9_\-]*)/?">(.*?)</a>', re.S)
 _PRODUCT = re.compile(r'class="board-product">(.*?)</div>', re.S)
 _VENDOR = re.compile(r'class="board-vendor">(.*?)</div>', re.S)
-_LINK = re.compile(r'href="%s([^"/]+\.uf2)"' % re.escape(FIRMWARE_PATH))
+_LINK = re.compile(r'href="%s([^"/]+)"' % re.escape(FIRMWARE_PATH))
+EXTENSIONS = {"esp32s3": ".bin"}        # the full image for esptool; default .uf2, for a UF2 drive
+# On the site, but its page says to use dfu-util, and erasing it loses its DFU bootloader.
+NOT_FOR_ESPTOOL = {"ARDUINO_NANO_ESP32"}
 
 
 @dataclass
@@ -72,9 +75,10 @@ def parse_boards(text):
     return sorted(boards, key=lambda b: b.label.lower())
 
 
-def parse_builds(text, board_id):
-    """UF2 builds on a board's page, newest first. Names look like BOARD[-VARIANT]-YYYYMMDD-vX.Y.Z[-preview...].uf2."""
-    name = re.compile(r"%s(?:-([A-Z0-9_]+))?-(\d{4})(\d\d)(\d\d)-(v[0-9A-Za-z.\-]+)\.uf2" % re.escape(board_id))
+def parse_builds(text, board_id, ext=".uf2"):
+    """A board's builds of one file type, newest first. Names: BOARD[-VARIANT]-YYYYMMDD-vX.Y.Z[-preview...].ext"""
+    name = re.compile(r"%s(?:-([A-Z0-9_]+))?-(\d{4})(\d\d)(\d\d)-(v[0-9A-Za-z.\-]+)%s"
+                      % (re.escape(board_id), re.escape(ext)))
     builds = {}
     for filename in _LINK.findall(text):
         m = name.fullmatch(filename)
@@ -145,16 +149,23 @@ class Catalog:
         os.replace(tmp, path)
         return items, None
 
-    def boards(self, chip):
-        if chip in BADGE_BOARDS:
-            return list(BADGE_BOARDS[chip]), None
-        return self._list("boards-%s.json" % chip, "%s/download/?mcu=%s" % (BASE, chip), parse_boards, Board)
+    def boards(self, chip, badges=True):
+        """(boards, saved). The badges come first if asked for, and survive the site being out of reach."""
+        first = list(BADGE_BOARDS.get(chip, [])) if badges else []
+        try:
+            site, saved = self._list("boards-%s.json" % chip, "%s/download/?mcu=%s" % (BASE, chip), parse_boards, Board)
+        except FirmwareError:
+            if first:
+                return first, None
+            raise
+        return first + [b for b in site if b.id not in NOT_FOR_ESPTOOL], saved
 
-    def builds(self, board_id):
+    def builds(self, board_id, chip=None):
         if board_id in BADGE_BUILDS:
             return list(BADGE_BUILDS[board_id]), None
+        ext = EXTENSIONS.get(chip, ".uf2")
         return self._list("builds-%s.json" % board_id, "%s/download/%s/" % (BASE, board_id),
-                          lambda text: parse_builds(text, board_id), Build)
+                          lambda text: parse_builds(text, board_id, ext), Build)
 
     def path_of(self, build):
         if os.path.basename(build.filename) != build.filename or not build.filename.endswith((".uf2", ".bin")):

@@ -101,6 +101,21 @@ def test_flash_passes_the_port_and_offset_and_reports_progress(tmp_path):
     assert "--before no-reset --after watchdog-reset" in args      # what worked on a real Tildagon
 
 
+def test_erase_is_only_asked_for_when_chosen(tmp_path):
+    log = tmp_path / "args.txt"
+    tool = fake_tool(tmp_path, "open(%r, 'w').write(' '.join(args))\n" % str(log))
+    image = write(tmp_path, esp_image())
+    fw.flash_esptool(image, ROM, tool=tool)
+    assert "--erase-all" not in log.read_text()
+    fw.flash_esptool(image, ROM, tool=tool, erase=True)
+    assert log.read_text().endswith("write-flash --erase-all 0 " + image)
+
+
+def test_a_breakout_with_a_tildagons_chip_is_not_waited_for_when_its_own_firmware_was_chosen(monkeypatch):
+    order = steps(monkeypatch)
+    assert fw.install_and_verify("img", CHECKED, expect_tildagon=False).port == "" and order == ["ports", "flash"]
+
+
 def test_every_run_leaves_its_full_output_in_a_log(tmp_path):
     tool = fake_tool(tmp_path, "print('line one')\nprint('fatal: line two')\nsys.exit(2)\n")
     with pytest.raises(fw.FirmwareError, match="Full output: .*esptool.log"):
@@ -187,7 +202,7 @@ def steps(monkeypatch, ports=None, wait_error=None):
     order = []
     monkeypatch.setattr(fw, "read_esp_chip", lambda port: TILDAGON)
     monkeypatch.setattr(fw, "tildagon_ports", lambda: order.append("ports") or set())
-    monkeypatch.setattr(fw, "flash_esptool", lambda *a: order.append("flash"))
+    monkeypatch.setattr(fw, "flash_esptool", lambda *a, **k: order.append("flash"))
 
     def wait(before, timeout, ports):
         order.append("wait")

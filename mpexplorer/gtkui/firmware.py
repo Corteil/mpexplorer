@@ -5,12 +5,13 @@ import threading
 from .. import firmware as fw
 from ..backends import human
 from ..errors import Cancelled
-from ..firmware_catalog import Catalog, default_build, saved_text
+from ..firmware_catalog import BADGE_BOARDS, Catalog, default_build, saved_text
 from .common import GLib, Gtk, ask_yes_no, error
 
 STEPS = ("Pico or Pico 2: hold the BOOTSEL button while plugging it in.\n"
          "Tildagon: power it off from its menu, then hold boop while plugging USB into USB in. Keep holding for a "
          "few seconds.\n"
+         "Another ESP32-S3 board: hold its BOOT button while plugging it in.\n"
          "The board appears here, and any serial connection to it ends.")
 SAME_CHIP = ("The bootloader names the chip, not the board: a Pico and a Pico W read the same but need "
              "different firmware. Choose your exact board.")
@@ -67,6 +68,10 @@ class FirmwareDialog(Gtk.Dialog):
         grid.attach(self.chooser, 1, 4, 1, 1)
         box.pack_start(grid, False, False, 0)
 
+        self.erase = Gtk.CheckButton(label="Erase the whole flash first. This removes all files. The usual advice the "
+                                     "first time MicroPython goes on an ESP32 board.")
+        self.erase.get_child().set_line_wrap(True)
+        box.pack_start(self.erase, False, False, 0)
         box.pack_start(Gtk.Label(label=SAME_CHIP, xalign=0, wrap=True, sensitive=False), False, False, 0)
         self.note = Gtk.Label(xalign=0, wrap=True, selectable=True)
         box.pack_start(self.note, False, False, 0)
@@ -158,12 +163,12 @@ class FirmwareDialog(Gtk.Dialog):
         self._check()
 
     def _list_for(self, drive):
-        """The chip to list boards for. On esptool, only once the chip has been read and matches a board we know."""
-        if not drive:
+        """(chip, include the badges) to list boards for. On esptool, only once the chip has been read."""
+        if not drive or not drive.chip:
             return None
         if drive.method != "esptool":
-            return drive.chip
-        return drive.chip if drive.esp_chip and drive.esp_chip.looks_like_tildagon() else None
+            return drive.chip, True
+        return (drive.chip, drive.esp_chip.looks_like_tildagon()) if drive.esp_chip else None
 
     def _read_chip(self, drive):
         self.chip_reading = drive.path
@@ -178,12 +183,12 @@ class FirmwareDialog(Gtk.Dialog):
         self._in_background(lambda: fw.read_esp_chip(drive.path), done)
 
     # -- the site's lists ----------------------------------------------------
-    def _load_boards(self, chip):
+    def _load_boards(self, key):
         self.boards, self.builds, self.list_error = [], [], ""
         self.product_box.remove_all()
         self.build_box.remove_all()
-        if chip:
-            self._in_background(lambda: self.catalog.boards(chip), self._boards_loaded)
+        if key:
+            self._in_background(lambda: self.catalog.boards(*key), self._boards_loaded)
 
     def _boards_loaded(self, res, exc):
         if exc:
@@ -203,9 +208,9 @@ class FirmwareDialog(Gtk.Dialog):
         self.outcome = ""
         self.builds = []
         self.build_box.remove_all()
-        board = self.product()
-        if board:
-            self._in_background(lambda: self.catalog.builds(board.id), self._builds_loaded)
+        board, drive = self.product(), self.drive()
+        if board and drive:
+            self._in_background(lambda: self.catalog.builds(board.id, drive.chip), self._builds_loaded)
         self._check()
 
     def _builds_loaded(self, res, exc):
@@ -244,6 +249,10 @@ class FirmwareDialog(Gtk.Dialog):
         if self.running or self.result:     # a list can arrive late: it must not touch a running or finished install
             return
         drive, self.info = self.drive(), None
+        esp = bool(drive and drive.method == "esptool")
+        self.erase.set_sensitive(esp)
+        if not esp:
+            self.erase.set_active(False)
         if self.use_site.get_active():
             ready = self._check_site(drive)
         else:
@@ -271,15 +280,12 @@ class FirmwareDialog(Gtk.Dialog):
             text = "No board in its bootloader yet."
         elif problem:
             text = problem
-        elif drive.esp_chip and not drive.esp_chip.looks_like_tildagon():
-            text = ("This ESP32-S3 does not match a Tildagon (found %s). The app has no download for it: "
-                    "use a file made for your board." % drive.esp_chip.text)
         elif not drive.chip:
             text = "No list for this bootloader: use a file instead."
         elif not self.boards:
             text = self.list_error or "Reading the board list ..."
         elif not self.product():
-            text = "Choose your board. %s" % self.list_error
+            text = "Choose your board. %s %s" % (self._not_tildagon(drive), self.list_error)
         elif not self.build():
             text = self.list_error or ("Reading the versions ..." if not self.builds else "No release for this board: "
                                        "tick the box below Version to see other builds.")
@@ -288,6 +294,12 @@ class FirmwareDialog(Gtk.Dialog):
             return True
         self.note.set_text(text.strip())
         return False
+
+    @staticmethod
+    def _not_tildagon(drive):
+        if drive.esp_chip and not drive.esp_chip.looks_like_tildagon():
+            return "This chip does not match a Tildagon, so that is not listed (found %s)." % drive.esp_chip.text
+        return ""
 
     def _check_file(self, drive):
         path = self.chooser.get_filename()
@@ -330,6 +342,11 @@ class FirmwareDialog(Gtk.Dialog):
         drive = self.drive()
         site = self.use_site.get_active()
         build, path = (self.build(), None) if site else (None, self.chooser.get_filename())
+        options = {}
+        if drive.method == "esptool":
+            options["erase"] = self.erase.get_active()
+            if site:
+                options["expect_tildagon"] = self.product().id in [b.id for b in BADGE_BOARDS["esp32s3"]]
         what = "%s for the %s" % (build.label, self.product().label) if site else os.path.basename(path)
         also = "\n\nmpexplorer will disconnect from the current board first." if self.app.device else ""
         if drive.esp_chip:
@@ -339,6 +356,9 @@ class FirmwareDialog(Gtk.Dialog):
                           "board in its bootloader. Files on the board usually stay, but copy off anything you "
                           "need first.%s" % (what, fw.CHIP_NAMES[drive.chip], drive.path, also)):
             return
+        if options.get("erase") and not ask_yes_no(self, "Erase the flash", "Erase everything on the board first? Its "
+                                                   "files cannot be recovered."):
+            return
         self.app.disconnect()
         self.running, self.outcome = True, ""
         self.cancel_event.clear()
@@ -347,7 +367,7 @@ class FirmwareDialog(Gtk.Dialog):
         self.bar.set_fraction(0)
         self.bar.show()
         for w in (self.install_btn, self.close_btn, self.board_box, self.chooser, self.site_rows, self.use_site,
-                  self.use_file):
+                  self.use_file, self.erase):
             w.set_sensitive(False)
 
         def progress(done, total):
@@ -362,7 +382,7 @@ class FirmwareDialog(Gtk.Dialog):
                 image = self._fetch(build, path, drive, progress, stage)
                 sha = fw.sha256_of(image)
                 res = fw.install_and_verify(image, drive, on_progress=progress, on_stage=stage,
-                                            cancelled=self.cancel_event.is_set)
+                                            cancelled=self.cancel_event.is_set, **options)
             except Exception as e:
                 exc = e
             GLib.idle_add(self._finished, res, sha, exc)
@@ -387,8 +407,8 @@ class FirmwareDialog(Gtk.Dialog):
         self.close_btn.set_sensitive(True)
         if res and not res.port:
             self.result = res
-            self.note.set_text("Written and checked. This is not a Tildagon, so the app cannot confirm it started: "
-                               "reset the board yourself and Scan for its port.\nSHA-256 %s" % sha)
+            self.note.set_text("Written and checked. The app cannot follow this board as it starts: reset it "
+                               "yourself and Scan for its port.\nSHA-256 %s" % sha)
             return
         if res:
             self.result = res

@@ -181,12 +181,46 @@ def test_a_bad_name_from_a_saved_list_cannot_leave_the_cache(tmp_path, name):
 
 
 def test_the_tildagon_comes_from_the_table_without_the_network(tmp_path):
-    site = Site({})
-    c = cat.Catalog(str(tmp_path), site)
-    boards, saved = c.boards("esp32s3")
+    c = cat.Catalog(str(tmp_path), Site({}))
+    boards, saved = c.boards("esp32s3")             # the site is out of reach: the badge is still there
     assert [b.id for b in boards] == ["TILDAGON"] and saved is None
-    builds, _ = c.builds("TILDAGON")
+    site = Site({})
+    builds, _ = cat.Catalog(str(tmp_path), site).builds("TILDAGON")
     assert cat.default_build(builds).url == cat.EMF_FLASHER and not site.asked
+
+
+S3_INDEX = """
+<a class="board-card" href="ESP32_GENERIC_S3"><div class="board-product">ESP32-S3</div>
+<div class="board-vendor">Espressif</div></a>
+<a class="board-card" href="ARDUINO_NANO_ESP32"><div class="board-product">Nano ESP32</div>
+<div class="board-vendor">Arduino</div></a>
+"""
+S3_PAGE = """
+<a href="/resources/firmware/ESP32_GENERIC_S3-20260824-v1.29.0.uf2">uf2</a>
+<a href="/resources/firmware/ESP32_GENERIC_S3-20260824-v1.29.0.app-bin">app</a>
+<a href="/resources/firmware/ESP32_GENERIC_S3-20260824-v1.29.0.bin">bin</a>
+<a href="/resources/firmware/ESP32_GENERIC_S3-20260824-v1.29.0.meta.zip">meta</a>
+<a href="/resources/firmware/ESP32_GENERIC_S3-SPIRAM_OCT-20260824-v1.29.0.bin">octal</a>
+"""
+
+
+def test_esp32s3_boards_follow_the_badge_and_a_chip_that_differs_gets_no_badge(tmp_path):
+    c = cat.Catalog(str(tmp_path), Site({index_url("esp32s3"): S3_INDEX.encode()}))
+    assert [b.id for b in c.boards("esp32s3")[0]] == ["TILDAGON", "ESP32_GENERIC_S3"]
+    assert [b.id for b in c.boards("esp32s3", badges=False)[0]] == ["ESP32_GENERIC_S3"]
+
+
+def test_a_chip_that_differs_is_told_when_the_site_is_out_of_reach(tmp_path):
+    with pytest.raises(FirmwareError, match="Cannot read"):
+        cat.Catalog(str(tmp_path), Site({})).boards("esp32s3", badges=False)
+
+
+def test_esp32s3_builds_are_the_full_bin_and_never_the_uf2_or_app_bin(tmp_path):
+    url = page_url("ESP32_GENERIC_S3")
+    builds, _ = cat.Catalog(str(tmp_path), Site({url: S3_PAGE.encode()})).builds("ESP32_GENERIC_S3", "esp32s3")
+    assert sorted(b.filename for b in builds) == ["ESP32_GENERIC_S3-20260824-v1.29.0.bin",
+                                                  "ESP32_GENERIC_S3-SPIRAM_OCT-20260824-v1.29.0.bin"]
+    assert cat.default_build(builds).filename == "ESP32_GENERIC_S3-20260824-v1.29.0.bin"
 
 
 def test_a_file_that_changes_under_one_name_is_read_again_and_the_copy_is_the_fallback(tmp_path):
