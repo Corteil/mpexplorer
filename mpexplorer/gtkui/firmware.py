@@ -9,7 +9,8 @@ from ..firmware_catalog import Catalog, default_build, saved_text
 from .common import GLib, Gtk, ask_yes_no, error
 
 STEPS = ("Pico or Pico 2: hold the BOOTSEL button while plugging it in.\n"
-         "Tildagon: unplug USB, hold the bat and boop buttons for 20 seconds, then plug USB back in.\n"
+         "Tildagon: power it off from its menu, then hold boop while plugging USB into USB in. Keep holding for a "
+         "few seconds.\n"
          "The board appears here, and any serial connection to it ends.")
 SAME_CHIP = ("The bootloader names the chip, not the board: a Pico and a Pico W read the same but need "
              "different firmware. Choose your exact board.")
