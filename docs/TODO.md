@@ -74,8 +74,10 @@ label if one is missing on another theme.
 - [ ] Then, decide with the owner whether to build an upload-focused agent first. Check data integrity at 100+ KB/s on stdin
       (the 2026-10-29 measurement only counted bytes). `agent_src.py` + `AgentLink` (CPython tests), `AgentBackend` with
       fallback, GUI "Fast mode" toggle, pipelining.
-- [ ] Find out why the Tildagon's stdout is capped near 11 KB/s (firmware USB serial flush/tick?). Fixing that would speed up
-      downloads far more than anything on our side.
+- [x] Find out why the Tildagon's stdout is capped near 11 KB/s: stdout also goes to UART0 at 115200 and the UART wait is about
+      10 ms (see "Board output" in `docs/HANDOFF.md`).
+- Not doing (owner, 2026-10-31): a firmware change to lift the cap (`MICROPY_HW_ENABLE_UART_REPL` 0, confirmed 1 kHz tick).
+  Badge files are tiny on average, so the speed does not matter in practice.
 
 ## 3. Release and housekeeping
 - [ ] Merge the `handoff-2026-10-28` branch (docs and `tools/`) when the owner says so.
