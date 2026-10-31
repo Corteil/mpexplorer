@@ -390,8 +390,13 @@ with `winfo_rootx()`-style calls: find the window by differencing `grim` screens
 - **Raw-paste window is 128 bytes on the Tildagon** (it stops and waits for the device every 128 bytes, about 8.7 ms per window
   over USB, about 15 KB/s of code text); plain sending (256-byte blocks, 5 ms apart) is about 35 KB/s. Hence the adaptive mode.
 - **Board output to the host is capped near 10.7 KB/s** whatever is printed or how (`print`, `sys.stdout.write`,
-  `sys.stdout.buffer.write`, any chunk size), also with a bare blocking pyserial read. Not our code; cause unknown.
+  `sys.stdout.buffer.write`, any chunk size), also with a bare blocking pyserial read. Not our code.
   Host -> board has no such cap: `sys.stdin.buffer.read` with no pauses took in about 118 KB/s.
+  Cause (2026-10-31): `tildagon/mpconfigboard.h` sets `MICROPY_HW_ENABLE_UART_REPL` to 1, so `mp_hal_stdout_tx_strn` writes
+  everything to UART0 at 115200 (11.25 KB/s), blocking, before USB CDC. Dividing UART0's clock divider by 4 to 32 by register
+  gave only 12.5-13.8 KB/s (data intact): when its 128-byte FIFO is full the UART loop waits one tick, and on the running
+  firmware `select.poll(1)` takes about 10 ms, which suggests a 100 Hz tick (inferred; the local build's sdkconfig says 1000 Hz).
+  Not tested: firmware with the UART REPL off or a 1 kHz tick. `machine.UART(0, ...)` fails with `ESP_ERR_INVALID_STATE`.
 - **`os.stat` is about 40 ms per file on the Tildagon's FAT**; `os.ilistdir` is 8-18 ms per entry and includes the size (mount
   points such as `/sdcard` come back as 3-item tuples without one, so those still fall back to `stat`).
 - **Badge RTC is UTC by convention** and holds time across a soft reset, but not power loss (no battery): it reads 2000-01-01
