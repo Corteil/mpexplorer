@@ -752,7 +752,24 @@ def test_the_2022_badge_gets_its_buttons_not_the_bootloader_button(setup):
     drives[0] = TIDAL_RUNNING
     d = make()
     assert d.board_box.get_active_text() == "TiDAL (2022 badge) at /dev/ttyACM2"
-    assert not d.boot_btn.get_visible() and "bottom right" in d.note.get_text()
+    assert not d.boot_btn.get_visible() and "bottom right" in d.details.get_text()
+    assert "boop" not in d.details.get_text()       # only this device's steps
+
+
+def test_the_steps_change_with_the_device_chosen(setup):
+    make, drives, *_ = setup
+    drives[:] = [TILDAGON_RUNNING, TIDAL_RUNNING]
+    d = make(cls=dialog.BackupDialog)
+    assert "boop" in d.details.get_text()
+    d.board_box.set_active(1)
+    assert "bottom right" in d.details.get_text() and "boop" not in d.details.get_text()
+
+
+def test_with_nothing_found_all_the_steps_are_shown(setup):
+    make, drives, *_ = setup
+    drives.clear()
+    text = make(cls=dialog.EraseDialog).details.get_text()
+    assert "BOOTSEL" in text and "boop" in text and "bottom right" in text and "BOOT button" in text
 
 
 def test_a_running_badge_is_sent_to_its_rom_and_the_tool_moves_to_it(setup, monkeypatch):

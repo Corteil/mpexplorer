@@ -318,10 +318,25 @@ def test_a_running_badge_is_named_by_usb_without_opening_its_port(monkeypatch):
     assert [fw.can_enter_bootloader(d) for d in found] == [True, False]
     assert "Put in bootloader" in fw.running_badge_hint(found[0])
     assert "Put in bootloader" not in fw.running_badge_hint(found[1])
-    assert "bottom right" in fw.running_badge_hint(found[1])
+    assert "bottom right" in dict(fw.device_details(found[1]))["How to reach its bootloader"]
 
 
 def test_a_badge_entering_its_bootloader_is_watched_for_as_a_rom_port():
     answers = iter([[], [ROM]])
     repl = BootRepl()
     assert fw.enter_bootloader("/dev/x", poll=0, open_board=opener(repl), find=lambda: next(answers)) == ROM
+
+
+@pytest.mark.parametrize("drive, words", [
+    (fw.BootDrive("/dev/a", "m", "MicroPython", None, "repl"), "BOOTSEL"),
+    (fw.BootDrive("/m/d", "m", "RP2350", "rp2350"), "BOOTSEL"),
+    (fw.BootDrive("/dev/t", "m", "TILDAGON", None, "badge"), "boop"),
+    (fw.BootDrive("/dev/t", "m", "TIDAL", None, "badge"), "bottom right"),
+    (ROM, "boop"),
+    (fw.BootDrive("/dev/b", "m", "E", "esp32s3", "esptool", fw.EspChip("ESP32-S3", 8, None)), "bottom right"),
+    (fw.BootDrive("/dev/b", "m", "E", "esp32s3", "esptool", fw.EspChip("ESP32-S3", 16, 8)), "BOOT button"),
+    (fw.BootDrive("/dev/b", "m", "E", "esp32s3", "esptool"), "BOOT button"),
+    (fw.BootDrive("/m/d", "m", "X", None), "instructions for this board"),
+])
+def test_each_kind_of_device_shows_its_own_bootloader_steps(drive, words):
+    assert words in dict(fw.device_details(drive))["How to reach its bootloader"]
