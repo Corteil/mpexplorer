@@ -8,8 +8,9 @@ from ..errors import Cancelled
 from ..firmware_catalog import Catalog, default_build, saved_text
 from .common import GLib, Gtk, ask_yes_no, error
 
-STEPS = ("Hold the BOOTSEL button while plugging the Pico or Pico 2 in. It appears here as a USB drive, "
-         "and any serial connection to it ends.")
+STEPS = ("Pico or Pico 2: hold the BOOTSEL button while plugging it in.\n"
+         "Tildagon: unplug USB, hold the bat and boop buttons for 20 seconds, then plug USB back in.\n"
+         "The board appears here, and any serial connection to it ends.")
 SAME_CHIP = ("The bootloader names the chip, not the board: a Pico and a Pico W read the same but need "
              "different firmware. Choose your exact board.")
 
@@ -20,7 +21,7 @@ class FirmwareDialog(Gtk.Dialog):
         self.app, self.drives, self.info, self.running, self.result = app, [], None, False, None
         self.catalog = Catalog()
         self.boards, self.builds, self.shown_builds, self.list_chip, self.list_error = [], [], [], None, ""
-        self.load_id, self.closed, self.outcome = 0, False, ""
+        self.load_id, self.closed, self.outcome, self.tool_problem = 0, False, "", ""
         self.cancel_event = threading.Event()
         self.set_default_size(560, -1)
         box = self.get_content_area()
@@ -55,9 +56,10 @@ class FirmwareDialog(Gtk.Dialog):
         grid.attach(self.use_file, 1, 3, 1, 1)
         self.chooser = Gtk.FileChooserButton(title="Choose a firmware file", action=Gtk.FileChooserAction.OPEN)
         uf2 = Gtk.FileFilter()
-        uf2.set_name("UF2 firmware (*.uf2)")
+        uf2.set_name("Firmware (*.uf2, *.bin)")
         uf2.add_pattern("*.uf2")
         uf2.add_pattern("*.UF2")
+        uf2.add_pattern("*.bin")
         self.chooser.add_filter(uf2)
         self.chooser.connect("file-set", lambda _c: self._check())
         grid.attach(self.chooser, 1, 4, 1, 1)
@@ -109,7 +111,7 @@ class FirmwareDialog(Gtk.Dialog):
     # -- what is plugged in ------------------------------------------------
     def scan(self):
         """Keep the list current, so a board shows up as soon as it is plugged in."""
-        found = fw.detect()
+        found = fw.detect_all()
         if [d.path for d in found] == [d.path for d in self.drives]:
             return
         chosen = self.drive()
@@ -138,6 +140,12 @@ class FirmwareDialog(Gtk.Dialog):
         if chip != self.list_chip:
             self.list_chip = chip
             self._load_boards(chip)
+        self.tool_problem = ""
+        if drive and drive.method == "esptool":
+            try:
+                fw.find_esptool()
+            except fw.FirmwareError as e:
+                self.tool_problem = str(e)
         self._check()
 
     # -- the site's lists ----------------------------------------------------
@@ -211,6 +219,9 @@ class FirmwareDialog(Gtk.Dialog):
             ready = self._check_site(drive)
         else:
             ready = self._check_file(drive)
+        if ready and self.tool_problem:
+            self.note.set_text(self.tool_problem)
+            ready = False
         self.install_btn.set_sensitive(ready)
         if self.outcome:
             self.note.set_text(self.outcome)
@@ -241,7 +252,7 @@ class FirmwareDialog(Gtk.Dialog):
             self.note.set_text("Choose a firmware file.")
         else:
             try:
-                self.info = fw.check_uf2(path, drive.chip)
+                self.info = fw.check_image(path, drive.chip)
                 self.note.set_text("%s: %s firmware for the %s, %s\nSHA-256 %s" % (
                     os.path.basename(path), self.info.cpu, fw.CHIP_NAMES[drive.chip], human(self.info.size),
                     fw.sha256_of(path)))
@@ -307,7 +318,7 @@ class FirmwareDialog(Gtk.Dialog):
         stage("Getting %s" % build.filename)
         image = self.catalog.download(build, on_progress=progress, cancelled=self.cancel_event.is_set)
         try:
-            fw.check_uf2(image, drive.chip)
+            fw.check_image(image, drive.chip)
         except fw.FirmwareError:
             self.catalog.forget(build)          # the next try downloads it again
             raise

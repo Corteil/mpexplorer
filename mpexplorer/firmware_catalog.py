@@ -12,6 +12,8 @@ from .errors import Cancelled
 from .firmware import MAX_IMAGE, FirmwareError
 
 BASE = "https://micropython.org"
+EMF_FLASHER = "https://emfcamp.github.io/badge-2024-software/merged-firmware.bin"
+ALLOWED = (BASE + "/", "https://emfcamp.github.io/")
 FIRMWARE_PATH = "/resources/firmware/"
 TIMEOUT = 20
 VARIANT_NAMES = {"RISCV": "RISC-V"}
@@ -39,11 +41,20 @@ class Build:
     date: str               # YYYY-MM-DD
     variant: str            # "" for the standard build
     preview: bool
+    url: str = ""           # set for a file that changes under one name; otherwise it is on micropython.org
 
     @property
     def label(self):
+        if not self.date:
+            return self.version
         extras = [VARIANT_NAMES.get(self.variant, self.variant)] if self.variant else []
         return "%s (%s)%s" % (self.version, self.date, "  " + ", ".join(extras) if extras else "")
+
+
+# Boards that micropython.org does not build for. The web flasher's "Latest" is the only full image they publish.
+BADGE_BOARDS = {"esp32s3": [Board("TILDAGON", "Tildagon (2024, 2026)", "EMF Camp")]}
+BADGE_BUILDS = {"TILDAGON": [Build("TILDAGON-merged-firmware.bin", "Latest from the EMF flasher", "", "", False,
+                                   EMF_FLASHER)]}
 
 
 def default_build(builds):
@@ -89,11 +100,11 @@ class Catalog:
         self.dir, self.opener = cache_dir or default_cache_dir(), opener
 
     def _read(self, url, limit, on_progress=None, cancelled=None):
-        if not url.startswith(BASE + "/"):
+        if not url.startswith(ALLOWED):
             raise FirmwareError("Refusing to download from %s" % url)
         try:
             with self.opener(url) as reply:
-                if not reply.geturl().startswith(BASE + "/"):
+                if not reply.geturl().startswith(ALLOWED):
                     raise FirmwareError("The download was redirected to %s" % reply.geturl())
                 length = reply.headers.get("Content-Length")
                 total, data = int(length) if length and length.isdigit() else 0, bytearray()
@@ -135,23 +146,33 @@ class Catalog:
         return items, None
 
     def boards(self, chip):
+        if chip in BADGE_BOARDS:
+            return list(BADGE_BOARDS[chip]), None
         return self._list("boards-%s.json" % chip, "%s/download/?mcu=%s" % (BASE, chip), parse_boards, Board)
 
     def builds(self, board_id):
+        if board_id in BADGE_BUILDS:
+            return list(BADGE_BUILDS[board_id]), None
         return self._list("builds-%s.json" % board_id, "%s/download/%s/" % (BASE, board_id),
                           lambda text: parse_builds(text, board_id), Build)
 
     def path_of(self, build):
-        if os.path.basename(build.filename) != build.filename or not build.filename.endswith(".uf2"):
+        if os.path.basename(build.filename) != build.filename or not build.filename.endswith((".uf2", ".bin")):
             raise FirmwareError("Bad firmware name: %s" % build.filename)
         return os.path.join(self.dir, build.filename)
 
     def download(self, build, on_progress=None, cancelled=None):
-        """The build's file, from the cache if it is there. A name is never reused on the site, so a copy stays good."""
+        """The build's file. A micropython.org name is never reused, so a saved copy stays good; a file that changes
+        under one name is read again, and the saved copy is used only if that fails."""
         path = self.path_of(build)
-        if os.path.exists(path):
+        if os.path.exists(path) and not build.url:
             return path
-        data = self._read(BASE + FIRMWARE_PATH + build.filename, MAX_IMAGE, on_progress, cancelled)
+        try:
+            data = self._read(build.url or BASE + FIRMWARE_PATH + build.filename, MAX_IMAGE, on_progress, cancelled)
+        except FirmwareError:
+            if os.path.exists(path):
+                return path
+            raise
         os.makedirs(self.dir, exist_ok=True)
         tmp = path + ".part"
         with open(tmp, "wb") as f:

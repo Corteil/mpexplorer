@@ -83,7 +83,7 @@ def setup(tmp_path, monkeypatch):
     drive_dir.mkdir()
     (drive_dir / fw.INFO_FILE).write_text("UF2 Bootloader v3.0\nModel: Raspberry Pi RP2\nBoard-ID: RPI-RP2\n")
     drives = [fw.read_drive(str(drive_dir))]
-    monkeypatch.setattr(fw, "detect", lambda: list(drives))
+    monkeypatch.setattr(fw, "detect_all", lambda: list(drives))
     # the real function must never run here: it would look for and talk to real boards
     monkeypatch.setattr(fw, "install_and_verify", lambda *a, **k: pytest.fail("install not stubbed"))
     monkeypatch.setattr(dialog, "Catalog", FakeCatalog)
@@ -329,3 +329,21 @@ def test_a_failed_install_from_the_site_can_be_tried_again(setup, monkeypatch):
     wait_until(lambda: not d.running)
     assert errors and d.site_rows.get_sensitive()
     wait_until(lambda: d.boards)
+
+
+def test_a_badge_in_its_rom_is_offered_the_tildagon_and_needs_esptool(setup, monkeypatch):
+    make, drives, *_ = setup
+    drives[0] = fw.BootDrive("/dev/ttyACM0", "ESP32-S3 ROM bootloader", "ESP32-S3", "esp32s3", "esptool")
+    monkeypatch.setattr(FakeCatalog, "BOARDS", [Board("TILDAGON", "Tildagon", "EMF Camp")])
+    monkeypatch.setattr(FakeCatalog, "BUILDS", [Build("T-merged.bin", "Latest", "", "", False, "https://x/")])
+
+    def missing():
+        raise fw.FirmwareError(fw.INSTALL_ESPTOOL)
+    monkeypatch.setattr(fw, "find_esptool", missing)
+    d = make()
+    assert d.board_box.get_active_text() == "ESP32-S3 at /dev/ttyACM0"
+    site_ready(d)
+    assert "pipx install esptool" in d.note.get_text() and not d.install_btn.get_sensitive()
+    monkeypatch.setattr(fw, "find_esptool", lambda: ["esptool"])
+    d._drive_changed()
+    assert "T-merged.bin" in d.note.get_text() and d.install_btn.get_sensitive()
