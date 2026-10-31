@@ -39,9 +39,7 @@ ESP_IMAGE_MAGIC, ESP32S3_CHIP_ID = 0xE9, 9
 ESP_PARTITION_TABLE, ESP_APP_OFFSET, ESP_FLASH_BYTES = 0x8000, 0x10000, 8 * 1024 * 1024
 TILDAGON_CHIP = ("ESP32-S3-PICO-1", 8, 2)            # type, MB of flash, MB of PSRAM, as read from a real Tildagon
 ESPTOOL_MAJOR = 5
-ESPTOOL_STAGES = (("Erasing flash", "Erasing the flash, which can take a while"),
-                  ("Writing at", "Writing the firmware"),
-                  ("Verifying", "Checking what was written"))
+ESPTOOL_STAGES = (("Erasing flash", "Erasing flash"), ("Writing at", "Writing firmware"), ("Verifying", "Verifying"))
 ESPTOOL_LOG = "esptool.log"                          # every run's full output, for when the short message is not enough
 INSTALL_ESPTOOL = "Installing on this board needs esptool %d. Install it with: pipx install esptool" % ESPTOOL_MAJOR
 
