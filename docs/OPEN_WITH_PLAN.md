@@ -95,6 +95,8 @@ fall back to defaults and never block startup.
 
 **File types preferences page (2026-10-31):** Edit > Preferences > File types lists each saved extension and its program, with Add / Change / Remove (saved at once; custom commands are kept). Core helpers `normalize_extension`, `forget_handler`, `describe_handler` in `openwith.py`. Tested under Xvfb; the owner then tried it by hand on 2026-10-31 and reported it working (not itemised).
 
+**Shift+Enter and File menu entry (2026-10-31):** File > Open with... (Shift+Enter) and the context menu call `App.open_with_selected()`. Tested under Xvfb; not tried by hand.
+
 ## Phases
 1. `openwith.py` + tests (settings, lookup, commands, watcher). 2. Device download/launch/upload loop for one custom
 command. 3. GTK chooser + default-for-type + context-menu entries. 4. Built-in hex and image viewers, preferences page.

@@ -1064,3 +1064,28 @@ def test_file_types_page_lists_adds_changes_and_removes(make_app, cfg, monkeypat
     monkeypatch.setattr("mpexplorer.gtkui.prefs.error", lambda parent, title, text: errors.append(text))
     dlg._add_type()
     assert errors and [r[0] for r in dlg.types] == [".png", ".py"]
+
+
+def test_shift_enter_and_file_menu_choose_a_program(make_app, tmp_path, monkeypatch):
+    (tmp_path / "notes.txt").write_text("y\n")
+    (tmp_path / "sub").mkdir()
+    app = make_app()
+    app.left.go(str(tmp_path))
+    pump(300)
+    app.active = app.left
+    asked = []
+    monkeypatch.setattr(app, "choose_open_with", lambda pane, path, size: asked.append(path))
+    notes = []
+    monkeypatch.setattr("mpexplorer.gtkui.app.info", lambda parent, title, text: notes.append(text))
+    shift_enter = types.SimpleNamespace(keyval=common.Gdk.KEY_Return, state=common.Gdk.ModifierType.SHIFT_MASK)
+    app.left.tree.get_selection().unselect_all()
+    assert app.left._key(None, shift_enter) is True                     # nothing selected: told, not raised
+    assert notes == ["Select one file first."] and asked == []
+    for i, row in enumerate(app.left.store):
+        if row[1] == "notes.txt":
+            app.left.tree.get_selection().select_path(common.Gtk.TreePath.new_from_indices([i]))
+    assert app.left._key(None, shift_enter) is True
+    app.open_with_selected()                                            # the File menu entry
+    assert asked == [str(tmp_path / "notes.txt")] * 2
+    plain = types.SimpleNamespace(keyval=common.Gdk.KEY_Return, state=0)
+    assert app.left._key(None, plain) is False                          # plain Enter still opens the default
