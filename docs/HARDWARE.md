@@ -148,8 +148,9 @@ link, not flash.
 What is different about this badge (all seen by hand or in the run above, 2026-10-31):
 - **It stays silent unless RTS is asserted as well as DTR.** With RTS low (what the Tildagon needs) it never answers. mpexplorer now
   tries RTS low first and, if the board says nothing, RTS high, and remembers the result per board (`boards.rts`; `RawREPL.open_board`).
-  The fallback was checked against a fake board; against this badge only the manual probe (DTR + RTS high) was seen working, not the
-  app's connect.
+  Checked with the real badge (2026-10-31, the app's own `connect_device` run under Xvfb with a scratch settings file, no status
+  screen, no clock set, no reset): the first connect took 6.9 s (RTS low tried, then high), listed the root, saved
+  `boards.rts` for the board, and the second connect took 0.8 s. Disconnect left the badge on USB. Not yet tried by hand in the GUI.
 - **A soft reset (Ctrl-D) makes it drop off USB** and it does not come back until it is unplugged and re-plugged (seen three times:
   after a probe, after a clean-up, and during the benchmark's first run). So do not use "Soft reset" or "Restart the board when
   disconnecting" with it, and run the benchmark with `--no-reset`. Cause not known.
