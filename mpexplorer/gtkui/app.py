@@ -302,6 +302,7 @@ class App(Gtk.Window):
 
     def _pause_toggled(self, btn):
         paused = btn.get_active()
+        btn.set_label("Resume" if paused else "Pause")
         if paused == self.edits.paused:
             return
         self.edits.set_paused(paused)
