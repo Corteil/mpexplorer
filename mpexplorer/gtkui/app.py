@@ -17,8 +17,9 @@ from ..openwith import (SYSTEM_OPEN, EditManager, app_template, handler_for, loo
                         remember_handler)
 from ..ops import ConflictPolicy, copy_tree, delete_items, is_within, move_item, total_size, unique_name
 from ..ports import board_id, device_of, list_ports, short_model
-from ..remember import device_start, host_start, port_choice, remember_board_name, remember_folder, remember_port
-from ..settings import Settings
+from ..remember import (device_start, host_start, port_choice, remember_board_name, remember_board_rts, remember_folder,
+                        remember_port)
+from ..settings import Settings, segment
 from ..transport import RawREPL
 from ..watchdog import Watchdog
 from .common import (ICON, Gdk, GdkPixbuf, Gio, GLib, Gtk, ask_yes_no, button, error, fmt_time, icon_button, info,
@@ -421,15 +422,14 @@ class App(Gtk.Window):
         board = board_id(port)
 
         def work(prog):
-            repl = RawREPL.open(port)
+            repl, rts = RawREPL.open_board(port, rts=self.settings.get("boards.rts").get(segment(board), False))
             try:
-                repl.enter_raw()
                 dev = DeviceBackend(repl)
                 try:
                     machine = repl.exec("import os;print(os.uname().machine)").decode().strip()
                 except Exception:
                     machine = ""            # a build without os.uname: the port list keeps its generic name
-                return dev, device_start(self.settings, dev, board), machine
+                return dev, device_start(self.settings, dev, board), machine, rts
             except BaseException:
                 repl.close()
                 raise
@@ -441,13 +441,14 @@ class App(Gtk.Window):
                 self.set_status("Connection failed")
                 error(self, "Connection failed", str(exc))
                 return
-            self.connected(res[0], res[1], port, board, res[2])
+            self.connected(res[0], res[1], port, board, res[2], rts=res[3])
         self.runner.submit(work, done, "Connecting", quiet=True)
 
-    def connected(self, dev, start, port, board, machine=""):
+    def connected(self, dev, start, port, board, machine="", rts=False):
         """The connection is up: show the board, and remember the port, its model (and later its folders)."""
         self.device = dev
         remember_board_name(self.settings, board, machine)
+        remember_board_rts(self.settings, board, rts)
         self.right.detail = "  ".join(x for x in (port, short_model(machine) if machine else "") if x)
         self.board = board
         self.session = ConsoleSession(dev.repl)

@@ -5,9 +5,10 @@ import pytest
 from fakedevice import FakeSerial
 from mpexplorer import ports
 from mpexplorer.backends import DeviceBackend
-from mpexplorer.remember import device_start, host_start, port_choice, remember_folder, remember_port
+from mpexplorer.remember import (device_start, host_start, port_choice, remember_board_rts, remember_folder,
+                                 remember_port)
 from mpexplorer.settings import Settings
-from mpexplorer.transport import RawREPL
+from mpexplorer.transport import RawREPL, TransportError
 
 
 @pytest.fixture
@@ -124,3 +125,50 @@ def test_short_model():
     assert ports.short_model("Raspberry Pi Pico2 with RP2350") == "Pico 2 (RP2350)"
     assert ports.short_model("TiLDAGON with ESP32S3") == "TiLDAGON (ESP32S3)"
     assert ports.short_model("Unknown") == "Unknown"
+
+
+class SilentUnlessRts(FakeSerial):
+    """The 2022 badge: it says nothing at all unless RTS is asserted as well as DTR."""
+
+    def __init__(self, rts):
+        super().__init__()
+        self.rts = rts
+
+    def write(self, data):
+        return len(data) if not self.rts else super().write(data)
+
+
+def open_stub(monkeypatch, needs_rts, tried):
+    def fake_open(cls, port, baud=115200, paste=None, adaptive=True, rts=False):
+        tried.append(rts)
+        return RawREPL(SilentUnlessRts(rts) if needs_rts else FakeSerial())
+    monkeypatch.setattr(RawREPL, "open", classmethod(fake_open))
+    monkeypatch.setattr("mpexplorer.transport.time.sleep", lambda s: None)
+
+
+def test_open_board_falls_back_to_rts_for_a_silent_board(monkeypatch):
+    tried = []
+    open_stub(monkeypatch, True, tried)
+    repl, rts = RawREPL.open_board("/dev/x")
+    assert rts is True and tried == [False, True] and repl.raw        # low failed, high answered
+    tried.clear()
+    repl, rts = RawREPL.open_board("/dev/x", rts=True)                # remembered: straight to RTS high
+    assert rts is True and tried == [True]
+
+
+def test_open_board_keeps_rts_low_for_a_normal_board_and_gives_up_on_a_dead_one(monkeypatch):
+    tried = []
+    open_stub(monkeypatch, False, tried)
+    assert RawREPL.open_board("/dev/x")[1] is False and tried == [False]    # the Tildagon path is unchanged
+    monkeypatch.setattr(RawREPL, "enter_raw", lambda self: (_ for _ in ()).throw(TransportError("nothing")))
+    with pytest.raises(TransportError, match="nothing"):
+        RawREPL.open_board("/dev/x")
+
+
+def test_remember_board_rts(s):
+    remember_board_rts(s, "16d0:1114:123.456", True)
+    assert s.get("boards.rts") == {"16d0:1114:123_456": True}
+    remember_board_rts(s, "16d0:1114:123.456", False)                  # it answers without RTS now
+    assert s.get("boards.rts") == {}
+    remember_board_rts(s, "", True)
+    assert s.get("boards.rts") == {}

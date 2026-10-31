@@ -55,6 +55,12 @@ def str_dict(v):
     raise ValueError("expected a table of text values")
 
 
+def bool_dict(v):
+    if isinstance(v, dict) and all(isinstance(k, str) and isinstance(x, bool) for k, x in v.items()):
+        return dict(v)
+    raise ValueError("expected a table of true/false values")
+
+
 def sort_order(v):
     if isinstance(v, list) and len(v) == 2 and v[0] in ("name", "size", "modified") and isinstance(v[1], bool):
         return list(v)
@@ -81,6 +87,7 @@ SPEC = {
     "window.maximized": (False, boolean),
     "folders.host": ("", string),
     "folders.boards": ({}, str_dict),               # board id -> last device folder
+    "boards.rts": ({}, bool_dict),                  # board id -> assert RTS as well as DTR (the 2022 badge needs it)
     "boards.names": ({}, str_dict),                 # board id -> what os.uname().machine said at the last connect
     "open_with.auto_upload": (True, boolean),       # upload saves made in an external program (docs/OPEN_WITH_PLAN.md)
     "open_with.by_extension": ({}, str_dict),       # ".py" -> "editor" | "app:<desktop id>" | "custom:<name>"
