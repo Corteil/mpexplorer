@@ -41,8 +41,8 @@ label if one is missing on another theme.
 - [x] Editor Save -> `document-save` ("Save, Ctrl+S"); console Run / Interrupt / Clear -> `media-playback-start` /
       `process-stop` / `edit-clear` with hints ("Run, Enter", "Interrupt, Esc", "Clear output").
 - [x] Show the shortcut in each hint, and keep the menus as they are (text) so nothing is lost.
-- [ ] Check it still fits the 1180 px window and the minimum width; look at it with `grim` before and after.
-- [x] (The Tk GUI was removed on 2026-10-29.) Still to do: update README screenshots.
+- [x] Fits the 1180 px window; the window's minimum width is 857 px (2026-10-31, rendered under Xvfb with PiXflat, not re-checked with `grim`).
+- [x] (The Tk GUI was removed on 2026-10-29.) README screenshots: see section 3.
 
 ## 2d. Badge status screen (`mpexplorer/badgescreen.py`)
 - [x] While connected, a Tildagon's frozen screen shows a status page: CONNECTED, this computer's name, the device folder, free
@@ -55,22 +55,25 @@ label if one is missing on another theme.
 - [x] `settings.py` + 22 tests: validated keys, atomic writes, damaged-file recovery, forward compatibility.
 - [x] GTK: remember last port / folders (per board) / window size / sort / hidden; saved on exit and on change.
 - [x] Edit > Preferences... (General, Settings file) in both GUIs; a damaged file is reported in the status bar.
-- [ ] Preferences tabs for File types (with Open with...) and Connection (fast mode, once agent mode exists).
+- [x] Preferences File types page (2026-10-31).
+- [ ] Preferences Connection tab (fast mode), only if agent mode is built.
 - [ ] Check on the Pi: window size/position restore under Wayland, the remembered device folder on the badge.
 
 ## 2b. Open with... (plan: `docs/OPEN_WITH_PLAN.md`)
 - [x] (Decided: saves upload automatically; Geany first.) Phase 1: `openwith.py` (settings, associations, `{file}` commands, upload watcher) with tests, no GUI. (Done 2026-10-30.)
 - [x] Device files: download to a private cache, launch the program, upload saves back with a conflict check. (Done 2026-10-30 for Geany, via right-click; the owner confirmed it on the Pico 2. Still to try by hand: the conflict dialog, a host file, the Tildagon.)
-- [ ] Read the `open_with.auto_upload` setting, add the pause button on the status entry, and try the conflict dialog (overwrite, keep both, skip) by hand.
+- [x] `open_with.auto_upload` is read and the Pause/Resume button exists (owner confirmed 2026-10-31).
+- [ ] Try the conflict dialog (overwrite, keep both, skip) by hand, and Open with on the Tildagon and an RP2040.
 - [x] GTK: Open with... chooser, "remember for this type", context menu (built 2026-10-30 on branch `open-with-chooser`; tests only, not tried by hand).
-- [ ] Open with...: Shift+Enter and a File menu entry; ask before opening an executable-looking file with a system app.
-- [ ] Hex and image viewers, File types preferences page.
+- [x] Open with...: Shift+Enter; ask before opening an executable-looking file with a system app (owner confirmed 2026-10-31).
+- [x] Hex and image viewers, File types preferences page (owner confirmed 2026-10-31).
 
 ## 2c. Agent mode (plan: `docs/AGENT_PLAN.md`)
 - [x] `tools/bench.py` written and tested (fake board + real MicroPython).
 - [x] Ran `tools/bench.py` on the Tildagon (2026-10-29): SLOW, tables in `docs/HARDWARE.md`. Causes measured; see "Phase 0 results"
       in `docs/AGENT_PLAN.md` (host->board can be about 10x faster with an agent, board->host is capped near 11 KB/s by the board).
-- [x] Run it on a Pico and Pico 2 (2026-10-30; it now skips sizes that do not fit). [ ] The 2022 badge is still to do.
+- [x] Run it on a Pico and Pico 2 (2026-10-30; it now skips sizes that do not fit). [x] 2022 badge run 2026-10-31 (`docs/HARDWARE.md`); its 200-file listing stalled in the benchmark but not in a standalone test.
+- [ ] Repeat the benchmark order on the 2022 badge to chase that stall.
 - [ ] Then, decide with the owner whether to build an upload-focused agent first. Check data integrity at 100+ KB/s on stdin
       (the 2026-10-29 measurement only counted bytes). `agent_src.py` + `AgentLink` (CPython tests), `AgentBackend` with
       fallback, GUI "Fast mode" toggle, pipelining.
@@ -80,14 +83,15 @@ label if one is missing on another theme.
   Badge files are tiny on average, so the speed does not matter in practice.
 
 ## 3. Release and housekeeping
-- [ ] Merge the `handoff-2026-10-28` branch (docs and `tools/`) when the owner says so.
 - [ ] Tag `v0.1.0` to exercise `release.yml`, then merge Dependabot PR #2 (`softprops/action-gh-release` v3).
-- [ ] Screenshots in the README (GTK window, console, terminal).
+- [x] Screenshots in the README (main window, console; 2026-10-31, rendered against the fake board, path boxes set by hand for the picture).
+- [ ] Terminal mode screenshot in the README.
+- [ ] Owner to decide: delete the leftover GitHub branches (`claude/micropython-file-explorer-gui-7tsgfy`, `handoff-pi`, `wire-settings` have nothing unmerged; `todo-refresh` has one older TODO commit).
 - [ ] Optional: add `mpexplorer.desktop` and the icon to the repo with an install note, instead of README text only.
 
 ## 4. Later / ideas
 - [ ] Saved connection profiles (port, last folders).
-- [ ] GUI smoke tests in CI (GTK needs a display: weston or xvfb). The probes in `tools/` are the starting point.
+- [x] GUI tests in CI (the `gui` job, under xvfb).
 - [x] Delete the Tk GUI, the `--tk` option and the Tk rules in `CLAUDE.md` (done 2026-10-29; `AnsiScreen` moved to `tests/ansiscreen.py`).
 - [x] Transfer speed with raw-paste on and off measured on the Tildagon; sending now adapts per connection (`transport.py`).
       Still to tune/measure: `CHUNK` / `WRITE_BLOCK`, and a Pico and the 2022 badge.

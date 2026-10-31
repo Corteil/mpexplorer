@@ -4,6 +4,10 @@ A dual-pane file explorer with a GUI for MicroPython boards (Raspberry Pi Pico /
 (Tildagon) and 2026, anything that runs MicroPython). It runs on a **Raspberry Pi 5** (or any computer with Python 3 and GTK 3) and talks to the
 board over USB serial. **Nothing is installed on the board**: it works through the stock raw REPL, like `mpremote`.
 
+![Main window: host and device panes](docs/images/main.png)
+
+![REPL console](docs/images/console.png)
+
 ## Features
 - Host and Device panes: browse, sort, filter, show hidden files
 - Upload / download files and folders (buttons, drag between panes, or copy and paste)
