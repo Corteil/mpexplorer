@@ -247,10 +247,10 @@ def flash_esptool(image, drive, on_progress=None, cancelled=None, tool=None, sta
     info = check_esp_image(image)
     if drive.path not in _ports_with(ESP32S3_ROM_USB) and not tool:
         raise FirmwareError("The board at %s has gone. Scan again." % drive.path)
-    # no-reset before connecting: the chip is already in its ROM, and a reset would boot a badge whose button is no
-    # longer held back into its normal firmware
+    # no-reset before connecting: the chip is already in its ROM. Watchdog reset after: on a real Tildagon esptool's
+    # default "hard reset via RTS" left it in the ROM, and this one starts the new firmware
     argv = (tool or find_esptool()) + ["--chip", "esp32s3", "--port", drive.path, "--baud", "460800",
-                                       "--before", "no-reset", "--after", "hard-reset",
+                                       "--before", "no-reset", "--after", "watchdog-reset",
                                        "write-flash", "0", image]
     log_path = esptool_log_path()
     os.makedirs(os.path.dirname(log_path), exist_ok=True)
