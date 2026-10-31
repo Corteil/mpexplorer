@@ -9,19 +9,19 @@ from ..errors import Cancelled
 from ..firmware_catalog import NUKE_FILE, Build, Catalog, default_build, saved_text
 from .common import GLib, Gtk, ask_yes_no, error
 
-STEPS = ("Pico or Pico 2: hold the BOOTSEL button while plugging it in.\n"
-         "Tildagon or 2026 badge: power it off from its menu, then hold boop while plugging USB into USB in. Keep "
-         "holding for a few seconds.\n"
-         "2022 badge: hold the bottom right button, tap bottom-left, then release both.\n"
-         "Another ESP32-S3 board: hold its BOOT button while plugging it in.")
+STEPS = ("To put a board in its bootloader:\n"
+         "Pico or Pico 2: %s.\n"
+         "Tildagon or 2026 badge: %s.\n"
+         "2022 badge: %s.\n"
+         "Another ESP32-S3 board: %s." % (fw.PICO_STEPS, fw.BADGES["TILDAGON"].steps, fw.BADGES["TIDAL"].steps,
+                                          fw.ESP32_STEPS))
 SAME_CHIP = ("The bootloader names the chip, not the board: a Pico and a Pico W read the same but need "
              "different firmware. Choose your exact board.")
-NO_DEVICE = "No device found yet."
+NO_DEVICE = "No device found yet.\n\n" + STEPS
 
 
 class DeviceDialog(Gtk.Dialog):
     """What the three tools share: the device list and its details, and running a slow job with the window locked."""
-    steps = STEPS
     cancel_text = "Cancelled."
     fail_title = "It did not work"
 
@@ -37,7 +37,6 @@ class DeviceDialog(Gtk.Dialog):
         box = self.get_content_area()
         box.set_spacing(8)
         box.set_border_width(12)
-        box.pack_start(Gtk.Label(label=self.steps, xalign=0, wrap=True), False, False, 0)
 
         grid = Gtk.Grid(column_spacing=10, row_spacing=6)
         grid.attach(Gtk.Label(label="Device", xalign=1), 0, 0, 1, 1)
@@ -633,8 +632,6 @@ def firmware_filter(chooser):
 
 class BackupDialog(DeviceDialog):
     """Save a board's whole flash to a file, and put such a file back."""
-    steps = ("A Pico or Pico 2 running MicroPython can be backed up as it is.\n" + STEPS +
-             "\nA badge is backed up from its bootloader. A Pico in BOOTSEL can only be restored.")
     cancel_text = "Cancelled. A restore can leave the flash part written: restore again before using the board."
 
     def __init__(self, app):
@@ -663,7 +660,7 @@ class BackupDialog(DeviceDialog):
         self.restore_btn.set_tooltip_text("Hold BOOTSEL while plugging it in to restore"
                                           if drive and drive.method == "repl" else None)
         if not drive:
-            self.note.set_text(NO_DEVICE)
+            self.note.set_text("")
         elif drive.method == "badge":
             self.note.set_text(fw.running_badge_hint(drive))
         elif problem:
@@ -743,7 +740,6 @@ class BackupDialog(DeviceDialog):
 
 class EraseDialog(DeviceDialog):
     """Erase the whole flash, leaving a board in its bootloader."""
-    steps = STEPS
 
     def __init__(self, app):
         super().__init__(app, "Erase flash")
@@ -763,7 +759,7 @@ class EraseDialog(DeviceDialog):
         usable = bool(drive) and not problem and drive.method != "repl" and bool(drive.chip)
         self.erase_btn.set_sensitive(usable)
         if not drive:
-            self.note.set_text(NO_DEVICE)
+            self.note.set_text("")
         elif drive.method == "badge":
             self.note.set_text(fw.running_badge_hint(drive))
         elif drive.method == "repl":

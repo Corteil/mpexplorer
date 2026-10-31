@@ -64,7 +64,8 @@ class Badge:
 
 BADGES = {
     "TILDAGON": Badge(("ESP32-S3-PICO-1", 8, 2, True), (0x16D0, 0x120E), True, "Tildagon (2024, 2026)", True,
-                      "power it off from its menu, then hold boop while plugging USB into USB in"),
+                      "power it off from its menu, then hold boop while plugging USB into USB in. Keep holding for a few "
+                      "seconds"),
     "TIDAL": Badge(("ESP32-S3", 8, None, True), (0x16D0, 0x1114), False, "TiDAL (2022 badge)", False,
                    "hold the bottom right button, tap bottom-left, then release both"),
 }
@@ -541,14 +542,32 @@ def can_enter_bootloader(drive):
 
 
 def running_badge_hint(drive):
-    badge = BADGES[drive.board_id]
-    if badge.boot_from_repl:
-        return "This badge is running normally. Press Put in bootloader, or %s." % badge.steps
-    return "This badge is running normally. To use this tool, %s." % badge.steps
+    if BADGES[drive.board_id].boot_from_repl:
+        return "This badge is running normally. Press Put in bootloader, or use the steps above."
+    return "This badge is running normally. To use this tool, follow the steps above."
+
+
+PICO_STEPS = "hold the BOOTSEL button while plugging it in"
+ESP32_STEPS = "hold its BOOT button while plugging it in (the name can differ between boards)"
+OTHER_STEPS = "see the instructions for this board"
+
+
+def bootloader_steps(drive):
+    """How this kind of device reaches its bootloader, by hand."""
+    if drive.method == "badge":
+        return BADGES[drive.board_id].steps
+    if drive.method == "esptool":
+        chip = drive.esp_chip
+        return BADGES[chip.badge].steps if chip and chip.badge else ESP32_STEPS
+    return PICO_STEPS if drive.method == "repl" or drive.chip else OTHER_STEPS
 
 
 def device_details(drive, running=None):
     """(name, value) lines for the device's details panel."""
+    return _device_facts(drive, running) + [("How to reach its bootloader", bootloader_steps(drive))]
+
+
+def _device_facts(drive, running):
     if drive.method == "badge":
         return [("State", "running normally"), ("Port", drive.path),
                 ("Details", "more can be read once it is in its bootloader")]
