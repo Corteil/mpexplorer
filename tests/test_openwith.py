@@ -480,3 +480,23 @@ def test_remember_handler_by_extension_and_custom(settings):
     assert openwith.parse_handler(settings, "custom:geany") == ("command", "geany {file}")
     assert openwith.remember_handler(settings, "Makefile", "editor") is None            # no extension: not saved
     assert settings.get("open_with.by_extension") == {".py": "custom:geany"}
+
+
+def test_normalize_extension():
+    assert openwith.normalize_extension(" .PY ") == ".py"
+    assert openwith.normalize_extension("txt") == ".txt"
+    for bad in ("", ".", "a b", "a/b", "tar.gz"):
+        assert openwith.normalize_extension(bad) is None
+
+
+def test_forget_and_describe_handlers(settings):
+    openwith.remember_handler(settings, "a.py", "custom:geany", ("geany", "geany {file}"))
+    openwith.remember_handler(settings, "b.bin", "hex")
+    assert openwith.describe_handler(settings, "custom:geany") == "Custom: geany {file}"
+    assert openwith.describe_handler(settings, "custom:gone") == "gone (command missing)"
+    assert openwith.describe_handler(settings, "hex") == "Hex viewer"
+    assert openwith.describe_handler(settings, "app:x.desktop", lambda i: "Xed") == "Xed"
+    assert openwith.describe_handler(settings, "app:x.desktop") == "x.desktop"
+    assert openwith.forget_handler(settings, ".bin") is True
+    assert openwith.forget_handler(settings, ".bin") is False
+    assert settings.get("open_with.by_extension") == {".py": "custom:geany"}

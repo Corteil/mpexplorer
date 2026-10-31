@@ -1040,3 +1040,27 @@ def test_open_with_dialog_lists_apps_and_returns_the_choice(make_app):
             if isinstance(w, dialogs.Gtk.Dialog) and w.get_title() == "Open with":
                 w.response(dialogs.Gtk.ResponseType.OK)
     assert dialogs.ask_open_with(app, "a.py", True) == ("editor", None, False)      # the first row is preselected
+
+
+def test_file_types_page_lists_adds_changes_and_removes(make_app, cfg, monkeypatch):
+    app = make_app(open_with__by_extension={".py": "custom:geany", ".bin": "hex"},
+                   open_with__custom={"geany": "geany {file}"})
+    dlg = PreferencesDialog(app)
+    assert [tuple(r) for r in dlg.types] == [(".bin", "Hex viewer"), (".py", "Custom: geany {file}")]
+    picks = iter([("image", None, False), ("editor", None, True)])
+    monkeypatch.setattr("mpexplorer.gtkui.prefs.ask_open_with", lambda *a: next(picks))
+    monkeypatch.setattr("mpexplorer.gtkui.prefs.prompt", lambda *a: " PNG")
+    dlg._add_type()                                                     # normalised to .png, saved at once
+    assert app.settings.get("open_with.by_extension")[".png"] == "image"
+    assert saved(cfg)["open_with"]["by_extension"][".png"] == "image"
+    dlg.types_view.set_cursor(common.Gtk.TreePath.new_from_indices([0]))       # .bin
+    dlg._change_type()
+    assert app.settings.get("open_with.by_extension")[".bin"] == "editor"
+    dlg.types_view.set_cursor(common.Gtk.TreePath.new_from_indices([0]))
+    dlg._remove_type()
+    assert ".bin" not in app.settings.get("open_with.by_extension")
+    errors = []
+    monkeypatch.setattr("mpexplorer.gtkui.prefs.prompt", lambda *a: "a b")
+    monkeypatch.setattr("mpexplorer.gtkui.prefs.error", lambda parent, title, text: errors.append(text))
+    dlg._add_type()
+    assert errors and [r[0] for r in dlg.types] == [".png", ".py"]

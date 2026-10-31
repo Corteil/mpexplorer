@@ -7,8 +7,7 @@ icons) and a custom command row (`geany {file}`), plus "Always use this for .ext
 program for the extension (`handler_for`), else the built-in editor. Host files launch directly; device files are edit-in-place
 sessions. It replaced the fixed "Open with Geany" entry (Geany is in the list). Differences from the plan: our own list dialog instead
 of `Gtk.AppChooserDialog` (so the built-ins and the custom row fit in one list); `app_template()` turns a desktop file's `Exec` line
-into a `{file}` template; `remember_handler()` saves the default. Still missing: Shift+Enter and a File menu entry, the File types
-preferences page, asking
+into a `{file}` template; `remember_handler()` saves the default. Still missing: Shift+Enter and a File menu entry, asking
 before opening an executable-looking file with the system default.
 
 ### What exists (phases 1 and 2)
@@ -93,6 +92,8 @@ fall back to defaults and never block startup.
 - GUI by hand on the Pi 5 (the chooser, a real external editor): add rows to `docs/HARDWARE.md`.
 
 **Phase 4 (partly, 2026-10-31):** hex and image viewers (`gtkui/viewer.py`, `viewers.hexdump`; hex up to 256 KB, image up to 2 MB, read-only), listed in the chooser. Tested under Xvfb on host files; the owner then tried both viewers by hand on 2026-10-31 and reported them working (which files and boards not itemised).
+
+**File types preferences page (2026-10-31):** Edit > Preferences > File types lists each saved extension and its program, with Add / Change / Remove (saved at once; custom commands are kept). Core helpers `normalize_extension`, `forget_handler`, `describe_handler` in `openwith.py`. Tested under Xvfb; not tried by hand.
 
 ## Phases
 1. `openwith.py` + tests (settings, lookup, commands, watcher). 2. Device download/launch/upload loop for one custom
