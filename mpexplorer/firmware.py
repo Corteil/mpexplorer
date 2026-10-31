@@ -34,10 +34,8 @@ CHIP_NAMES = {"rp2040": "RP2040", "rp2350": "RP2350", "esp32s3": "ESP32-S3"}
 MACHINE_NAMES = {"esp32s3": "ESP32S3"}               # how os.uname().machine spells it, if not as CHIP_NAMES does
 RP2_MICROPYTHON_USB = (0x2E8A, 0x0005)
 ESP32S3_ROM_USB = (0x303A, 0x1001)                   # "USB JTAG/serial debug unit", seen on a real Tildagon
-TILDAGON_USB = (0x16D0, 0x120E)
 ESP_IMAGE_MAGIC, ESP32S3_CHIP_ID = 0xE9, 9
 ESP_PARTITION_TABLE, ESP_APP_OFFSET, ESP_FLASH_BYTES = 0x8000, 0x10000, 8 * 1024 * 1024
-TILDAGON_CHIP = ("ESP32-S3-PICO-1", 8, 2)            # type, MB of flash, MB of PSRAM, as read from a real Tildagon
 ESPTOOL_MAJOR = 5
 ESPTOOL_STAGES = (("Erasing flash", "Erasing flash"), ("Writing at", "Writing firmware"), ("Verifying", "Verifying"))
 ESPTOOL_LOG = "esptool.log"                          # every run's full output, for when the short message is not enough
@@ -49,14 +47,31 @@ class FirmwareError(BackendError):
 
 
 @dataclass
+class Badge:
+    chip: tuple                 # type, MB of flash, MB of PSRAM, embedded flash: as read from a real one
+    usb: tuple
+    soft_reset: bool            # the 2022 badge drops off USB until replugged after a soft reset
+
+
+BADGES = {
+    "TILDAGON": Badge(("ESP32-S3-PICO-1", 8, 2, True), (0x16D0, 0x120E), True),
+    "TIDAL": Badge(("ESP32-S3", 8, None, True), (0x16D0, 0x1114), False),
+}
+
+
+@dataclass
 class EspChip:
     type: str
     flash_mb: int | None
     psram_mb: int | None
+    embedded_flash: bool = True
 
-    def looks_like_tildagon(self):
-        """No badge id can be read: another board with the same chip and memory looks the same."""
-        return (self.type, self.flash_mb, self.psram_mb) == TILDAGON_CHIP
+    @property
+    def badge(self):
+        """The badge this chip reads as, else None. No badge id can be read: another board with the same chip and
+        memory looks the same."""
+        details = (self.type, self.flash_mb, self.psram_mb, self.embedded_flash)
+        return next((name for name, badge in BADGES.items() if badge.chip == details), None)
 
     @property
     def text(self):
@@ -236,13 +251,15 @@ def parse_esp_chip(text):
         raise FirmwareError("esptool did not say what this chip is.\n%s" % text[-300:])
     flash = re.search(r"Detected flash size:\s*(\d+)MB", text)
     psram = re.search(r"Embedded PSRAM (\d+)MB", text)
-    return EspChip(kind[1], int(flash[1]) if flash else None, int(psram[1]) if psram else None)
+    return EspChip(kind[1], int(flash[1]) if flash else None, int(psram[1]) if psram else None,
+                   "Embedded Flash" in text)
 
 
 def read_esp_chip(port, tool=None):
-    """Ask the ROM what this chip is, without writing or leaving the ROM."""
+    """Ask what this chip is, without writing or leaving the bootloader. Not --no-stub: it fails with "Failed to
+    configure SPI flash pins" if an earlier esptool run left its stub running, which this works with."""
     argv = (tool or find_esptool()) + ["--chip", "esp32s3", "--port", port, "--before", "no-reset", "--after",
-                                       "no-reset", "--no-stub", "flash-id"]
+                                       "no-reset", "flash-id"]
     try:
         run = subprocess.run(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace",
                              timeout=30)
@@ -415,8 +432,8 @@ def rp2_ports():
     return _ports_with(RP2_MICROPYTHON_USB)
 
 
-def tildagon_ports():
-    return _ports_with(TILDAGON_USB)
+def badge_ports(badge):
+    return _ports_with(BADGES[badge].usb)
 
 
 def wait_for_new_port(before, timeout=15.0, poll=0.2, ports=rp2_ports):
@@ -431,7 +448,7 @@ def wait_for_new_port(before, timeout=15.0, poll=0.2, ports=rp2_ports):
         time.sleep(poll)
 
 
-def identify(port, chip, timeout=10.0, poll=0.5, open_board=RawREPL.open_board):
+def identify(port, chip, timeout=10.0, poll=0.5, open_board=RawREPL.open_board, reset=True):
     """Prove the install: talk to the new firmware and check it runs on the expected chip."""
     end = time.monotonic() + timeout
     while True:
@@ -447,7 +464,7 @@ def identify(port, chip, timeout=10.0, poll=0.5, open_board=RawREPL.open_board):
     except TransportError as e:
         raise FirmwareError("MicroPython did not answer on %s: %s" % (port, e))
     finally:
-        repl.close(reset=True)
+        repl.close(reset=reset)
     lines = text.strip().splitlines()
     if len(lines) != 2:
         raise FirmwareError("Unexpected reply from %s: %r" % (port, text))
@@ -465,31 +482,30 @@ def sha256_of(path):
     return digest.hexdigest()
 
 
-def install_and_verify(image, drive, on_progress=None, on_stage=None, cancelled=None, expect_tildagon=None,
+def install_and_verify(image, drive, on_progress=None, on_stage=None, cancelled=None, expect_badge=None,
                        erase=False):
     """The whole install: write, wait for the restart, then talk to the new firmware. Returns an Installed, with no
-    port if the board cannot be followed. expect_tildagon: None decides by the chip; False when another board's
-    firmware was chosen for a chip that reads like a Tildagon's."""
+    port if the board cannot be followed. expect_badge: None decides by the chip; "" when another board's firmware
+    was chosen for a chip that reads like a badge's."""
     stage = on_stage or (lambda text: None)
     if drive.method == "esptool":
         stage("Checking the chip")
         if read_esp_chip(drive.path) != drive.esp_chip:     # another board was plugged in after this one was checked
             raise FirmwareError("The board on %s has changed. Nothing was written. Scan again." % drive.path)
-        before = tildagon_ports()
+        badge = drive.esp_chip.badge if expect_badge is None else expect_badge
+        before = badge_ports(badge) if badge else set()
         flash_esptool(image, drive, on_progress, cancelled, erase=erase, on_stage=stage)
-        if expect_tildagon is None:
-            expect_tildagon = drive.esp_chip.looks_like_tildagon()
-        if not expect_tildagon:                             # no way to tell what other boards appear as when they start
+        if not badge:                                       # no way to tell what other boards appear as when they start
             return Installed("", "", "")
         stage("Waiting for the badge to start")
         try:
-            port = wait_for_new_port(before, timeout=60.0, ports=tildagon_ports)
+            port = wait_for_new_port(before, timeout=60.0, ports=lambda: badge_ports(badge))
         except FirmwareError:
-            raise FirmwareError("The firmware was written and checked, but no Tildagon came back. If this is a "
-                                "Tildagon, unplug it and plug it in again. If it is another board with the same chip, "
-                                "it now has Tildagon firmware: put it in its bootloader and install firmware for it.")
+            raise FirmwareError("The firmware was written and checked, but the badge did not come back. If this is "
+                                "a badge, unplug it and plug it in again. If it is another board with the same chip, "
+                                "it now has badge firmware: put it in its bootloader and install firmware for it.")
         stage("Checking the board on %s" % port)
-        return identify(port, drive.chip, timeout=30.0)
+        return identify(port, drive.chip, timeout=30.0, reset=BADGES[badge].soft_reset)
     before = rp2_ports()
     stage("Copying the firmware")
     install(image, drive, on_progress, cancelled)

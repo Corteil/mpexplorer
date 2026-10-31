@@ -5,12 +5,13 @@ import threading
 from .. import firmware as fw
 from ..backends import human
 from ..errors import Cancelled
-from ..firmware_catalog import BADGE_BOARDS, Catalog, default_build, saved_text
+from ..firmware_catalog import Catalog, default_build, saved_text
 from .common import GLib, Gtk, ask_yes_no, error
 
 STEPS = ("Pico or Pico 2: hold the BOOTSEL button while plugging it in.\n"
          "Tildagon: power it off from its menu, then hold boop while plugging USB into USB in. Keep holding for a "
          "few seconds.\n"
+         "2022 badge: hold the bottom right button, tap bottom-left, then release both.\n"
          "Another ESP32-S3 board: hold its BOOT button while plugging it in.\n"
          "The board appears here, and any serial connection to it ends.")
 SAME_CHIP = ("The bootloader names the chip, not the board: a Pico and a Pico W read the same but need "
@@ -163,12 +164,15 @@ class FirmwareDialog(Gtk.Dialog):
         self._check()
 
     def _list_for(self, drive):
-        """(chip, include the badges) to list boards for. On esptool, only once the chip has been read."""
+        """(chip, the badges to include) to list boards for. On esptool, only once the chip has been read."""
         if not drive or not drive.chip:
             return None
         if drive.method != "esptool":
-            return drive.chip, True
-        return (drive.chip, drive.esp_chip.looks_like_tildagon()) if drive.esp_chip else None
+            return drive.chip, ()
+        if not drive.esp_chip:
+            return None
+        badge = drive.esp_chip.badge
+        return drive.chip, (badge,) if badge else ()
 
     def _read_chip(self, drive):
         self.chip_reading = drive.path
@@ -297,8 +301,8 @@ class FirmwareDialog(Gtk.Dialog):
 
     @staticmethod
     def _not_tildagon(drive):
-        if drive.esp_chip and not drive.esp_chip.looks_like_tildagon():
-            return "This chip does not match a Tildagon, so that is not listed (found %s)." % drive.esp_chip.text
+        if drive.esp_chip and not drive.esp_chip.badge:
+            return "This chip does not match a badge, so none is listed (found %s)." % drive.esp_chip.text
         return ""
 
     def _check_file(self, drive):
@@ -346,7 +350,7 @@ class FirmwareDialog(Gtk.Dialog):
         if drive.method == "esptool":
             options["erase"] = self.erase.get_active()
             if site:
-                options["expect_tildagon"] = self.product().id in [b.id for b in BADGE_BOARDS["esp32s3"]]
+                options["expect_badge"] = self.product().id if self.product().id in fw.BADGES else ""
         what = "%s for the %s" % (build.label, self.product().label) if site else os.path.basename(path)
         also = "\n\nmpexplorer will disconnect from the current board first." if self.app.device else ""
         if drive.esp_chip:

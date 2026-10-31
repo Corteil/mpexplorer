@@ -127,7 +127,7 @@ def test_the_stages_follow_what_esptool_is_doing(tmp_path):
 
 def test_a_breakout_with_a_tildagons_chip_is_not_waited_for_when_its_own_firmware_was_chosen(monkeypatch):
     order = steps(monkeypatch)
-    assert fw.install_and_verify("img", CHECKED, expect_tildagon=False).port == "" and order == ["ports", "flash"]
+    assert fw.install_and_verify("img", CHECKED, expect_badge="").port == "" and order == ["flash"]
 
 
 def test_every_run_leaves_its_full_output_in_a_log(tmp_path):
@@ -212,10 +212,11 @@ def test_detect_rom_lists_only_the_rom_usb_id(monkeypatch):
                                                                      ("/dev/b", "esptool", "esp32s3")]
 
 
-def steps(monkeypatch, ports=None, wait_error=None):
+def steps(monkeypatch, ports=None, wait_error=None, resets=None):
     order = []
+    resets = [] if resets is None else resets
     monkeypatch.setattr(fw, "read_esp_chip", lambda port: TILDAGON)
-    monkeypatch.setattr(fw, "tildagon_ports", lambda: order.append("ports") or set())
+    monkeypatch.setattr(fw, "badge_ports", lambda badge: order.append("ports") or set())
     monkeypatch.setattr(fw, "flash_esptool", lambda *a, **k: order.append("flash"))
 
     def wait(before, timeout, ports):
@@ -224,7 +225,8 @@ def steps(monkeypatch, ports=None, wait_error=None):
             raise fw.FirmwareError("no port")
         return "/dev/new"
     monkeypatch.setattr(fw, "wait_for_new_port", wait)
-    monkeypatch.setattr(fw, "identify", lambda port, chip, timeout: fw.Installed(port, "1.28.0", "Tildagon"))
+    monkeypatch.setattr(fw, "identify", lambda port, chip, timeout, reset: resets.append(reset) or
+                        fw.Installed(port, "1.28.0", "Tildagon"))
     return order
 
 
@@ -251,7 +253,7 @@ def test_another_board_is_written_but_not_waited_for_as_a_tildagon(monkeypatch):
     order = steps(monkeypatch)
     monkeypatch.setattr(fw, "read_esp_chip", lambda port: BREAKOUT)
     drive = fw.BootDrive("/dev/fake", "m", "ESP32-S3", "esp32s3", "esptool", BREAKOUT)
-    assert fw.install_and_verify("img", drive).port == "" and order == ["ports", "flash"]
+    assert fw.install_and_verify("img", drive).port == "" and order == ["flash"]
 
 
 class Repl:
@@ -276,22 +278,44 @@ def test_identify_errors_are_still_transport_safe():
 
 def test_reads_a_real_tildagons_output_as_a_tildagon():
     chip = fw.parse_esp_chip(FLASH_ID)
-    assert chip == TILDAGON and chip.looks_like_tildagon() and chip.text == "ESP32-S3-PICO-1, 8 MB flash, 2 MB PSRAM"
+    assert chip == TILDAGON and chip.badge == "TILDAGON" and chip.text == "ESP32-S3-PICO-1, 8 MB flash, 2 MB PSRAM"
 
 
 @pytest.mark.parametrize("chip", [
     fw.EspChip("ESP32-S3", 8, 2),                   # a module, not the badge's PICO-1
+    fw.EspChip("ESP32-S3", 8, None, False),         # flash outside the chip: not the 2022 badge
+    fw.EspChip("ESP32-S3", 16, None),
     fw.EspChip("ESP32-S3-PICO-1", 4, 2),
     fw.EspChip("ESP32-S3-PICO-1", 8, None),
     fw.EspChip("ESP32-S3-PICO-1", None, 2),
 ])
-def test_other_chips_do_not_look_like_a_tildagon(chip):
-    assert not chip.looks_like_tildagon()
+def test_other_chips_do_not_read_as_a_badge(chip):
+    assert chip.badge is None
+
+
+def test_reads_a_real_2022_badges_output_as_one():
+    chip = fw.parse_esp_chip("Chip type:          ESP32-S3 (QFN56) (revision v0.1)\n"
+                             "Features:           Wi-Fi, Dual Core + LP Core, 240MHz, Embedded Flash 8MB (GD)\n"
+                             "Detected flash size: 8MB\n")
+    assert chip.badge == "TIDAL"
+
+
+def test_the_2022_badge_is_never_soft_reset_after_an_install(monkeypatch):
+    resets = []
+    steps(monkeypatch, resets=resets)
+    chip = fw.EspChip("ESP32-S3", 8, None)
+    monkeypatch.setattr(fw, "read_esp_chip", lambda port: chip)
+    drive = fw.BootDrive("/dev/fake", "m", "ESP32-S3", "esp32s3", "esptool", chip)
+    fw.install_and_verify("img", drive)
+    assert resets == [False]
+    monkeypatch.setattr(fw, "read_esp_chip", lambda port: TILDAGON)
+    fw.install_and_verify("img", CHECKED)
+    assert resets == [False, True]
 
 
 def test_a_breakout_with_no_psram_parses_and_says_so():
     chip = fw.parse_esp_chip("Chip type: ESP32-S3 (QFN56)\nFeatures: Wi-Fi\nDetected flash size: 16MB\n")
-    assert chip == fw.EspChip("ESP32-S3", 16, None) and "no PSRAM" in chip.text
+    assert chip == fw.EspChip("ESP32-S3", 16, None, False) and "no PSRAM" in chip.text
 
 
 def test_output_that_does_not_name_the_chip_is_an_error():
@@ -304,7 +328,8 @@ def test_read_chip_stays_in_the_rom_and_writes_nothing(tmp_path):
     tool = fake_tool(tmp_path, "open(%r, 'w').write(' '.join(args))\nprint(%r)\n" % (str(log), FLASH_ID))
     assert fw.read_esp_chip("/dev/fake", tool=tool) == TILDAGON
     args = log.read_text()
-    assert "--before no-reset --after no-reset --no-stub flash-id" in args and "write" not in args
+    assert "--before no-reset --after no-reset flash-id" in args and "write" not in args
+    assert "--no-stub" not in args                  # fails on a chip with the stub already running
 
 
 def test_read_chip_failing_asks_if_it_is_in_its_bootloader(tmp_path):

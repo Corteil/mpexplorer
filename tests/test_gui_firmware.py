@@ -61,10 +61,10 @@ class FakeCatalog:
               Build("RPI_PICO-20260406-v1.28.0.uf2", "v1.28.0", "2026-04-06", "", False)]
     image, boards_error, saved, forgotten = None, None, None, []
 
-    def boards(self, chip, badges=True):
+    def boards(self, chip, badges=()):
         if self.boards_error:
             raise fw.FirmwareError(self.boards_error)
-        return [b for b in self.BOARDS if badges or b.id != "TILDAGON"], self.saved
+        return [b for b in self.BOARDS if b.id not in fw.BADGES or b.id in badges], self.saved
 
     def builds(self, board_id, chip=None):
         return self.BUILDS, self.saved
@@ -365,7 +365,7 @@ def test_a_breakout_is_offered_its_boards_not_the_tildagon_and_says_what_it_foun
     d = make()
     wait_until(lambda: d.boards)
     assert [b.id for b in d.boards] == ["ESP32_GENERIC_S3"] and d.product() is None
-    assert "does not match a Tildagon" in d.note.get_text() and "16 MB flash, 8 MB PSRAM" in d.note.get_text()
+    assert "does not match a badge" in d.note.get_text() and "16 MB flash, 8 MB PSRAM" in d.note.get_text()
     assert not d.install_btn.get_sensitive()
     d.product_box.set_active(0)
     wait_until(lambda: d.build())
@@ -378,14 +378,14 @@ def tildagon_chip_with_both_boards(monkeypatch, drives):
                                                 Board("WAVESHARE", "ESP32-S3-Pico", "Waveshare")])
 
 
-@pytest.mark.parametrize("product, expected", [(0, True), (1, False)])
+@pytest.mark.parametrize("product, expected", [(0, "TILDAGON"), (1, "")])
 def test_the_chosen_board_decides_whether_a_tildagon_is_waited_for(setup, monkeypatch, product, expected):
     make, drives, _, _, tmp = setup
     tildagon_chip_with_both_boards(monkeypatch, drives)
     got = {}
 
-    def fake(image, drive, on_progress, on_stage, cancelled, expect_tildagon=None, erase=False):
-        got.update(expect_tildagon=expect_tildagon, erase=erase)
+    def fake(image, drive, on_progress, on_stage, cancelled, expect_badge=None, erase=False):
+        got.update(expect_badge=expect_badge, erase=erase)
         return fw.Installed("", "", "")
     monkeypatch.setattr(fw, "install_and_verify", fake)
     monkeypatch.setattr(fw, "check_image", lambda *a: None)
@@ -394,7 +394,7 @@ def test_the_chosen_board_decides_whether_a_tildagon_is_waited_for(setup, monkey
     d.catalog.image = uf2(tmp / "x.uf2")
     d.install()
     wait_until(lambda: not d.running)
-    assert got == {"expect_tildagon": expected, "erase": False}
+    assert got == {"expect_badge": expected, "erase": False}
     assert "cannot follow this board" in d.note.get_text()
 
 
@@ -442,3 +442,14 @@ def test_nothing_is_offered_until_the_chip_has_been_read(setup, monkeypatch):
     assert not d.install_btn.get_sensitive()
     wait_until(lambda: "Cannot read the chip" in d.note.get_text())
     assert not d.boards and not d.install_btn.get_sensitive()
+
+
+def test_a_2022_badge_is_offered_its_own_firmware_not_the_tildagons(setup, monkeypatch):
+    make, drives, *_ = setup
+    rom_with(monkeypatch, drives, lambda port: fw.EspChip("ESP32-S3", 8, None))
+    monkeypatch.setattr(FakeCatalog, "BOARDS", [Board("TILDAGON", "Tildagon", "EMF Camp"),
+                                                Board("TIDAL", "TiDAL", "EMF Camp"),
+                                                Board("ESP32_GENERIC_S3", "ESP32-S3", "Espressif")])
+    d = make()
+    wait_until(lambda: d.boards)
+    assert [b.id for b in d.boards] == ["TIDAL", "ESP32_GENERIC_S3"] and d.product() is None
