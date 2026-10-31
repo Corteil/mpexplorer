@@ -30,7 +30,7 @@ before opening an executable-looking file with the system default.
   overwritten silently: it is left alone and its cache copy kept in `~/.cache/mpexplorer/open/` (the user is told). Cache copies are
   deleted when nothing is unsent. A session is dropped after the program has exited and nothing changed for 10 minutes. Geany hands a
   file to a running window and may exit at once, so the watcher follows the file, not the process.
-- `Watcher.paused` exists but has no button, and the `open_with.auto_upload` setting is declared but **not read yet**.
+- **Pause (2026-10-31):** a "Pause" toggle in the status bar (shown while edit sessions exist) holds auto-upload for all open copies and ones opened meanwhile (`EditManager.set_paused`); held saves stay pending and go up on release. Disconnect/quit does not send held saves: they are reported as "Edits not uploaded" and kept in the cache. Preferences > General "Upload saves ... automatically" (`open_with.auto_upload`) starts uploads held when off. It is global, not per file. Tested; not tried by hand.
 - Lessons: a poller that restarted the settle timer on every poll would never have uploaded (caught by a test, now covered);
   tests that swap the manager's clock must reset `_last_tick`; run Geany as `geany -i` (new instance) when testing so it cannot
   hand the file to a window on the owner's screen.

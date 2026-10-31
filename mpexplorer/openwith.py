@@ -308,7 +308,14 @@ class EditManager:
         self.refresh, self.launch, self._clock = refresh or (lambda: None), launch, clock
         self.interval, self.idle = interval, idle
         self.sessions = []
+        self.paused = False                 # auto-upload is held for every open copy (and for ones opened meanwhile)
         self._last_tick = float("-inf")
+
+    def set_paused(self, paused):
+        """Hold (or release) auto-upload for all open copies. Held saves stay pending; releasing uploads them."""
+        self.paused = bool(paused)
+        for s in self.sessions:
+            s.watcher.paused = self.paused
 
     # -- starting ------------------------------------------------------
     def edit_device_file(self, dev, board, remote, template):
@@ -335,6 +342,7 @@ class EditManager:
                 self.say("Cannot open %s: %s" % (name, exc))
                 return
             placeholder.watcher, placeholder.busy = watcher, False
+            watcher.paused = self.paused
             placeholder.last_active = self._clock()
             self.sessions.append(placeholder)
             self._start(placeholder, template)
@@ -414,7 +422,9 @@ class EditManager:
         left = []
         for s in [x for x in self.sessions if x.board == board]:
             s.watcher.notice()
-            if s.watcher.pending and not s.watcher.gone:
+            if s.watcher.pending and s.watcher.paused:
+                left.append(posixpath.basename(s.remote))       # held on purpose: not sent behind the user's back
+            elif s.watcher.pending and not s.watcher.gone:
                 try:
                     if upload_changes(dev, s.watcher) != "uploaded":
                         left.append(posixpath.basename(s.remote))
