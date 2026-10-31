@@ -122,7 +122,7 @@ def test_the_stages_follow_what_esptool_is_doing(tmp_path):
                                "print('Hash of data verified.')\n")
     seen = []
     fw.flash_esptool(write(tmp_path, esp_image()), ROM, tool=tool, erase=True, on_stage=seen.append)
-    assert seen == ["Erasing the flash, which can take a while", "Writing the firmware", "Checking what was written"]
+    assert seen == ["Erasing flash", "Writing firmware", "Verifying"]
 
 
 def test_a_breakout_with_a_tildagons_chip_is_not_waited_for_when_its_own_firmware_was_chosen(monkeypatch):
