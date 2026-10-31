@@ -1,4 +1,5 @@
 """Install MicroPython on a board in its bootloader: boards with a UF2 drive so far. See docs/FIRMWARE_PLAN.md."""
+import hashlib
 import os
 import re
 import struct
@@ -240,3 +241,23 @@ def identify(port, chip, timeout=10.0, poll=0.5, open_board=RawREPL.open_board):
     if CHIP_NAMES[chip] not in machine:
         raise FirmwareError("%s is running on '%s', not the expected %s." % (port, machine, CHIP_NAMES[chip]))
     return Installed(port, release, machine)
+
+
+def sha256_of(path):
+    digest = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 16), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def install_and_verify(image, drive, on_progress=None, on_stage=None, cancelled=None):
+    """The whole install: copy, wait for the restart, then talk to the new firmware. Returns an Installed."""
+    stage = on_stage or (lambda text: None)
+    before = rp2_ports()
+    stage("Copying the firmware")
+    install(image, drive, on_progress, cancelled)
+    stage("Waiting for MicroPython to start")
+    port = wait_for_new_port(before)
+    stage("Checking the board on %s" % port)
+    return identify(port, drive.chip)

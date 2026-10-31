@@ -28,6 +28,7 @@ from .console import ConsoleWindow
 from .dialogs import (OutputWindow, SyncDialog, TransferPopup, ask_conflict, ask_edit_conflict, ask_open_with,
                       ask_sync_target)
 from .editor import Editor
+from .firmware import FirmwareDialog
 from .viewer import Viewer
 from .pane import Pane
 from .prefs import PreferencesDialog
@@ -156,6 +157,7 @@ class App(Gtk.Window):
         add(d, "Soft reset", self.soft_reset)
         t = menu("Tools")
         add(t, "Sync this folder to the other pane...", self.sync_folders)
+        add(t, "Install firmware...", self.install_firmware)
         w = menu("Window")
         w.connect("show", lambda m: self._fill_window_menu(m))
         return bar
@@ -182,6 +184,9 @@ class App(Gtk.Window):
         dlg = PreferencesDialog(self)
         dlg.run()
         dlg.destroy()
+
+    def install_firmware(self):
+        FirmwareDialog(self)
 
     # -- remembered state --------------------------------------------------
     def _restore_window(self):

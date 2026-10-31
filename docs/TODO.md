@@ -70,7 +70,9 @@ label if one is missing on another theme.
 
 ## 2e. Install firmware (plan: `docs/FIRMWARE_PLAN.md`)
 - [x] Phase 1: UF2 detection, image checks, copy and identify (`firmware.py`), fake drives only.
-- [ ] Phase 2: dialog with local files, then the owner tries it on both Picos.
+- [x] Phase 2: Tools > Install firmware... with local files (Xvfb, fake drives).
+- [ ] Owner tries it on both Picos: real copy, restart, new port, Connect, and that files stay.
+- [ ] Erase option and recording installs in the settings.
 
 ## 2c. Agent mode (plan: `docs/AGENT_PLAN.md`)
 - [x] `tools/bench.py` written and tested (fake board + real MicroPython).
