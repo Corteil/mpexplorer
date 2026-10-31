@@ -82,7 +82,7 @@ Rules:
 4. **Tildagon:** esptool, progress parsing, cancel, tests with a fake esptool. Before writing any code, confirm the bootloader USB id and
    that the serial port works with esptool on the Pi. Owner test: keep a copy of the badge's files first.
 5. **2022 badge:** find the bootloader steps and confirm flash size, then test on the second badge.
-5a. **Other boards:** searchable board list, UF2 boards first, then esp32/esp8266 once tested on a generic board. A board is marked "tested" only after a real run, listed in `docs/HARDWARE.md`.
+5a. **Other boards:** ESP32-S3 boards from micropython.org are in the dialog (2026-10-31, code and tests only; see "Other boards"; `ARDUINO_NANO_ESP32` is left out because its page says dfu-util and erasing loses its bootloader). Remaining: searchable board list, UF2 boards first, then esp32/esp8266 once tested on a generic board. A board is marked "tested" only after a real run, listed in `docs/HARDWARE.md`.
 6. **Later, if wanted:** reflash a running board without the button dance (`machine.bootloader()`); read-only backup first.
 
 ## Idea: RAM-only probe for RP2 boards (not in the first version)

@@ -54,7 +54,7 @@ class EspChip:
     psram_mb: int | None
 
     def looks_like_tildagon(self):
-        """No badge id can be read: a breakout with the same chip and memory looks the same."""
+        """No badge id can be read: another board with the same chip and memory looks the same."""
         return (self.type, self.flash_mb, self.psram_mb) == TILDAGON_CHIP
 
     @property
@@ -287,9 +287,9 @@ def _esptool_tail(lines):
     return "\n".join(line for line in text.splitlines() if line.strip())[-600:]
 
 
-def flash_esptool(image, drive, on_progress=None, cancelled=None, tool=None, stall=90.0):
-    """Write a merged image at offset 0. esptool checks what it wrote. A cancel or failure can leave the flash part
-    written; a board in its ROM bootloader stays there, ready for another try."""
+def flash_esptool(image, drive, on_progress=None, cancelled=None, tool=None, stall=90.0, erase=False):
+    """Write a merged image at offset 0, after erasing the whole flash if asked. esptool checks what it wrote. A cancel
+    or failure can leave the flash part written; a board in its ROM bootloader stays there, ready for another try."""
     flash_mb = drive.esp_chip.flash_mb if drive.esp_chip else None
     info = check_esp_image(image, flash_mb * 1024 * 1024 if flash_mb else ESP_FLASH_BYTES)
     if drive.path not in _ports_with(ESP32S3_ROM_USB) and not tool:
@@ -298,7 +298,9 @@ def flash_esptool(image, drive, on_progress=None, cancelled=None, tool=None, sta
     # default "hard reset via RTS" left it in the ROM, and this one starts the new firmware
     argv = (tool or find_esptool()) + ["--chip", "esp32s3", "--port", drive.path, "--baud", "460800",
                                        "--before", "no-reset", "--after", "watchdog-reset",
-                                       "write-flash", "0", image]
+                                       "write-flash"] + (["--erase-all"] if erase else []) + ["0", image]
+    if erase:
+        stall = max(stall, 300.0)       # a chip erase prints nothing for as long as it takes
     log_path = esptool_log_path()
     os.makedirs(os.path.dirname(log_path), exist_ok=True)
     try:
@@ -456,8 +458,11 @@ def sha256_of(path):
     return digest.hexdigest()
 
 
-def install_and_verify(image, drive, on_progress=None, on_stage=None, cancelled=None):
-    """The whole install: copy, wait for the restart, then talk to the new firmware. Returns an Installed."""
+def install_and_verify(image, drive, on_progress=None, on_stage=None, cancelled=None, expect_tildagon=None,
+                       erase=False):
+    """The whole install: write, wait for the restart, then talk to the new firmware. Returns an Installed, with no
+    port if the board cannot be followed. expect_tildagon: None decides by the chip; False when another board's
+    firmware was chosen for a chip that reads like a Tildagon's."""
     stage = on_stage or (lambda text: None)
     if drive.method == "esptool":
         stage("Checking the chip")
@@ -465,8 +470,10 @@ def install_and_verify(image, drive, on_progress=None, on_stage=None, cancelled=
             raise FirmwareError("The board on %s has changed. Nothing was written. Scan again." % drive.path)
         before = tildagon_ports()
         stage("Writing the firmware")
-        flash_esptool(image, drive, on_progress, cancelled)
-        if not drive.esp_chip.looks_like_tildagon():        # no way to tell what other boards appear as when they start
+        flash_esptool(image, drive, on_progress, cancelled, erase=erase)
+        if expect_tildagon is None:
+            expect_tildagon = drive.esp_chip.looks_like_tildagon()
+        if not expect_tildagon:                             # no way to tell what other boards appear as when they start
             return Installed("", "", "")
         stage("Waiting for the badge to start")
         try:

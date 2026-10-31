@@ -77,7 +77,7 @@ label if one is missing on another theme.
 - [x] Phase 4, Tildagon: install through the dialog worked on a real badge (2026-10-31, confirmed by the owner); files survive.
 - [x] A chip that does not read as a Tildagon is not offered its image (confirmed on a real Tildagon; not tried on a breakout).
 - [ ] Phase 5: the 2022 badge.
-- [ ] Try the "does not match" message on a real ESP32-S3 breakout.
+- [ ] Try a real ESP32-S3 breakout: the "does not match" message, then a micropython.org build and the erase option.
 - [ ] Erase option and recording installs in the settings.
 
 ## 2c. Agent mode (plan: `docs/AGENT_PLAN.md`)
