@@ -280,7 +280,7 @@ class BootRepl:
 
     def close(self, reset=False):
         assert not reset                            # a reset now would undo it
-        if self.on_exec:
+        if isinstance(self.on_exec, OSError):
             raise OSError("gone")
 
 
@@ -342,3 +342,57 @@ def test_the_details_do_not_repeat_the_steps():
                   fw.BootDrive("/m/d", "m", "RP2350", "rp2350")):
         text = str(fw.device_details(drive))
         assert "boop" not in text and "hold" not in text.lower()
+
+
+class FakeSerial:
+    def __init__(self, reply=b"MicroPython\r\n>>> ", drop_on=None):
+        self.buffer, self.sent, self.drop_on, self.closed = reply, [], drop_on, False
+
+    @property
+    def in_waiting(self):
+        return len(self.buffer)
+
+    def read(self, n):
+        out, self.buffer = self.buffer[:n], self.buffer[n:]
+        return out
+
+    def write(self, data):
+        if self.drop_on and self.drop_on in data:
+            raise OSError("gone")
+        self.sent.append(data)
+
+    def close(self):
+        self.closed = True
+
+
+class Holder:
+    def __init__(self, ser):
+        self.ser = ser
+
+
+def test_a_badge_is_asked_from_its_normal_repl_never_the_raw_one():
+    ser, answers = FakeSerial(), iter([[], [ROM]])
+    got = fw.enter_bootloader("/dev/x", poll=0, find=lambda: next(answers), normal_repl=True,
+                              open_board=lambda port: pytest.fail("raw REPL"), open_port=lambda port: Holder(ser))
+    assert got == ROM and b"machine.bootloader()\r\n" in ser.sent and ser.closed
+    assert b"\x01" not in b"".join(ser.sent)        # Ctrl-A would enter the raw REPL
+
+
+def test_a_badge_going_away_as_it_is_told_is_fine():
+    ser, answers = FakeSerial(drop_on=b"machine.bootloader"), iter([[], [ROM]])
+    assert fw.enter_bootloader("/dev/x", poll=0, find=lambda: next(answers), normal_repl=True,
+                               open_port=lambda port: Holder(ser)) == ROM
+
+
+def test_a_badge_with_no_prompt_is_reported_and_not_sent_the_command(monkeypatch):
+    ser = FakeSerial(reply=b"")
+    monkeypatch.setattr(fw.time, "monotonic", iter(range(0, 1000, 5)).__next__)
+    with pytest.raises(fw.FirmwareError, match="did not give its prompt"):
+        fw.enter_bootloader("/dev/x", find=lambda: [], normal_repl=True, open_port=lambda port: Holder(ser))
+    assert not any(b"bootloader" in d for d in ser.sent) and ser.closed
+
+
+def test_a_board_that_refuses_says_why(monkeypatch):
+    monkeypatch.setattr(fw, "detect", lambda: [])
+    with pytest.raises(fw.FirmwareError, match="refused.*not allowed"):
+        fw.enter_bootloader("/dev/x", timeout=0, open_board=opener(BootRepl(fw.DeviceError("not allowed"))))

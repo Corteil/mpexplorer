@@ -14,7 +14,7 @@ from dataclasses import dataclass
 
 from .errors import BackendError, Cancelled
 from .ports import short_model
-from .transport import RawREPL, TransportError
+from .transport import DeviceError, RawREPL, TransportError
 
 INFO_FILE = "INFO_UF2.TXT"
 BLOCK = 512
@@ -495,24 +495,62 @@ def read_running(port, open_board=RawREPL.open_board):
         repl.close(reset=True)
 
 
-def enter_bootloader(port, timeout=20.0, poll=0.2, open_board=RawREPL.open_board, find=None):
-    """Ask a running board to restart into its bootloader, with no button; returns the device when it appears. It drops
-    off USB as soon as it obeys, so a lost connection here is the expected result, and the device appearing decides.
-    find lists what to watch for: UF2 drives unless told otherwise."""
-    find = find or detect
-    before = {d.path for d in find()}
+def _bootloader_in_raw_repl(port, open_board):
     try:
         repl, _ = open_board(port)
     except (TransportError, OSError) as e:
         raise FirmwareError("Cannot reach %s: is it connected in the app? (%s)" % (port, e))
     try:
         repl.exec("import machine\nmachine.bootloader()", timeout=2.0)
+    except DeviceError as e:                # the board answered, and said no
+        raise FirmwareError("The board refused: %s" % e)
     except (TransportError, OSError):
         pass
+    finally:
+        try:
+            repl.close()
+        except (TransportError, OSError):
+            pass
+
+
+def _bootloader_in_normal_repl(port, open_port):
+    """A real Tildagon hung with no way out but a replug when asked from the raw REPL; from the normal one it obeys."""
     try:
-        repl.close()
-    except (TransportError, OSError):
-        pass
+        repl = open_port(port)
+    except (TransportError, OSError) as e:
+        raise FirmwareError("Cannot reach %s: is it connected in the app? (%s)" % (port, e))
+    try:
+        ser = repl.ser
+        ser.write(b"\x03\x03")
+        seen, end = b"", time.monotonic() + 3.0
+        while not seen.endswith(b">>> ") and time.monotonic() < end:
+            seen += ser.read(ser.in_waiting or 1)
+        if not seen.endswith(b">>> "):
+            raise FirmwareError("The board on %s did not give its prompt." % port)
+        ser.write(b"import machine\r\n")
+        time.sleep(0.3)
+        ser.write(b"machine.bootloader()\r\n")
+        time.sleep(0.3)
+    except OSError:
+        pass                                # it has already gone, as asked
+    finally:
+        try:
+            repl.ser.close()
+        except (AttributeError, OSError):
+            pass
+
+
+def enter_bootloader(port, timeout=20.0, poll=0.2, open_board=RawREPL.open_board, find=None, normal_repl=False,
+                     open_port=RawREPL.open):
+    """Ask a running board to restart into its bootloader, with no button; returns the device when it appears. It drops
+    off USB as soon as it obeys, so a lost connection here is the expected result, and the device appearing decides.
+    find lists what to watch for: UF2 drives unless told otherwise."""
+    find = find or detect
+    before = {d.path for d in find()}
+    if normal_repl:
+        _bootloader_in_normal_repl(port, open_port)
+    else:
+        _bootloader_in_raw_repl(port, open_board)
     end = time.monotonic() + timeout
     while True:
         new = [d for d in find() if d.path not in before]
