@@ -531,7 +531,7 @@ def test_a_running_board_cannot_be_erased(setup):
     make, drives, *_ = setup
     drives[0] = RUNNING
     d = make(cls=dialog.EraseDialog)
-    wait_until(lambda: "hold BOOTSEL" in d.note.get_text() and d.drive().path in d.running_info)
+    wait_until(lambda: "BOOTSEL" in d.note.get_text() and d.drive().path in d.running_info)
     assert not d.erase_btn.get_sensitive()
 
 
@@ -752,17 +752,17 @@ def test_the_2022_badge_gets_its_buttons_not_the_bootloader_button(setup):
     drives[0] = TIDAL_RUNNING
     d = make()
     assert d.board_box.get_active_text() == "TiDAL (2022 badge) at /dev/ttyACM2"
-    assert not d.boot_btn.get_visible() and "bottom right" in d.details.get_text()
-    assert "boop" not in d.details.get_text()       # only this device's steps
+    assert not d.boot_btn.get_visible() and "bottom right" in d.note.get_text()
+    assert "boop" not in d.note.get_text()          # only this device's steps
 
 
 def test_the_steps_change_with_the_device_chosen(setup):
     make, drives, *_ = setup
     drives[:] = [TILDAGON_RUNNING, TIDAL_RUNNING]
     d = make(cls=dialog.BackupDialog)
-    assert "boop" in d.details.get_text()
+    assert "If that does not work" in d.note.get_text() and "hold boop" in d.note.get_text()
     d.board_box.set_active(1)
-    assert "bottom right" in d.details.get_text() and "boop" not in d.details.get_text()
+    assert "bottom right" in d.note.get_text() and "boop" not in d.note.get_text()
 
 
 def test_with_nothing_found_all_the_steps_are_shown(setup):

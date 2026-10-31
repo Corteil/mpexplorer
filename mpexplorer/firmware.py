@@ -541,33 +541,20 @@ def can_enter_bootloader(drive):
     return drive.method == "repl" or (drive.method == "badge" and BADGES[drive.board_id].boot_from_repl)
 
 
-def running_badge_hint(drive):
-    if BADGES[drive.board_id].boot_from_repl:
-        return "This badge is running normally. Press Put in bootloader, or use the steps above."
-    return "This badge is running normally. To use this tool, follow the steps above."
-
-
 PICO_STEPS = "hold the BOOTSEL button while plugging it in"
 ESP32_STEPS = "hold its BOOT button while plugging it in (the name can differ between boards)"
-OTHER_STEPS = "see the instructions for this board"
 
 
-def bootloader_steps(drive):
-    """How this kind of device reaches its bootloader, by hand."""
-    if drive.method == "badge":
-        return BADGES[drive.board_id].steps
-    if drive.method == "esptool":
-        chip = drive.esp_chip
-        return BADGES[chip.badge].steps if chip and chip.badge else ESP32_STEPS
-    return PICO_STEPS if drive.method == "repl" or drive.chip else OTHER_STEPS
+def bootloader_hint(drive):
+    """How to get a running board to its bootloader: the button if it has one, and its own steps by hand."""
+    steps = BADGES[drive.board_id].steps if drive.method == "badge" else PICO_STEPS
+    if can_enter_bootloader(drive):
+        return "Press Put in bootloader. If that does not work, %s." % steps
+    return "To use this tool, %s." % steps
 
 
 def device_details(drive, running=None):
     """(name, value) lines for the device's details panel."""
-    return _device_facts(drive, running) + [("How to reach its bootloader", bootloader_steps(drive))]
-
-
-def _device_facts(drive, running):
     if drive.method == "badge":
         return [("State", "running normally"), ("Port", drive.path),
                 ("Details", "more can be read once it is in its bootloader")]
