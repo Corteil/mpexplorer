@@ -243,7 +243,7 @@ def test_the_site_list_is_for_the_found_chip_and_no_board_is_chosen_for_you(setu
     make, *_ = setup
     d = make()
     wait_until(lambda: d.boards)
-    assert d.product() is None and not d.install_btn.get_sensitive() and "Choose your board" in d.note.get_text()
+    assert d.product() is None and not d.install_btn.get_sensitive() and "Choose your exact board" in d.note.get_text()
 
 
 def test_the_default_version_is_the_latest_release_and_the_rest_are_opt_in(setup):
