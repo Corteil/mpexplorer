@@ -354,6 +354,7 @@ def test_progress_describes_the_transfer(monkeypatch):
     p = Progress()
     p.label = "main.py"
     assert p.describe() == "main.py" and p.eta() is None and p.fraction() == 0.0 and not p.known()   # nothing known yet
+    p.started = 100.0                                   # a round start: with real uptime (CI) 2.0 can come out inexact
     clock = {"t": p.started}
     monkeypatch.setattr(time, "monotonic", lambda: clock["t"])
     p.total, p.done = 4096, 1024
