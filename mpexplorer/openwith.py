@@ -8,6 +8,7 @@ import os
 import posixpath
 import re
 import shlex
+import stat
 import subprocess
 import time
 from collections import namedtuple
@@ -17,7 +18,7 @@ from .backends import LocalBackend, human
 from .ops import Progress, _copy_file
 
 SETTLE = 1.0                    # seconds without another save before a change is uploaded
-BUILTIN = ("editor", "run", "hex", "image")
+BUILTIN = ("editor", "run", "hex", "image", "system")
 PART_SUFFIX = ".mpx-part"
 
 
@@ -99,6 +100,19 @@ def remember_handler(settings, name, handler, custom=None):
     return key
 
 
+SYSTEM_OPEN = "xdg-open {file}"        # the "system default application" handler
+EXECUTABLE_EXTENSIONS = (".sh", ".bash", ".run", ".bin", ".appimage", ".desktop", ".exe", ".msi", ".bat", ".cmd",
+                         ".com", ".scr", ".jar", ".command")
+
+
+def looks_executable(name, mode=None):
+    """True for a file the system default might RUN rather than show: a program-like extension, or (for a host file,
+    pass its st_mode) any of the executable bits."""
+    if posixpath.splitext(name)[1].lower() in EXECUTABLE_EXTENSIONS:
+        return True
+    return bool(mode and mode & 0o111 and stat.S_ISREG(mode))
+
+
 def normalize_extension(text):
     """'PY', '.Py' or ' .py ' -> '.py'; None for empty text or anything with a slash, space or a lone dot."""
     text = text.strip().lower()
@@ -123,7 +137,8 @@ def describe_handler(settings, handler, app_name=None):
     """A saved handler as words for a list: 'Built-in editor', 'Geany', 'Custom: geany {file}'.
 
     `app_name(desktop id)` gives an installed app's display name (None or a miss shows the id)."""
-    names = {"editor": "Built-in editor", "run": "Run on the board", "hex": "Hex viewer", "image": "Image viewer"}
+    names = {"editor": "Built-in editor", "run": "Run on the board", "hex": "Hex viewer", "image": "Image viewer",
+             "system": "System default application"}
     if handler in names:
         return names[handler]
     kind, _, value = handler.partition(":")

@@ -13,7 +13,8 @@ from ..console import ConsoleSession
 from ..errors import BackendError, Cancelled
 from ..jobs import JobRunner
 from ..badgescreen import BadgeScreen
-from ..openwith import EditManager, app_template, handler_for, parse_handler, remember_handler
+from ..openwith import (SYSTEM_OPEN, EditManager, app_template, handler_for, looks_executable, parse_handler,
+                        remember_handler)
 from ..ops import ConflictPolicy, copy_tree, delete_items, is_within, move_item, total_size, unique_name
 from ..ports import board_id, device_of, list_ports, short_model
 from ..remember import device_start, host_start, port_choice, remember_board_name, remember_folder, remember_port
@@ -699,6 +700,21 @@ class App(Gtk.Window):
         """Double-click / Enter: the program saved for this file type, else the built-in editor."""
         self.open_with(pane, path, size, handler_for(self.settings, posixpath.basename(path)))
 
+    def _confirm_system_open(self, pane, path):
+        """The system default may run a program instead of showing it: ask first for an executable-looking file."""
+        name = posixpath.basename(path)
+        mode = None
+        if pane.backend.key == "local":
+            try:
+                mode = os.stat(path).st_mode
+            except OSError:
+                pass
+        if not looks_executable(name, mode):
+            return True
+        return ask_yes_no(self, "Open with the system default?",
+                          "%s looks like a program. The system default application may run it instead of "
+                          "showing it.\n\nOpen it anyway?" % name)
+
     def open_with_selected(self):
         """File menu / Shift+Enter / context menu: choose the program for the one selected file."""
         pane = self.active
@@ -734,6 +750,10 @@ class App(Gtk.Window):
         except ValueError as e:
             error(self, "Cannot open file", str(e))
             return
+        if kind == "builtin" and value == "system":
+            if not self._confirm_system_open(pane, path):
+                return
+            kind, value = "command", SYSTEM_OPEN
         if kind == "command":
             self.open_external(pane, path, value)
         elif value == "run":

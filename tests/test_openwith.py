@@ -526,3 +526,13 @@ def test_pause_covers_files_opened_later_and_flush_does_not_send_held_saves(rig,
     open(rig.mgr.sessions[0].watcher.local, "wb").write(b"a2\n")
     assert rig.mgr.flush(dev, "bd1") == ["a.py"] and read(dev, bd + "/a.py") == b"a1\n"
     assert rig.mgr.close_board("bd1") == ["a.py"]                      # kept in the cache, the user is told
+
+
+def test_looks_executable():
+    for name in ("run.sh", "Tool.AppImage", "setup.EXE", "x.desktop"):
+        assert openwith.looks_executable(name)
+    assert not openwith.looks_executable("notes.txt") and not openwith.looks_executable("main.py")
+    assert openwith.looks_executable("tool", 0o100755)                  # a regular file with the executable bit
+    assert not openwith.looks_executable("notes", 0o100644)
+    assert not openwith.looks_executable("dir", 0o040755)               # a folder is not a program
+    assert openwith.describe_handler(None, "system") == "System default application"
