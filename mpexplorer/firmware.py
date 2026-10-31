@@ -1,4 +1,5 @@
 """Install MicroPython on a board in its bootloader: UF2 drives, and esptool for badges. See docs/FIRMWARE_PLAN.md."""
+import base64
 import hashlib
 import importlib.util
 import os
@@ -37,7 +38,11 @@ ESP32S3_ROM_USB = (0x303A, 0x1001)                   # "USB JTAG/serial debug un
 ESP_IMAGE_MAGIC, ESP32S3_CHIP_ID = 0xE9, 9
 ESP_PARTITION_TABLE, ESP_APP_OFFSET, ESP_FLASH_BYTES = 0x8000, 0x10000, 8 * 1024 * 1024
 ESPTOOL_MAJOR = 5
-ESPTOOL_STAGES = (("Erasing flash", "Erasing flash"), ("Writing at", "Writing firmware"), ("Verifying", "Verifying"))
+ESPTOOL_STAGES = (("Erasing flash", "Erasing flash"), ("Writing at", "Writing firmware"), ("Verifying", "Verifying"),
+                  ("Reading from", "Reading flash"))
+UF2_PAYLOAD = 256
+UF2_FAMILY_FOR_BACKUP = {"rp2040": 0xE48BFF56, "rp2350": 0xE48BFF59}
+REPL_CHUNK = 30000                                   # a multiple of 3, so each piece of base64 stands alone
 ESPTOOL_LOG = "esptool.log"                          # every run's full output, for when the short message is not enough
 INSTALL_ESPTOOL = "Installing on this board needs esptool %d. Install it with: pipx install esptool" % ESPTOOL_MAJOR
 
@@ -104,6 +109,13 @@ class EspInfo:
 
 
 @dataclass
+class Backup:
+    path: str
+    size: int
+    source: str
+
+
+@dataclass
 class Installed:
     port: str
     release: str
@@ -166,8 +178,13 @@ def detect_rom():
             for port in sorted(_ports_with(ESP32S3_ROM_USB))]
 
 
+def detect_running():
+    """RP2 boards running MicroPython: they can be backed up, but need their bootloader for anything else."""
+    return [BootDrive(port, "MicroPython", "MicroPython", None, "repl") for port in sorted(rp2_ports())]
+
+
 def detect_all(mounts_file="/proc/self/mounts"):
-    return detect(mounts_file) + detect_rom()
+    return detect(mounts_file) + detect_rom() + detect_running()
 
 
 def check_uf2(path, chip):
@@ -313,13 +330,22 @@ def flash_esptool(image, drive, on_progress=None, cancelled=None, tool=None, sta
     info = check_esp_image(image, flash_mb * 1024 * 1024 if flash_mb else ESP_FLASH_BYTES)
     if drive.path not in _ports_with(ESP32S3_ROM_USB) and not tool:
         raise FirmwareError("The board at %s has gone. Scan again." % drive.path)
-    # no-reset before connecting: the chip is already in its ROM. Watchdog reset after: on a real Tildagon esptool's
-    # default "hard reset via RTS" left it in the ROM, and this one starts the new firmware
-    argv = (tool or find_esptool()) + ["--chip", "esp32s3", "--port", drive.path, "--baud", "460800",
-                                       "--before", "no-reset", "--after", "watchdog-reset",
-                                       "write-flash"] + (["--erase-all"] if erase else []) + ["0", image]
+    # Watchdog reset after: on a real Tildagon esptool's default "hard reset via RTS" left it in the ROM, and this one
+    # starts the new firmware
+    argv = (tool or find_esptool()) + _rom_args(drive, "watchdog-reset") + ["write-flash"] + \
+        (["--erase-all"] if erase else []) + ["0", image]
     if erase:
         stall = max(stall, 300.0)       # a chip erase prints nothing for as long as it takes
+    _run_esptool(argv, on_progress, on_stage, cancelled, stall)
+    return info
+
+
+def _rom_args(drive, after):
+    """no-reset before connecting: the chip is already in its ROM."""
+    return ["--chip", "esp32s3", "--port", drive.path, "--baud", "460800", "--before", "no-reset", "--after", after]
+
+
+def _run_esptool(argv, on_progress, on_stage, cancelled, stall):
     log_path = esptool_log_path()
     os.makedirs(os.path.dirname(log_path), exist_ok=True)
     try:
@@ -354,7 +380,7 @@ def flash_esptool(image, drive, on_progress=None, cancelled=None, tool=None, sta
                     shown = stage
                     if on_stage:
                         on_stage(stage)
-                m = re.search(r"Writing at .*?(\d+(?:\.\d+)?) ?%", line)
+                m = re.search(r"(?:Writing at|Reading from) .*?(\d+(?:\.\d+)?) ?%", line)
                 if m and on_progress:
                     on_progress(float(m[1]), 100)
         if partial:
@@ -368,7 +394,144 @@ def flash_esptool(image, drive, on_progress=None, cancelled=None, tool=None, sta
         log.close()
     if proc.wait() != 0:
         raise FirmwareError("esptool failed.\n%s\n\nFull output: %s" % (_esptool_tail(lines), log_path))
-    return info
+
+
+def check_nuke_uf2(path):
+    """The erase tool is a program run from RAM: check that it is one, for every chip it says it covers."""
+    name = os.path.basename(path)
+    try:
+        with open(path, "rb") as f:
+            data = f.read(MAX_IMAGE + 1)
+    except OSError as e:
+        raise FirmwareError("Cannot read %s: %s" % (name, e))
+    if not data or len(data) % BLOCK or len(data) > MAX_IMAGE:
+        raise FirmwareError("%s is not a UF2 file." % name)
+    seen = {}
+    for offset in range(0, len(data), BLOCK):
+        m0, m1, flags, addr, _count, number, total, family = struct.unpack_from("<8I", data, offset)
+        if (m0, m1) != (MAGIC_START0, MAGIC_START1) or struct.unpack_from("<I", data, offset + 508)[0] != MAGIC_END:
+            raise FirmwareError("%s is not a UF2 file: bad block %d." % (name, offset // BLOCK))
+        if not 0x20000000 <= addr < 0x20100000:
+            raise FirmwareError("%s writes outside RAM: refusing it as an erase tool." % name)
+        seen.setdefault((family, total), set()).add(number)
+    if not seen or any(len(numbers) != total for (_family, total), numbers in seen.items()):
+        raise FirmwareError("%s is incomplete." % name)
+
+
+def to_uf2(data, family, base=FLASH_START):
+    """A flash image as a UF2, so a backup goes back on through the UF2 drive like any firmware."""
+    total = (len(data) + UF2_PAYLOAD - 1) // UF2_PAYLOAD
+    out = bytearray()
+    for n in range(total):
+        piece = data[n * UF2_PAYLOAD:(n + 1) * UF2_PAYLOAD]
+        out += struct.pack("<8I", MAGIC_START0, MAGIC_START1, FLAG_HAS_FAMILY, base + n * UF2_PAYLOAD, UF2_PAYLOAD, n,
+                           total, family)
+        out += piece.ljust(MAX_PAYLOAD, b"\0") + struct.pack("<I", MAGIC_END)
+    return bytes(out)
+
+
+def _save_private(path, data):
+    """Backups can hold Wi-Fi passwords: only this user may read them. Written whole, or not at all."""
+    tmp = path + ".part"
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "wb") as f:
+        f.write(data)
+    os.replace(tmp, path)
+
+
+_REPL_SIZE = """
+import uctypes,os
+b=0x10000000
+s=bytes(uctypes.bytearray_at(b,256))
+n=0
+for m in (1,2,4,8,16):
+    if bytes(uctypes.bytearray_at(b+m*1048576,256))==s:
+        n=m
+        break
+print(n)
+print(os.uname().machine)
+"""
+_REPL_READ = """
+import uctypes,binascii,hashlib
+c=bytes(uctypes.bytearray_at(0x10000000+%d,%d))
+print(binascii.b2a_base64(c).decode().strip())
+print(binascii.hexlify(hashlib.sha256(c).digest()).decode())
+"""
+
+
+def backup_repl(port, path, on_progress=None, cancelled=None, open_board=RawREPL.open_board):
+    """Read a running RP2 board's whole flash through the raw REPL into a UF2 at `path`. Only reads the board, then
+    soft-resets it. The flash size is found by where its contents repeat in the address space."""
+    try:
+        repl, _ = open_board(port)
+    except (TransportError, OSError) as e:
+        raise FirmwareError("MicroPython did not answer on %s: %s" % (port, e))
+    try:
+        lines = repl.exec(_REPL_SIZE, timeout=10).decode().strip().splitlines()
+        size, machine = int(lines[0]) * 1024 * 1024, lines[1]
+        chip = next((c for c in UF2_FAMILY_FOR_BACKUP if CHIP_NAMES[c] in machine), None)
+        if not chip:
+            raise FirmwareError("Backing up %s is not supported." % machine)
+        if not size:
+            raise FirmwareError("Cannot work out the flash size of %s." % machine)
+        data = bytearray()
+        while len(data) < size:
+            if cancelled and cancelled():
+                raise Cancelled()
+            n = min(REPL_CHUNK, size - len(data))
+            text, sha = repl.exec(_REPL_READ % (len(data), n), timeout=30).decode().strip().splitlines()
+            piece = base64.b64decode(text)
+            if len(piece) != n or hashlib.sha256(piece).hexdigest() != sha:
+                raise FirmwareError("A read from the board at offset %d did not check out." % len(data))
+            data += piece
+            if on_progress:
+                on_progress(len(data), size)
+    except (TransportError, ValueError, IndexError) as e:
+        raise FirmwareError("Reading the flash failed: %s" % e)
+    finally:
+        repl.close(reset=True)
+    _save_private(path, to_uf2(bytes(data), UF2_FAMILY_FOR_BACKUP[chip]))
+    return Backup(path, size, machine)
+
+
+def backup_esptool(drive, path, on_progress=None, on_stage=None, cancelled=None, tool=None):
+    """Read an ESP chip's whole flash to `path`, which goes back on as a firmware file. It stays in its bootloader."""
+    mb = drive.esp_chip.flash_mb if drive.esp_chip else None
+    if not mb:
+        raise FirmwareError("The flash size of the board on %s is not known." % drive.path)
+    tmp = path + ".part"
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    os.close(fd)
+    size = mb * 1024 * 1024
+    _run_esptool((tool or find_esptool()) + _rom_args(drive, "no-reset") + ["read-flash", "0", str(size), tmp],
+                 on_progress, on_stage, cancelled, 90.0)
+    if os.path.getsize(tmp) != size:
+        raise FirmwareError("The backup is the wrong size: %d of %d bytes." % (os.path.getsize(tmp), size))
+    os.replace(tmp, path)
+    return Backup(path, size, drive.esp_chip.text)
+
+
+def erase_esptool(drive, on_stage=None, cancelled=None, tool=None):
+    """Erase the whole flash. The chip stays in its bootloader: with no firmware left, it has nowhere else to go."""
+    _run_esptool((tool or find_esptool()) + _rom_args(drive, "no-reset") + ["erase-flash"], None, on_stage, cancelled,
+                 300.0)
+
+
+def erase_uf2(image, drive, on_progress=None, cancelled=None, timeout=90.0, poll=0.5):
+    """Run the erase tool from a UF2 drive. It erases, then restarts into the bootloader, so the drive comes back."""
+    check_nuke_uf2(image)
+    if read_drive(drive.path) != drive:
+        raise FirmwareError("The board at %s has gone or changed. Scan again." % drive.path)
+    before = {d.path for d in detect() if d.path != drive.path}
+    _copy_to_drive(image, drive, on_progress, cancelled)
+    if not wait_gone(drive):
+        raise FirmwareError("The board did not start the erase. It is still in its bootloader.")
+    end = time.monotonic() + timeout
+    while time.monotonic() < end:
+        if any(d.chip == drive.chip and d.path not in before for d in detect()):
+            return
+        time.sleep(poll)
+    raise FirmwareError("The board did not come back after the erase. Unplug it and check it with BOOTSEL held.")
 
 
 def wait_gone(drive, timeout=20.0, poll=0.1):
@@ -392,6 +555,14 @@ def install(image, drive, on_progress=None, cancelled=None, gone_timeout=20.0):
     info = check_uf2(image, drive.chip)
     if read_drive(drive.path) != drive:
         raise FirmwareError("The board at %s has gone or changed. Scan again." % drive.path)
+    _copy_to_drive(image, drive, on_progress, cancelled)
+    if not wait_gone(drive, gone_timeout):
+        raise FirmwareError("The board did not restart after the copy. It is still in its bootloader.")
+    return info
+
+
+def _copy_to_drive(image, drive, on_progress=None, cancelled=None):
+    """The board may restart as the last data lands, so an error on the last chunk or after it is expected."""
     with open(image, "rb") as f:
         data = f.read()
     view = memoryview(data)
@@ -422,9 +593,6 @@ def install(image, drive, on_progress=None, cancelled=None, gone_timeout=20.0):
             out.close()
         except OSError:
             pass
-    if not wait_gone(drive, gone_timeout):
-        raise FirmwareError("The board did not restart after the copy. It is still in its bootloader.")
-    return info
 
 
 def rp2_ports():

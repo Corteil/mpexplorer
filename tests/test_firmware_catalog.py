@@ -238,3 +238,13 @@ def test_a_file_that_changes_under_one_name_is_read_again_and_the_copy_is_the_fa
     c.forget(b)
     with pytest.raises(FirmwareError, match="Cannot read"):
         c.download(b)
+
+
+def test_the_erase_tool_may_redirect_to_github_but_nowhere_else(tmp_path):
+    good = "https://release-assets.githubusercontent.com/x/nuke_universal.uf2"
+    c = cat.Catalog(str(tmp_path), Site({cat.NUKE_URL: lambda url: Reply(b"tool", good)}))
+    assert open(c.erase_tool(), "rb").read() == b"tool"
+    site = Site({cat.NUKE_URL: lambda url: Reply(b"bad", "https://evil.example/x.uf2")})
+    c = cat.Catalog(str(tmp_path), site)
+    path = c.erase_tool()                           # refused: the copy saved above is the fallback
+    assert open(path, "rb").read() == b"tool"

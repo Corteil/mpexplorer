@@ -1,11 +1,12 @@
 """Tools > Install firmware: put MicroPython on a board in its bootloader. The logic is in ..firmware."""
 import os
 import threading
+import time
 
 from .. import firmware as fw
 from ..backends import human
 from ..errors import Cancelled
-from ..firmware_catalog import Catalog, default_build, saved_text
+from ..firmware_catalog import NUKE_FILE, Build, Catalog, default_build, saved_text
 from .common import GLib, Gtk, ask_yes_no, error
 
 STEPS = ("Pico or Pico 2: hold the BOOTSEL button while plugging it in.\n"
@@ -13,14 +14,15 @@ STEPS = ("Pico or Pico 2: hold the BOOTSEL button while plugging it in.\n"
          "few seconds.\n"
          "2022 badge: hold the bottom right button, tap bottom-left, then release both.\n"
          "Another ESP32-S3 board: hold its BOOT button while plugging it in.\n"
-         "The board appears here, and any serial connection to it ends.")
+         "The board appears here, and any serial connection to it ends. A Pico running MicroPython can be backed up "
+         "without any of this.")
 SAME_CHIP = ("The bootloader names the chip, not the board: a Pico and a Pico W read the same but need "
              "different firmware. Choose your exact board.")
 
 
 class FirmwareDialog(Gtk.Dialog):
     def __init__(self, app):
-        super().__init__(title="Install firmware", transient_for=app, modal=True)
+        super().__init__(title="Firmware and flash", transient_for=app, modal=True)
         self.app, self.drives, self.info, self.running, self.result = app, [], None, False, None
         self.catalog = Catalog()
         self.boards, self.builds, self.shown_builds, self.list_chip, self.list_error = [], [], [], None, ""
@@ -81,6 +83,8 @@ class FirmwareDialog(Gtk.Dialog):
 
         self.cancel_btn = self.add_button("Cancel", Gtk.ResponseType.NONE)
         self.connect_btn = self.add_button("Connect", Gtk.ResponseType.APPLY)
+        self.backup_btn = self.add_button("Back up...", Gtk.ResponseType.ACCEPT)
+        self.erase_btn = self.add_button("Erase...", Gtk.ResponseType.REJECT)
         self.install_btn = self.add_button("Install", Gtk.ResponseType.OK)
         self.close_btn = self.add_button("Close", Gtk.ResponseType.CLOSE)
         for b in (self.cancel_btn, self.connect_btn):
@@ -126,7 +130,10 @@ class FirmwareDialog(Gtk.Dialog):
         self.drives = found
         self.board_box.remove_all()
         for d in found:
-            name = fw.CHIP_NAMES.get(d.chip, "Unsupported (%s)" % d.board_id)
+            if d.method == "repl":
+                name = "Running MicroPython"
+            else:
+                name = fw.CHIP_NAMES.get(d.chip, "Unsupported (%s)" % d.board_id)
             self.board_box.append_text("%s at %s" % (name, d.path))
         paths = [d.path for d in found]
         if found:
@@ -253,6 +260,15 @@ class FirmwareDialog(Gtk.Dialog):
         if self.running or self.result:     # a list can arrive late: it must not touch a running or finished install
             return
         drive, self.info = self.drive(), None
+        if drive and drive.method == "repl":
+            self.note.set_text("This board can be backed up as it is. To install or erase, hold BOOTSEL while "
+                               "plugging it in.")
+            self.install_btn.set_sensitive(False)
+            self.erase.set_sensitive(False)
+            self._sync_tools(drive)
+            if self.outcome:
+                self.note.set_text(self.outcome)
+            return
         esp = bool(drive and drive.method == "esptool")
         self.erase.set_sensitive(esp)
         if not esp:
@@ -265,6 +281,7 @@ class FirmwareDialog(Gtk.Dialog):
             self.note.set_text(self.tool_problem)
             ready = False
         self.install_btn.set_sensitive(ready)
+        self._sync_tools(drive)
         if self.outcome:
             self.note.set_text(self.outcome)
 
@@ -298,6 +315,13 @@ class FirmwareDialog(Gtk.Dialog):
             return True
         self.note.set_text(text.strip())
         return False
+
+    def _sync_tools(self, drive):
+        usable = bool(drive) and not self._chip_problem(drive) and not self.running
+        self.backup_btn.set_sensitive(usable and drive.method != "uf2")
+        self.erase_btn.set_sensitive(usable and drive.method != "repl" and bool(drive.chip))
+        self.backup_btn.set_tooltip_text("A board on a BOOTSEL drive cannot be read: start it normally to back it up"
+                                         if drive and drive.method == "uf2" else None)
 
     @staticmethod
     def _not_tildagon(drive):
@@ -333,6 +357,10 @@ class FirmwareDialog(Gtk.Dialog):
     def _response(self, _dlg, response):
         if response == Gtk.ResponseType.OK:
             self.install()
+        elif response == Gtk.ResponseType.ACCEPT:
+            self.backup()
+        elif response == Gtk.ResponseType.REJECT:
+            self.erase_flash()
         elif response == Gtk.ResponseType.NONE:
             self.cancel_event.set()
             self.cancel_btn.set_sensitive(False)
@@ -340,6 +368,118 @@ class FirmwareDialog(Gtk.Dialog):
             self._connect_new_port()
         elif not self.running:
             self.destroy()
+
+    # -- backup and erase --------------------------------------------------
+    def _ask_backup_path(self, drive):
+        dlg = Gtk.FileChooserDialog(title="Save the flash backup as", transient_for=self,
+                                    action=Gtk.FileChooserAction.SAVE)
+        dlg.add_buttons("Cancel", Gtk.ResponseType.CANCEL, "Save", Gtk.ResponseType.OK)
+        dlg.set_do_overwrite_confirmation(True)
+        dlg.set_current_name("flash-backup-%s.%s" % (time.strftime("%Y%m%d-%H%M"),
+                                                     "uf2" if drive.method == "repl" else "bin"))
+        path = dlg.get_filename() if dlg.run() == Gtk.ResponseType.OK else None
+        dlg.destroy()
+        return path
+
+    def _start(self, work, done):
+        """Run a slow job with the window locked; done(text) gives what to say when it has worked."""
+        self.app.disconnect()
+        self.running, self.outcome = True, ""
+        self.cancel_event.clear()
+        self.cancel_btn.set_sensitive(True)
+        self.cancel_btn.show()
+        self.bar.set_fraction(0)
+        self.bar.show()
+        for w in self._locked():
+            w.set_sensitive(False)
+
+        def run():
+            try:
+                res, exc = work(), None
+            except Exception as e:
+                res, exc = None, e
+            GLib.idle_add(self._job_done, res, exc, done)
+        threading.Thread(target=run, daemon=True).start()
+
+    def _locked(self):
+        return (self.install_btn, self.close_btn, self.board_box, self.chooser, self.site_rows, self.use_site,
+                self.use_file, self.erase, self.backup_btn, self.erase_btn)
+
+    def _progress(self, done, total):
+        GLib.idle_add(self.bar.set_fraction, done / total)
+
+    def _stage(self, text):
+        GLib.idle_add(self.note.set_text, text + " ...")
+
+    def _job_done(self, res, exc, done):
+        self.running = False
+        self.cancel_btn.hide()
+        self.bar.hide()
+        self.close_btn.set_sensitive(True)
+        for w in (self.board_box, self.use_site, self.use_file):
+            w.set_sensitive(True)
+        self._source_changed()
+        self.drives = []
+        self.board_box.remove_all()
+        self.scan()
+        self._check()
+        if isinstance(exc, Cancelled):
+            self.outcome = "Cancelled."
+        elif exc:
+            self.outcome = "Failed."
+        else:
+            self.outcome = done(res)
+        self.note.set_text(self.outcome)
+        if exc and not isinstance(exc, Cancelled):
+            error(self, "It did not work", str(exc))
+
+    def backup(self):
+        drive = self.drive()
+        path = self._ask_backup_path(drive)
+        if not path:
+            return
+
+        def work():
+            if drive.method == "repl":
+                got = fw.backup_repl(drive.path, path, self._progress, self.cancel_event.is_set)
+            else:
+                got = fw.backup_esptool(drive, path, self._progress, self._stage, self.cancel_event.is_set)
+            return got, fw.sha256_of(path)
+
+        def done(res):
+            got, sha = res
+            return "Backed up %s (%s) to %s\nSHA-256 %s\nIt can hold Wi-Fi passwords, so only you can read it." % (
+                human(got.size), got.source, got.path, sha)
+        self._start(work, done)
+
+    def erase_flash(self):
+        drive = self.drive()
+        what = "the %s at %s" % (fw.CHIP_NAMES.get(drive.chip, drive.board_id), drive.path)
+        if drive.esp_chip:
+            what += " (%s)" % drive.esp_chip.text
+        if not ask_yes_no(self, "Erase the flash", "Erase all of the flash on %s?\n\nThis removes its firmware and all "
+                          "its files. They cannot be recovered without a backup." % what):
+            return
+        if not ask_yes_no(self, "Erase the flash", "Really erase everything on %s?" % what):
+            return
+
+        def work():
+            if drive.method == "esptool":
+                fw.erase_esptool(drive, self._stage, self.cancel_event.is_set)
+                return None
+            self._stage("Getting the erase tool")
+            image = self.catalog.erase_tool(self._progress, self.cancel_event.is_set)
+            try:
+                fw.check_nuke_uf2(image)
+            except fw.FirmwareError:
+                self.catalog.forget(Build(NUKE_FILE, "", "", "", False))
+                raise
+            self._stage("Erasing flash")
+            fw.erase_uf2(image, drive, self._progress, self.cancel_event.is_set)
+            return None
+
+        self._start(work, lambda _res: "Erased. The board has no firmware now, and stays in its bootloader, ready "
+                                       "for an install.")
 
     # -- the install -------------------------------------------------------
     def install(self):
@@ -370,8 +510,7 @@ class FirmwareDialog(Gtk.Dialog):
         self.cancel_btn.show()
         self.bar.set_fraction(0)
         self.bar.show()
-        for w in (self.install_btn, self.close_btn, self.board_box, self.chooser, self.site_rows, self.use_site,
-                  self.use_file, self.erase):
+        for w in self._locked():
             w.set_sensitive(False)
 
         def progress(done, total):
@@ -419,6 +558,8 @@ class FirmwareDialog(Gtk.Dialog):
             self.note.set_text("Installed: MicroPython %s on %s, now at %s.\nSHA-256 %s" % (
                 res.release, res.machine, res.port, sha))
             self.connect_btn.show()
+            for w in (self.backup_btn, self.erase_btn):
+                w.set_sensitive(False)
             return
         for w in (self.board_box, self.use_site, self.use_file):
             w.set_sensitive(True)

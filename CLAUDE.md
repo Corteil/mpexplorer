@@ -7,7 +7,7 @@ Read `docs/HANDOFF.md` first: it is the project's memory (requirements, decision
 A dual-pane file explorer (GTK 3 via PyGObject), REPL console and terminal for MicroPython boards, running on a **Raspberry Pi 5**
 over USB serial. Targets: Pico / Pico 2 and the EMF Camp badges (2022 TiLDA Mk6, 2024 Tildagon, 2026 = same as 2024;
 all ESP32-S3). **Default rule: nothing is installed on the target** - everything goes through the stock raw REPL. The one exception is
-Tools > Install firmware, which writes firmware only to a board in its bootloader, only when the user starts it (`docs/FIRMWARE_PLAN.md`).
+Tools > Firmware and flash, which writes or erases only a board in its bootloader, only when the user starts it (`docs/FIRMWARE_PLAN.md`).
 (An opt-in RAM-only "agent mode" is designed in DESIGN.md but not built.)
 
 ## Commands

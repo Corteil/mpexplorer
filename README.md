@@ -23,7 +23,7 @@ board over USB serial. **Nothing is installed on the board**: it works through t
   automatically), Ctrl+C/D/E/B, `_` and `input()`. Copy and paste with Ctrl+Shift+C / Ctrl+Shift+V. While the
   terminal is active the device pane is paused (the serial line has one user at a time); switch back and your
   variables are still there.
-- **Folder sync** (Tools > Sync this folder to the other pane): compares by size and SHA-256 (computed on the
+- **Folder sync** (Tools > Sync folders): compares by size and SHA-256 (computed on the
   device, so nothing is transferred to check), shows a preview, copies only what changed, optional mirror-delete.
   `__pycache__`, `.git`, `*.pyc` are skipped. Files are written under a temporary name so a cancel never loses
   the old copy.
@@ -38,7 +38,8 @@ mpexplorer
 ```
 Plug the board in, press **Scan**, pick the port, **Connect**.
 
-Tools > Install firmware needs `pipx install esptool` for a Tildagon; a Pico or Pico 2 needs nothing extra.
+Tools > Firmware and flash installs firmware, backs up the flash and erases it. A badge or other ESP32-S3 needs
+`pipx install esptool`; a Pico or Pico 2 needs nothing extra.
 
 The interface is GTK 3 through PyGObject (`python3-gi`, already on Raspberry Pi OS); `--system-site-packages` lets
 pipx see it. `gir1.2-vte-2.91` is only needed for the console's Terminal mode.

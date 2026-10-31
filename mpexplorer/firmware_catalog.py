@@ -14,7 +14,12 @@ from .firmware import MAX_IMAGE, FirmwareError
 BASE = "https://micropython.org"
 EMF_FLASHER = "https://emfcamp.github.io/badge-2024-software/merged-firmware.bin"
 TIDAL_FLASHER = "https://emfcamp.github.io/TiDAL-Firmware/merged-firmware.bin"
-ALLOWED = (BASE + "/", "https://emfcamp.github.io/")
+NUKE_URL = "https://datasheets.raspberrypi.com/soft/flash_nuke.uf2"
+NUKE_FILE = "flash_nuke.uf2"
+# Raspberry Pi's address for the erase tool redirects to its GitHub release files.
+ALLOWED = (BASE + "/", "https://emfcamp.github.io/", "https://datasheets.raspberrypi.com/",
+           "https://github.com/raspberrypi/", "https://release-assets.githubusercontent.com/",
+           "https://objects.githubusercontent.com/")
 FIRMWARE_PATH = "/resources/firmware/"
 TIMEOUT = 20
 VARIANT_NAMES = {"RISCV": "RISC-V"}
@@ -194,6 +199,10 @@ class Catalog:
             f.write(data)
         os.replace(tmp, path)
         return path
+
+    def erase_tool(self, on_progress=None, cancelled=None):
+        """Raspberry Pi's erase program for a UF2 drive; a saved copy is used if it cannot be read again."""
+        return self.download(Build(NUKE_FILE, "", "", "", False, NUKE_URL), on_progress, cancelled)
 
     def forget(self, build):
         """Drop a copy that failed its check, so the next try downloads it again."""
