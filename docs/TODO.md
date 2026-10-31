@@ -74,6 +74,7 @@ label if one is missing on another theme.
 - [x] Owner installed v1.29.0 on an RP2040 Pico through the dialog (2026-10-31, reported working; its files survived).
 - [x] Phase 3: board list and downloads from micropython.org, with a cache (tests and the live site; no real install from a download yet).
 - [x] Owner installed a downloaded v1.29.0 on a Pico 2 (2026-10-31, reported working).
+- [ ] Phase 4, Tildagon (code on branch `firmware-tildagon`, fake esptool only): confirm the ROM USB id and esptool link on a real badge, then a real install.
 - [ ] Erase option and recording installs in the settings.
 
 ## 2c. Agent mode (plan: `docs/AGENT_PLAN.md`)

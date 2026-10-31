@@ -178,3 +178,26 @@ def test_a_bad_name_from_a_saved_list_cannot_leave_the_cache(tmp_path, name):
     with pytest.raises(FirmwareError, match="Bad firmware name"):
         cat.Catalog(str(tmp_path), site).download(build(name))
     assert not site.asked
+
+
+def test_the_tildagon_comes_from_the_table_without_the_network(tmp_path):
+    site = Site({})
+    c = cat.Catalog(str(tmp_path), site)
+    boards, saved = c.boards("esp32s3")
+    assert [b.id for b in boards] == ["TILDAGON"] and saved is None
+    builds, _ = c.builds("TILDAGON")
+    assert cat.default_build(builds).url == cat.EMF_FLASHER and not site.asked
+
+
+def test_a_file_that_changes_under_one_name_is_read_again_and_the_copy_is_the_fallback(tmp_path):
+    b = cat.BADGE_BUILDS["TILDAGON"][0]
+    site = Site({cat.EMF_FLASHER: b"one"})
+    c = cat.Catalog(str(tmp_path), site)
+    path = c.download(b)
+    site.pages[cat.EMF_FLASHER] = b"two"
+    assert open(c.download(b), "rb").read() == b"two" and len(site.asked) == 2
+    site.pages.clear()
+    assert c.download(b) == path and open(path, "rb").read() == b"two"
+    c.forget(b)
+    with pytest.raises(FirmwareError, match="Cannot read"):
+        c.download(b)

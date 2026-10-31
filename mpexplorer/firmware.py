@@ -1,8 +1,13 @@
-"""Install MicroPython on a board in its bootloader: boards with a UF2 drive so far. See docs/FIRMWARE_PLAN.md."""
+"""Install MicroPython on a board in its bootloader: UF2 drives, and esptool for badges. See docs/FIRMWARE_PLAN.md."""
 import hashlib
+import importlib.util
 import os
 import re
+import select
+import shutil
 import struct
+import subprocess
+import sys
 import time
 from dataclasses import dataclass
 
@@ -25,8 +30,15 @@ CHIP_FAMILIES = {
 }
 # the bootrom's Board-ID; a maker can change the RP2350's in OTP, which then reads as unknown
 BOARD_IDS = {"RPI-RP2": "rp2040", "RP2350": "rp2350"}
-CHIP_NAMES = {"rp2040": "RP2040", "rp2350": "RP2350"}
+CHIP_NAMES = {"rp2040": "RP2040", "rp2350": "RP2350", "esp32s3": "ESP32-S3"}
+MACHINE_NAMES = {"esp32s3": "ESP32S3"}               # how os.uname().machine spells it, if not as CHIP_NAMES does
 RP2_MICROPYTHON_USB = (0x2E8A, 0x0005)
+ESP32S3_ROM_USB = (0x303A, 0x1001)                   # expected: confirm on a real badge
+TILDAGON_USB = (0x16D0, 0x120E)
+ESP_IMAGE_MAGIC, ESP32S3_CHIP_ID, ESP_FLASH_8MB = 0xE9, 9, 3
+ESP_PARTITION_TABLE, ESP_APP_OFFSET, ESP_FLASH_BYTES = 0x8000, 0x10000, 8 * 1024 * 1024
+ESPTOOL_MAJOR = 5
+INSTALL_ESPTOOL = "Installing on this board needs esptool %d. Install it with: pipx install esptool" % ESPTOOL_MAJOR
 
 
 class FirmwareError(BackendError):
@@ -39,6 +51,7 @@ class BootDrive:
     model: str
     board_id: str
     chip: str | None            # None: a UF2 bootloader this app has no rule for
+    method: str = "uf2"         # uf2: path is a drive; esptool: path is a serial port
 
 
 @dataclass
@@ -47,6 +60,12 @@ class Uf2Info:
     cpu: str
     blocks: int
     size: int                   # bytes of firmware, without the UF2 framing
+
+
+@dataclass
+class EspInfo:
+    cpu: str
+    size: int
 
 
 @dataclass
@@ -98,6 +117,24 @@ def detect(mounts_file="/proc/self/mounts"):
     return [d for d in map(read_drive, points) if d]
 
 
+def _ports_with(usb):
+    try:
+        from serial.tools import list_ports as lp
+    except ImportError:
+        return set()
+    return {p.device for p in lp.comports() if (p.vid, p.pid) == usb}
+
+
+def detect_rom():
+    """ESP32-S3 chips in their ROM bootloader, which appear as a serial port."""
+    return [BootDrive(port, "ESP32-S3 ROM bootloader", "ESP32-S3", "esp32s3", "esptool")
+            for port in sorted(_ports_with(ESP32S3_ROM_USB))]
+
+
+def detect_all(mounts_file="/proc/self/mounts"):
+    return detect(mounts_file) + detect_rom()
+
+
 def check_uf2(path, chip):
     """Refuse anything but one complete flash image for this chip; returns its Uf2Info. Reads the whole file."""
     families = CHIP_FAMILIES.get(chip)
@@ -138,6 +175,112 @@ def check_uf2(path, chip):
     if len(seen) != total:
         raise FirmwareError("%s is incomplete: %d of %d blocks." % (name, len(seen), total))
     return Uf2Info(found, families[found], total, payload)
+
+
+def check_esp_image(path):
+    """Refuse anything but a complete 8 MB image for an ESP32-S3 badge. An app-only micropython.bin is what the badges'
+    GitHub releases hold: it starts like an image, but written at 0 on a blank chip it would not boot."""
+    name = os.path.basename(path)
+    try:
+        size = os.path.getsize(path)
+        if size > ESP_FLASH_BYTES:
+            raise FirmwareError("%s is larger than the flash (%d bytes)." % (name, size))
+        with open(path, "rb") as f:
+            data = f.read(ESP_APP_OFFSET + 1)
+    except OSError as e:
+        raise FirmwareError("Cannot read %s: %s" % (name, e))
+    if len(data) < 16 or data[0] != ESP_IMAGE_MAGIC:
+        raise FirmwareError("%s is not an ESP firmware image." % name)
+    if struct.unpack_from("<H", data, 12)[0] != ESP32S3_CHIP_ID:
+        raise FirmwareError("%s is not for the ESP32-S3." % name)
+    if data[3] >> 4 != ESP_FLASH_8MB:
+        raise FirmwareError("%s is not for 8 MB of flash." % name)
+    if len(data) <= ESP_APP_OFFSET or data[ESP_PARTITION_TABLE:ESP_PARTITION_TABLE + 2] != b"\xaa\x50" \
+            or data[ESP_APP_OFFSET] != ESP_IMAGE_MAGIC:
+        raise FirmwareError("%s is not a complete image: it needs the bootloader, partition table and app "
+                            "(a merged firmware file)." % name)
+    return EspInfo("Xtensa", size)
+
+
+def check_image(path, chip):
+    return check_esp_image(path) if chip == "esp32s3" else check_uf2(path, chip)
+
+
+def _esptool_version(argv):
+    try:
+        out = subprocess.run(argv + ["version"], capture_output=True, text=True, timeout=30).stdout
+    except (OSError, subprocess.SubprocessError):
+        return None
+    m = re.search(r"\bv?(\d+)\.\d+", out)
+    return int(m[1]) if m else None
+
+
+def find_esptool():
+    """The command to run esptool: this Python's module, else a program (pipx puts it in ~/.local/bin, which a
+    desktop launcher's PATH may leave out). Only one major version: its commands were renamed between 4 and 5."""
+    candidates = []
+    if importlib.util.find_spec("esptool"):
+        candidates.append([sys.executable, "-m", "esptool"])
+    for program in (shutil.which("esptool"), os.path.expanduser("~/.local/bin/esptool")):
+        if program and os.path.exists(program):
+            candidates.append([program])
+    for argv in candidates:
+        if _esptool_version(argv) == ESPTOOL_MAJOR:
+            return argv
+    raise FirmwareError(INSTALL_ESPTOOL)
+
+
+def _esptool_tail(lines):
+    text = re.sub(r"\x1b\[[0-9;]*[A-Za-z]", "", "\n".join(lines))
+    return "\n".join(line for line in text.splitlines() if line.strip())[-600:]
+
+
+def flash_esptool(image, drive, on_progress=None, cancelled=None, tool=None, stall=90.0):
+    """Write a merged image at offset 0. esptool checks what it wrote. A cancel or failure can leave the flash part
+    written; a board in its ROM bootloader stays there, ready for another try."""
+    info = check_esp_image(image)
+    if drive.path not in _ports_with(ESP32S3_ROM_USB) and not tool:
+        raise FirmwareError("The board at %s has gone. Scan again." % drive.path)
+    argv = (tool or find_esptool()) + ["--chip", "esp32s3", "--port", drive.path, "--baud", "460800",
+                                       "--before", "default-reset", "--after", "hard-reset",
+                                       "write-flash", "0", image]
+    try:
+        proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    except OSError as e:
+        raise FirmwareError("Cannot run esptool: %s" % e)
+    lines, partial, last = [], b"", time.monotonic()
+    try:
+        fd = proc.stdout.fileno()
+        while True:
+            if cancelled and cancelled():
+                raise Cancelled()
+            if time.monotonic() - last > stall:
+                raise FirmwareError("esptool stopped making progress.\n%s" % _esptool_tail(lines))
+            if not select.select([fd], [], [], 0.1)[0]:
+                continue
+            chunk = os.read(fd, 4096)
+            if not chunk:
+                break
+            last = time.monotonic()
+            parts = re.split(rb"[\r\n]+", partial + chunk)     # its progress bar rewrites one line with \r
+            partial = parts.pop()
+            for part in parts:
+                line = part.decode("utf-8", "replace")
+                lines = (lines + [line])[-40:]
+                m = re.search(r"Writing at .*?(\d+(?:\.\d+)?) ?%", line)
+                if m and on_progress:
+                    on_progress(float(m[1]), 100)
+        if partial:
+            lines.append(partial.decode("utf-8", "replace"))
+    except BaseException:
+        proc.kill()
+        proc.wait()
+        raise
+    finally:
+        proc.stdout.close()
+    if proc.wait() != 0:
+        raise FirmwareError("esptool failed.\n%s" % _esptool_tail(lines))
+    return info
 
 
 def wait_gone(drive, timeout=20.0, poll=0.1):
@@ -198,11 +341,11 @@ def install(image, drive, on_progress=None, cancelled=None, gone_timeout=20.0):
 
 def rp2_ports():
     """Serial ports that are MicroPython on an RP2 board."""
-    try:
-        from serial.tools import list_ports as lp
-    except ImportError:
-        return set()
-    return {p.device for p in lp.comports() if (p.vid, p.pid) == RP2_MICROPYTHON_USB}
+    return _ports_with(RP2_MICROPYTHON_USB)
+
+
+def tildagon_ports():
+    return _ports_with(TILDAGON_USB)
 
 
 def wait_for_new_port(before, timeout=15.0, poll=0.2, ports=rp2_ports):
@@ -238,7 +381,7 @@ def identify(port, chip, timeout=10.0, poll=0.5, open_board=RawREPL.open_board):
     if len(lines) != 2:
         raise FirmwareError("Unexpected reply from %s: %r" % (port, text))
     release, machine = lines
-    if CHIP_NAMES[chip] not in machine:
+    if MACHINE_NAMES.get(chip, CHIP_NAMES[chip]) not in machine:
         raise FirmwareError("%s is running on '%s', not the expected %s." % (port, machine, CHIP_NAMES[chip]))
     return Installed(port, release, machine)
 
@@ -254,6 +397,18 @@ def sha256_of(path):
 def install_and_verify(image, drive, on_progress=None, on_stage=None, cancelled=None):
     """The whole install: copy, wait for the restart, then talk to the new firmware. Returns an Installed."""
     stage = on_stage or (lambda text: None)
+    if drive.method == "esptool":
+        before = tildagon_ports()
+        stage("Writing the firmware")
+        flash_esptool(image, drive, on_progress, cancelled)
+        stage("Waiting for the badge to start")
+        try:
+            port = wait_for_new_port(before, timeout=60.0, ports=tildagon_ports)
+        except FirmwareError:
+            raise FirmwareError("The firmware was written and checked, but the badge did not come back. "
+                                "Unplug it and plug it in again; it should then start normally.")
+        stage("Checking the board on %s" % port)
+        return identify(port, drive.chip, timeout=30.0)
     before = rp2_ports()
     stage("Copying the firmware")
     install(image, drive, on_progress, cancelled)
