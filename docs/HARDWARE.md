@@ -160,8 +160,14 @@ What is different about this badge (all seen by hand or in the run above, 2026-1
   turned up complete in the next read, followed by a late raw-paste answer (`R\x01\x80\x00\x01`). So the reply did arrive, very
   late, and the reader was not confused by its size: on a second 2022 badge (2022-06-04 build, 72 KB free, so no files were created)
   a read-only check printed JSON listings of 27, 100, 200, 400 and 800 entries (up to 20 KB) three times each, all correct, in
-  0.1 to 0.4 s. That leaves the board being slow to list a folder of 200 real files right after the benchmark's 1 MB writes
-  (a guess, not shown): to test it, create the 200 files on a badge with room and time `os.ilistdir` on the board itself.
+  0.1 to 0.4 s. That left a slow board as the guess, so it was tried
+  on the first badge (2026-10-31, 3.9 MB free, no soft reset): 200 empty files in a scratch folder
+  (creating them took 64 s, 0.32 s per file), listed by the board's own `os.ilistdir` in 2.04 s and by the app's `listdir` in
+  2.3 s (three times, steady); the same after writing a 256 KB file in that folder (2.07 / 2.3 s) and after removing 100 files
+  (1.89 / 2.1 s for 101 entries). So a 200-file folder lists slowly on this badge (about 2 s, mostly the board's own
+  `ilistdir`, not the link) but **the more-than-a-minute stall did not reproduce**. What differed in the benchmark: it listed the
+  folder right after its 1 MB upload, download and copy tests in the same raw-REPL session. Cause still unknown. The scratch folder
+  was removed and the badge's files and free space are as before.
 - The benchmark's scratch folder `/_mpx_bench` was left behind and removed by hand afterwards; the badge's files are as they were.
 
 ### Upload mode on the Tildagon (2026-10-29)
