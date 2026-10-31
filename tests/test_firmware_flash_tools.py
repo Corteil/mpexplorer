@@ -316,8 +316,8 @@ def test_a_running_badge_is_named_by_usb_without_opening_its_port(monkeypatch):
     found = fw.detect_running_badges()
     assert [fw.device_label(d) for d in found] == ["Tildagon (2024, 2026) at /dev/t", "TiDAL (2022 badge) at /dev/o"]
     assert [fw.can_enter_bootloader(d) for d in found] == [True, False]
-    assert "Put in bootloader" in fw.bootloader_hint(found[0])
-    assert "Put in bootloader" not in fw.bootloader_hint(found[1]) and "bottom right" in fw.bootloader_hint(found[1])
+    assert "Start bootloader" in fw.bootloader_hint(found[0])
+    assert "Start bootloader" not in fw.bootloader_hint(found[1]) and "bottom right" in fw.bootloader_hint(found[1])
 
 
 def test_a_badge_entering_its_bootloader_is_watched_for_as_a_rom_port():
@@ -333,7 +333,7 @@ def test_a_badge_entering_its_bootloader_is_watched_for_as_a_rom_port():
 ])
 def test_each_running_board_gets_its_own_way_to_the_bootloader(drive, button, words):
     hint = fw.bootloader_hint(drive)
-    assert words in hint and ("Put in bootloader. If that does not work" in hint) == button
+    assert words in hint and ("Start bootloader. If that does not work" in hint) == button
 
 
 def test_the_details_do_not_repeat_the_steps():

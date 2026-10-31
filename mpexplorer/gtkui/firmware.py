@@ -56,7 +56,7 @@ class DeviceDialog(Gtk.Dialog):
 
         self.cancel_btn = self.add_button("Cancel", Gtk.ResponseType.NONE)
         self.cancel_btn.set_no_show_all(True)
-        self.boot_btn = self.add_button("Put in bootloader", Gtk.ResponseType.YES)
+        self.boot_btn = self.add_button("Start bootloader", Gtk.ResponseType.YES)
         self.boot_btn.set_no_show_all(True)
         self.boot_btn.set_tooltip_text("Restart this board in its bootloader, without its buttons. It stops what is "
                                        "running; its files stay.")
