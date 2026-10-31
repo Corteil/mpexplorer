@@ -227,7 +227,8 @@ def test_running_picos_are_listed_after_boards_in_a_bootloader(monkeypatch):
     monkeypatch.setattr(fw, "rp2_ports", lambda: {"/dev/p"})
     monkeypatch.setattr(fw, "detect", lambda m: [])
     monkeypatch.setattr(fw, "detect_rom", lambda: [ROM])
-    assert [d.method for d in fw.detect_all()] == ["esptool", "repl"]
+    monkeypatch.setattr(fw, "badge_ports", lambda name: {"/dev/t"} if name == "TIDAL" else set())
+    assert [d.method for d in fw.detect_all()] == ["esptool", "repl", "badge"]
 
 
 def test_read_running_says_what_the_board_is_and_resets_it():
@@ -248,7 +249,7 @@ def test_read_running_on_a_busy_port_says_it_may_be_connected():
     (fw.BootDrive("/dev/a", "m", "MicroPython", None, "repl"), "cannot read", "MicroPython board at /dev/a"),
     (fw.BootDrive("/dev/a", "m", "MicroPython", None, "repl"), fw.RunningInfo("Raspberry Pi Pico with RP2040", "1", 2),
      "Pico (RP2040) at /dev/a"),
-    (ROM, None, "Tildagon at /dev/fake"),
+    (ROM, None, "Tildagon (2024, 2026) at /dev/fake"),
     (fw.BootDrive("/dev/b", "m", "E", "esp32s3", "esptool"), None, "ESP32-S3 at /dev/b"),
     (fw.BootDrive("/m/d", "m", "RP2350", "rp2350"), None, "RP2350 at /m/d"),
     (fw.BootDrive("/m/d", "m", "X", None), None, "Unsupported (X) at /m/d"),
@@ -296,7 +297,7 @@ def test_entering_the_bootloader_finds_the_new_drive_even_as_the_port_vanishes(m
 
 def test_a_board_that_does_not_enter_the_bootloader_says_what_to_do(monkeypatch):
     monkeypatch.setattr(fw, "detect", lambda: [])
-    with pytest.raises(fw.FirmwareError, match="Hold BOOTSEL"):
+    with pytest.raises(fw.FirmwareError, match="Use its buttons"):
         fw.enter_bootloader("/dev/x", timeout=0, open_board=opener(BootRepl()))
 
 
@@ -307,3 +308,20 @@ def test_a_busy_port_is_reported_when_entering_the_bootloader(monkeypatch):
         raise OSError("busy")
     with pytest.raises(fw.FirmwareError, match="connected in the app"):
         fw.enter_bootloader("/dev/x", open_board=busy)
+
+
+def test_a_running_badge_is_named_by_usb_without_opening_its_port(monkeypatch):
+    monkeypatch.setattr(fw, "badge_ports", lambda name: {"/dev/t"} if name == "TILDAGON" else {"/dev/o"})
+    monkeypatch.setattr(fw.RawREPL, "open_board", lambda *a, **k: pytest.fail("opened a badge"))
+    found = fw.detect_running_badges()
+    assert [fw.device_label(d) for d in found] == ["Tildagon (2024, 2026) at /dev/t", "TiDAL (2022 badge) at /dev/o"]
+    assert [fw.can_enter_bootloader(d) for d in found] == [True, False]
+    assert "Put in bootloader" in fw.running_badge_hint(found[0])
+    assert "Put in bootloader" not in fw.running_badge_hint(found[1])
+    assert "bottom right" in fw.running_badge_hint(found[1])
+
+
+def test_a_badge_entering_its_bootloader_is_watched_for_as_a_rom_port():
+    answers = iter([[], [ROM]])
+    repl = BootRepl()
+    assert fw.enter_bootloader("/dev/x", poll=0, open_board=opener(repl), find=lambda: next(answers)) == ROM
