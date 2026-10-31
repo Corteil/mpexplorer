@@ -68,6 +68,10 @@ label if one is missing on another theme.
 - [x] Open with...: Shift+Enter; ask before opening an executable-looking file with a system app (owner confirmed 2026-10-31).
 - [x] Hex and image viewers, File types preferences page (owner confirmed 2026-10-31).
 
+## 2e. Install firmware (plan: `docs/FIRMWARE_PLAN.md`)
+- [x] Phase 1: UF2 detection, image checks, copy and identify (`firmware.py`), fake drives only.
+- [ ] Phase 2: dialog with local files, then the owner tries it on both Picos.
+
 ## 2c. Agent mode (plan: `docs/AGENT_PLAN.md`)
 - [x] `tools/bench.py` written and tested (fake board + real MicroPython).
 - [x] Ran `tools/bench.py` on the Tildagon (2026-10-29): SLOW, tables in `docs/HARDWARE.md`. Causes measured; see "Phase 0 results"
