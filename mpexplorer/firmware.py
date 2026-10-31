@@ -64,8 +64,7 @@ class Badge:
 
 BADGES = {
     "TILDAGON": Badge(("ESP32-S3-PICO-1", 8, 2, True), (0x16D0, 0x120E), True, "Tildagon (2024, 2026)", True,
-                      "power it off from its menu, then hold boop while plugging USB into USB in. Keep holding for a "
-                      "few seconds"),
+                      "power it off from its menu, then hold boop while plugging it in. Keep holding for a few seconds"),
     "TIDAL": Badge(("ESP32-S3", 8, None, True), (0x16D0, 0x1114), False, "TiDAL (2022 badge)", False,
                    "hold the bottom right button, tap bottom-left, then release both"),
 }
@@ -549,7 +548,7 @@ def bootloader_hint(drive):
     """How to get a running board to its bootloader: the button if it has one, and its own steps by hand."""
     steps = BADGES[drive.board_id].steps if drive.method == "badge" else PICO_STEPS
     if can_enter_bootloader(drive):
-        return "Press Put in bootloader. If that does not work, %s." % steps
+        return "Press Start bootloader. If that does not work, %s." % steps
     return "To use this tool, %s." % steps
 
 

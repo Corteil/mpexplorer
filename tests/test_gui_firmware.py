@@ -740,7 +740,7 @@ def test_a_running_badge_is_listed_in_every_tool_says_what_to_do_and_is_not_touc
     monkeypatch.setattr(fw, "read_esp_chip", lambda port: pytest.fail("read a badge"))
     d = make(cls=cls)
     assert d.board_box.get_active_text() == "Tildagon (2024, 2026) at /dev/ttyACM0"
-    assert "running normally" in d.details.get_text() and "Put in bootloader" in d.note.get_text()
+    assert "running normally" in d.details.get_text() and "Start bootloader" in d.note.get_text()
     assert d.boot_btn.get_visible() and d.boot_btn.get_sensitive()
     for name in ("install_btn", "backup_btn", "restore_btn", "erase_btn"):
         if hasattr(d, name):
