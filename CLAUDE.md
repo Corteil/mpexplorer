@@ -6,7 +6,8 @@ Read `docs/HANDOFF.md` first: it is the project's memory (requirements, decision
 ## What this is
 A dual-pane file explorer (GTK 3 via PyGObject), REPL console and terminal for MicroPython boards, running on a **Raspberry Pi 5**
 over USB serial. Targets: Pico / Pico 2 and the EMF Camp badges (2022 TiLDA Mk6, 2024 Tildagon, 2026 = same as 2024;
-all ESP32-S3). **Default rule: nothing is ever installed on the target** - everything goes through the stock raw REPL.
+all ESP32-S3). **Default rule: nothing is installed on the target** - everything goes through the stock raw REPL. The one exception is
+Tools > Install firmware, which writes firmware only to a board in its bootloader, only when the user starts it (`docs/FIRMWARE_PLAN.md`).
 (An opt-in RAM-only "agent mode" is designed in DESIGN.md but not built.)
 
 ## Commands
@@ -20,9 +21,9 @@ Python >= 3.11, line length 120, ruff rules E/F/W only, no type-annotation churn
 ## Layout
 - Core (GUI-free, fully tested): `transport.py` (raw REPL, raw-paste, trace, input, terminal ownership), `backends.py`
   (Local + Device over snippets), `ops.py` (copy/move/delete/conflicts), `sync.py`, `jobs.py` (one worker thread owns
-  the serial line), `console.py` (emulated REPL), `terminal.py` (real-REPL terminal), `badgescreen.py` (status page on a badge's screen), `clipboard.py`.
+  the serial line), `console.py` (emulated REPL), `terminal.py` (real-REPL terminal), `badgescreen.py` (status page on a badge's screen), `clipboard.py`, `firmware.py` + `firmware_catalog.py` (install firmware).
 - GUI, default (`mpexplorer/gtkui/`, GTK 3.24 via `python3-gi`, Wayland-native): `app.py`, `pane.py`, `editor.py`,
-  `console.py`, `terminal.py` (VTE, optional), `dialogs.py`, `common.py` (import GTK only through it: it pins the versions).
+  `console.py`, `terminal.py` (VTE, optional), `dialogs.py`, `firmware.py`, `common.py` (import GTK only through it: it pins the versions).
   `python -m mpexplorer` runs it, or prints how to install PyGObject if it is missing. (The Tk GUI was removed on 2026-10-29;
   it is in git history.)
 - GUI tests: `tests/test_gui_gtk.py` builds the real windows against the fake board and a temporary
