@@ -47,8 +47,11 @@ def cfg(tmp_path):
 
 
 @pytest.fixture
-def make_app(cfg):
-    apps = []
+def make_app(cfg, monkeypatch):
+    apps, folder_errors = [], []
+    # A "Cannot open folder" box is modal: if a listing job finishes while the test is ending it would hang the run.
+    # Record it instead (tests that expect that box patch pane.error themselves).
+    monkeypatch.setattr("mpexplorer.gtkui.pane.error", lambda parent, title, text: folder_errors.append(text))
 
     def make(**preset):
         s = Settings.load(cfg)
@@ -59,9 +62,11 @@ def make_app(cfg):
         pump()
         return app
     yield make
+    during_test = list(folder_errors)
     for a in apps:
         a.destroy()
     pump(50)
+    assert not during_test, "unexpected folder error box: %s" % during_test
 
 
 def width_for(app, wanted):
@@ -929,6 +934,7 @@ def test_run_script_can_be_interrupted_by_cancel(make_app, monkeypatch):
     assert submitted[0]["on_cancel"] is Repl.interrupt              # Cancel and Quit stop an endless script
     submitted[0]["on_cancel"]()
     assert calls == ["ctrl-c"]
+    app.right.backend = None            # the stand-in board cannot list a folder: no refresh may use it later
     app.right.backend = None
 
 
@@ -1122,3 +1128,23 @@ def test_auto_upload_preference_starts_uploads_held(make_app):
     assert app.pause_btn.get_visible() and app.pause_btn.get_active() and app.pause_btn.get_label() == "Resume"
     app.settings.set("open_with.auto_upload", True)
     assert not app.edits.paused and not app.pause_btn.get_active() and app.pause_btn.get_label() == "Pause"
+
+
+def test_system_default_asks_first_for_executable_looking_files(make_app, tmp_path, monkeypatch):
+    (tmp_path / "run.sh").write_text("echo hi\n")
+    (tmp_path / "notes.txt").write_text("y\n")
+    (tmp_path / "tool").write_text("x\n")
+    os.chmod(tmp_path / "tool", 0o755)
+    app = make_app()
+    launched, asked, answer = [], [], [False]
+    app.edits.launch = lambda argv: launched.append(argv)
+    monkeypatch.setattr("mpexplorer.gtkui.app.ask_yes_no", lambda parent, title, text: asked.append(text) or answer[0])
+    app.open_with(app.left, str(tmp_path / "notes.txt"), 2, "system")           # plain file: no question
+    assert launched == [["xdg-open", str(tmp_path / "notes.txt")]] and asked == []
+    launched.clear()
+    app.open_with(app.left, str(tmp_path / "run.sh"), 8, "system")              # by extension: asked, declined
+    app.open_with(app.left, str(tmp_path / "tool"), 2, "system")                # by executable bit: asked, declined
+    assert len(asked) == 2 and "run.sh looks like a program" in asked[0] and launched == []
+    answer[0] = True
+    app.open_with(app.left, str(tmp_path / "run.sh"), 8, "system")
+    assert launched == [["xdg-open", str(tmp_path / "run.sh")]]

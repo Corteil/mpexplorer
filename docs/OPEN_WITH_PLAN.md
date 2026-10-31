@@ -97,6 +97,8 @@ fall back to defaults and never block startup.
 
 **Shift+Enter and File menu entry (2026-10-31):** File > Open with... (Shift+Enter) and the context menu call `App.open_with_selected()`. Tested under Xvfb; the owner then tried it by hand on 2026-10-31 and reported it working (not itemised).
 
+**System default + executable prompt (2026-10-31):** the chooser has a "System default application" row (`xdg-open {file}`, handler `system`). `looks_executable()` (program-like extension, or the executable bit on a host file) makes the app ask "Open it anyway?" first. Other programs (Geany, the editor) do not ask. Tested; the owner then tried it by hand and reported it working. Sample files for trying it: `~/Code/mpx-open-with-test/` (outside the repo).
+
 ## Phases
 1. `openwith.py` + tests (settings, lookup, commands, watcher). 2. Device download/launch/upload loop for one custom
 command. 3. GTK chooser + default-for-type + context-menu entries. 4. Built-in hex and image viewers, preferences page.
