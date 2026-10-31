@@ -38,6 +38,7 @@ TILDAGON_USB = (0x16D0, 0x120E)
 ESP_IMAGE_MAGIC, ESP32S3_CHIP_ID, ESP_FLASH_8MB = 0xE9, 9, 3
 ESP_PARTITION_TABLE, ESP_APP_OFFSET, ESP_FLASH_BYTES = 0x8000, 0x10000, 8 * 1024 * 1024
 ESPTOOL_MAJOR = 5
+ESPTOOL_LOG = "esptool.log"                          # every run's full output, for when the short message is not enough
 INSTALL_ESPTOOL = "Installing on this board needs esptool %d. Install it with: pipx install esptool" % ESPTOOL_MAJOR
 
 
@@ -230,6 +231,11 @@ def find_esptool():
     raise FirmwareError(INSTALL_ESPTOOL)
 
 
+def esptool_log_path():
+    base = os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache")
+    return os.path.join(base, "mpexplorer", ESPTOOL_LOG)
+
+
 def _esptool_tail(lines):
     text = re.sub(r"\x1b\[[0-9;]*[A-Za-z]", "", "\n".join(lines))
     return "\n".join(line for line in text.splitlines() if line.strip())[-600:]
@@ -241,14 +247,20 @@ def flash_esptool(image, drive, on_progress=None, cancelled=None, tool=None, sta
     info = check_esp_image(image)
     if drive.path not in _ports_with(ESP32S3_ROM_USB) and not tool:
         raise FirmwareError("The board at %s has gone. Scan again." % drive.path)
+    # no-reset before connecting: the chip is already in its ROM, and a reset would boot a badge whose button is no
+    # longer held back into its normal firmware
     argv = (tool or find_esptool()) + ["--chip", "esp32s3", "--port", drive.path, "--baud", "460800",
-                                       "--before", "default-reset", "--after", "hard-reset",
+                                       "--before", "no-reset", "--after", "hard-reset",
                                        "write-flash", "0", image]
+    log_path = esptool_log_path()
+    os.makedirs(os.path.dirname(log_path), exist_ok=True)
     try:
         proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     except OSError as e:
         raise FirmwareError("Cannot run esptool: %s" % e)
     lines, partial, last = [], b"", time.monotonic()
+    log = open(log_path, "wb")
+    log.write((" ".join(argv) + "\n").encode())
     try:
         fd = proc.stdout.fileno()
         while True:
@@ -262,6 +274,8 @@ def flash_esptool(image, drive, on_progress=None, cancelled=None, tool=None, sta
             if not chunk:
                 break
             last = time.monotonic()
+            log.write(chunk)
+            log.flush()
             parts = re.split(rb"[\r\n]+", partial + chunk)     # its progress bar rewrites one line with \r
             partial = parts.pop()
             for part in parts:
@@ -278,8 +292,9 @@ def flash_esptool(image, drive, on_progress=None, cancelled=None, tool=None, sta
         raise
     finally:
         proc.stdout.close()
+        log.close()
     if proc.wait() != 0:
-        raise FirmwareError("esptool failed.\n%s" % _esptool_tail(lines))
+        raise FirmwareError("esptool failed.\n%s\n\nFull output: %s" % (_esptool_tail(lines), log_path))
     return info
 
 
