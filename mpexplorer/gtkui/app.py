@@ -18,7 +18,7 @@ from ..badgescreen import BadgeScreen
 from ..openwith import (SYSTEM_OPEN, EditManager, app_template, handler_for, looks_executable, parse_handler,
                         remember_handler)
 from ..ops import ConflictPolicy, copy_tree, delete_items, is_within, move_item, total_size, unique_name
-from .. import boardinfo
+from .. import boardinfo, meminfo
 from ..ports import board_id, device_of, list_boards, short_model
 from ..remember import (chip_key, device_start, host_start, move_folder_to_chip, port_choice, remember_board_name,
                         remember_board_rts, remember_folder, remember_port, remember_source, source_choice)
@@ -161,6 +161,7 @@ class App(Gtk.Window):
         add(d, "REPL console...", self.open_console)
         add(d, "Run selected script", self.run_script)
         add(d, "Free space", self.free_space)
+        add(d, "Board memory...", self.board_memory)
         add(d, "Set board time now", self.set_board_clock)
         add(d, "Name this board...", self.name_board)
         add(d, "Soft reset", self.soft_reset)
@@ -1098,6 +1099,15 @@ class App(Gtk.Window):
                                lambda res, exc: info(self, "Free space",
                                                      str(exc) if exc else "Device: %s free" % human(res)),
                                "Checking space", quiet=True)
+
+    def board_memory(self):
+        """Device > Board memory: flash chip, file system and RAM of the connected board (read-only)."""
+        if not (self.device and self._need_backend(self._pane_of(self.conn))):
+            return
+        dev = self.device
+        self.runner.submit(lambda prog: meminfo.describe(dev.memory()),
+                           lambda res, exc: info(self, "Board memory", str(exc) if exc else res),
+                           "Reading the board's memory", quiet=True)
 
     def set_board_clock(self):
         if self.device and self._need_backend(self._pane_of(self.conn)):

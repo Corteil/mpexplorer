@@ -222,3 +222,25 @@ def test_clearing_a_name_and_the_duplicate_and_shared_serial_cases(tmp_path, mon
     finally:
         app.conns.clear()
         app.destroy()
+
+
+def test_device_board_memory_shows_flash_file_system_and_ram(tmp_path, monkeypatch):
+    app = make(tmp_path, monkeypatch)
+    try:
+        from mpexplorer.gtkui import app as appmod
+        pane = connect_cp(app, tmp_path)
+        pane.source_box.get_child()
+        app.device.memory = lambda: {"machine": "Pico 2", "flash": 4194304, "fs_total": 3145728, "fs_free": 3000000,
+                                     "ram_free": 400000, "ram_used": 15000}
+        shown = []
+        monkeypatch.setattr(appmod, "info", lambda parent, title, text: shown.append((title, text)))
+        app.board_memory()
+        for _ in range(100):
+            pump(50)
+            if shown:
+                break
+        assert shown and shown[0][0] == "Board memory"
+        assert "Flash chip: 4 MB" in shown[0][1] and "File system: 3 MB" in shown[0][1] and "RAM (heap)" in shown[0][1]
+    finally:
+        app.conns.clear()
+        app.destroy()
