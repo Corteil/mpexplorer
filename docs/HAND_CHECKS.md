@@ -46,8 +46,8 @@ lists, even a file two packages share (`urequests` and `requests`).
 3. The firmware tools did not list a running CircuitPython Pico W: it uses Adafruit's USB vendor id (`239a:8120`), not Raspberry Pi's. Running CircuitPython boards are now listed (read without `uctypes`, started into their bootloader with `RunMode.UF2`; no backup for them), and the post-install port wait accepts both ids.
 4. The install-libraries confirmation now lists each library's files (reading of "does not list the packages" was uncertain: a screenshot showed the list itself loading).
 
-## Added after the first round (not yet hand-tested; passed by script, tests and a fake display only)
-Reopen the app from `main` first. The owner was not available for onsite testing on 2026-11-01, so none of these has been clicked in the real window.
+## Added after the first round (hand-tested by the owner 2026-11-01, all five checks OK)
+Reopen the app from `main` first. The owner checked all five in the real window on 2026-11-01 and reported them OK.
 1. **Open with on the CircuitPython drive:** double-click or right-click > Open with on `code.py` on the `CIRCUITPY` pane. The program opens the file *on the drive*
    (no copy under `~/.cache/mpexplorer/open`), and saving in it reloads the board.
 2. **Check for updates** (Tools > Install libraries, with some libraries installed): each installed row says `up to date`, `update available` or `incomplete`.
