@@ -10,7 +10,8 @@ board over USB serial. **Nothing is installed on the board**: it works through t
 
 ## Features
 - Host and Device panes: browse, sort, filter, show hidden files
-- Upload / download files and folders (buttons, drag between panes, or copy and paste)
+- Upload / download files and folders (buttons, drag between panes, or copy and paste). Dragging onto a folder in the same
+  pane moves into it
 - Copy, cut, paste, rename, delete, new file / folder, properties, free space
 - Copy from one board and paste on another: copied files are downloaded when you disconnect, so a large copy takes
   time then. A cut becomes a copy, because the first board has gone

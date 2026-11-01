@@ -662,12 +662,26 @@ class App(Gtk.Window):
             if move:
                 self.clipboard.clear()
 
-    def transfer(self, src, dst):
+    def transfer(self, src, dst, folder=None):
         if not (self._need_backend(src) and self._need_backend(dst)):
             return False
         items = [(src.backend, p) for _n, p in src.selected()]
         if items:
-            self._start_copy(items, dst.backend, dst.cwd, move=False)
+            self._start_copy(items, dst.backend, folder or dst.cwd, move=False)
+        return False
+
+    def dropped(self, src, dst, folder):
+        """A drag ended. Across panes it copies, into the folder under it if there is one. Within a pane it moves
+        into that folder, as a file manager does; with no folder under it there is nowhere to move to."""
+        if src is not dst:
+            return self.transfer(src, dst, folder)
+        if not self._need_backend(src):
+            return False
+        items = [(src.backend, p) for _n, p in src.selected() if p != folder]
+        if not folder:
+            self.set_status("Drop on a folder to move into it")
+        elif items:
+            self._start_copy(items, src.backend, folder, move=True)
         return False
 
     def ask_conflict(self, name):
