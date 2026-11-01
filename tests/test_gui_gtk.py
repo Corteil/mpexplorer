@@ -1631,3 +1631,65 @@ def test_remembering_can_be_turned_off(make_app, two_ports):
     assert app.left.source() == "Host"
     app.left.source_box.get_child().set_text(PORTS[0])
     assert app.settings.get("general.source.left") == "/dev/ttyACM3"
+
+
+class SeenBadge:
+    def __init__(self):
+        self.shown = []
+
+    def show(self, status=None, kind=None, folder=None):
+        self.shown.append(status)
+
+
+def two_badges(app, tmp_path):
+    first, second, a, b = two_boards(app, tmp_path)
+    left, right = SeenBadge(), SeenBadge()
+    app.conns[app.left].badge, app.conns[app.right].badge = left, right
+    return first, second, a, b, left, right
+
+
+def test_a_copy_between_boards_shows_on_both_screens(make_app, tmp_path):
+    app = make_app()
+    first, second, a, b, left, right = two_badges(app, tmp_path)
+    (a / "main.py").write_text("hello")
+    app.clipboard.set("copy", [(first, str(a / "main.py"))])
+    app.set_active(app.right)
+    app.paste()
+    until(lambda: app.status.get_text().startswith("Done"))
+    assert "Done" in left.shown and "Done" in right.shown
+
+
+def test_a_job_on_one_board_shows_only_on_its_screen(make_app, tmp_path):
+    app = make_app()
+    first, second, a, b, left, right = two_badges(app, tmp_path)
+    app.set_active(app.right)
+    app._simple_job(lambda prog: None, "Creating folder", "Failed", second)
+    until(lambda: "Done" in right.shown)
+    assert "Done" not in left.shown
+
+
+def test_a_job_that_does_not_name_a_board_tells_no_screen_of_two(make_app, tmp_path):
+    app = make_app()
+    first, second, a, b, left, right = two_badges(app, tmp_path)
+    done = []
+    app.runner.submit(lambda prog: None, lambda r, e: done.append(True), "Something")
+    until(lambda: done)
+    assert "Done" not in left.shown and "Done" not in right.shown
+
+
+def test_sync_can_run_between_two_boards(make_app, tmp_path):
+    from mpexplorer.gtkui.dialogs import SyncDialog
+    from mpexplorer.sync import apply_plan, build_plan
+    from mpexplorer.ops import Progress
+    app = make_app()
+    first, second, a, b = two_boards(app, tmp_path)
+    (a / "main.py").write_text("hello")
+    (a / "lib").mkdir()
+    (a / "lib" / "x.py").write_text("deep")
+    plan = build_plan(first, str(a), second, str(b))
+    apply_plan(plan, Progress())
+    assert (b / "main.py").read_text() == "hello" and (b / "lib" / "x.py").read_text() == "deep"
+    assert not build_plan(first, str(a), second, str(b)).of("copy")
+    dlg = SyncDialog(app, first, str(a), second, str(b), plan=build_plan(first, str(a), second, str(b)))
+    pump()
+    dlg.destroy()

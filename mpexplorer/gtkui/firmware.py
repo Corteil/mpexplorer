@@ -158,7 +158,11 @@ class DeviceDialog(Gtk.Dialog):
                 self.tool_problem = str(e)
         if drive and drive.method == "repl" and drive.path not in self.running_info \
                 and self.info_reading != drive.path:
-            self._read_running(drive)
+            conn = next((c for c in self.app.conns.values() if c.port == drive.path), None)
+            if conn:            # opening its port as well would fight with the connection
+                self.running_info[drive.path] = "connected in the app as %s" % (conn.label or conn.port)
+            else:
+                self._read_running(drive)
         self._show_details(drive)
         self.device_changed(drive)
         self._check()
@@ -269,8 +273,10 @@ class DeviceDialog(Gtk.Dialog):
     # -- running a job -----------------------------------------------------
     def _start(self, work, done):
         """Run a slow job with the window locked; done(result) gives what to say when it has worked."""
-        for pane in list(self.app.conns):           # the job needs its port now
-            self.app.disconnect(pane, keep_copied=False)
+        chosen = self.drive()
+        for pane, conn in list(self.app.conns.items()):     # only the board this job uses: any other carries on
+            if chosen and conn.port == chosen.path:
+                self.app.disconnect(pane, keep_copied=False)
         self.running, self.outcome = True, ""
         self.cancel_event.clear()
         self.cancel_btn.set_sensitive(True)
@@ -282,6 +288,8 @@ class DeviceDialog(Gtk.Dialog):
         self.boot_btn.set_sensitive(False)
 
         def run():
+            while self.app.runner.busy:             # closing that board is queued: the port must be free first
+                time.sleep(0.05)
             try:
                 res, exc = work(), None
             except Exception as e:
@@ -617,8 +625,11 @@ class FirmwareDialog(DeviceDialog):
         app = self.app
         self.destroy()
         app.scan_ports()
-        app.port_box.get_child().set_text(port)
-        app.connect_device()
+        pane = app.right if app.right not in app.conns else app.left
+        if pane in app.conns:
+            return                  # both panes are in use: leave them, the new board is in their lists
+        pane.source_box.get_child().set_text(port)
+        app.connect_device(pane)
 
 
 def firmware_filter(chooser):

@@ -96,7 +96,8 @@ label if one is missing on another theme.
 - [ ] Hand test phase 3 on real boards.
 - [x] One console per board, titled with the board (owner confirmed on real boards, 2026-11-01).
 - [x] Each pane remembers what its list had chosen; nothing connects by itself.
-- [ ] Phases 4-5.
+- [x] Phase 4: badge screens per job, firmware tools close only their board, Sync between boards (fake boards).
+- [ ] Phase 5: docs.
 
 ## 2c. Agent mode (plan: `docs/AGENT_PLAN.md`)
 - [x] `tools/bench.py` written and tested (fake board + real MicroPython).

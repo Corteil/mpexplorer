@@ -2,6 +2,7 @@
 import os
 import struct
 import time
+import types
 
 import pytest
 
@@ -170,7 +171,7 @@ def test_success_reports_the_version_and_offers_connect(setup, monkeypatch):
         return fw.Installed("/dev/ttyACM9", "1.29.0", "Raspberry Pi Pico with RP2040")
     monkeypatch.setattr(fw, "install_and_verify", fake)
     connected = []
-    monkeypatch.setattr(app, "connect_device", lambda: connected.append(app.port_box.get_child().get_text()))
+    monkeypatch.setattr(app, "connect_device", lambda pane: connected.append(pane.source()))
     d = make(path)
     drive = d.drive()
     d.install()
@@ -801,3 +802,65 @@ def test_a_running_badge_is_sent_to_its_rom_and_the_tool_moves_to_it(setup, monk
     wait_until(lambda: not d.running and d.drive() and d.drive().esp_chip)
     assert seen == {"port": "/dev/ttyACM0", "find": fw.detect_rom, "normal_repl": True} and not errors
     assert d.board_box.get_active_text() == "Tildagon (2024, 2026) at /dev/ttyACM1"
+
+
+def fake_conn(app, pane, port):
+    from mpexplorer.connection import Connection
+    conn = Connection(port, "chip:" + port, types.SimpleNamespace(close=lambda reset=False: None, key="device",
+                                                                  root="/", repl=None), None, label=port + "  Pico")
+    app.conns[pane] = conn
+    return conn
+
+
+def test_a_job_closes_only_the_board_it_uses(setup, monkeypatch):
+    make, drives, _, app, tmp = setup
+    drives[0] = RUNNING
+    left = fake_conn(app, app.left, "/dev/ttyACM9")
+    fake_conn(app, app.right, RUNNING.path)
+    closed = []
+    monkeypatch.setattr(app, "disconnect", lambda pane, keep_copied=True: closed.append(pane) or app.conns.pop(pane))
+    monkeypatch.setattr(fw, "backup_repl", lambda *a: fw.Backup("p", 1, "s"))
+    monkeypatch.setattr(fw, "sha256_of", lambda p: "abc")
+    d = make(cls=dialog.BackupDialog)
+    monkeypatch.setattr(d, "_ask_backup_path", lambda drive: "p")
+    d.backup()
+    wait_until(lambda: not d.running)
+    assert closed == [app.right] and app.conns == {app.left: left}
+    app.conns.clear()
+
+
+def test_a_board_connected_in_the_app_is_not_opened_again_to_read_it(setup, monkeypatch):
+    make, drives, _, app, _ = setup
+    drives[0] = RUNNING
+    fake_conn(app, app.right, RUNNING.path)
+    monkeypatch.setattr(fw, "read_running", lambda port: pytest.fail("opened it twice"))
+    d = make(cls=dialog.BackupDialog)
+    pump(50)
+    assert "connected in the app" in d.details.get_text() and d.backup_btn.get_sensitive()
+    app.conns.clear()
+
+
+def test_a_job_on_a_bootloader_closes_nothing(setup, monkeypatch):
+    make, _, _, app, _ = setup
+    left = fake_conn(app, app.left, "/dev/ttyACM9")
+    monkeypatch.setattr(app, "disconnect", lambda *a, **k: pytest.fail("closed a board"))
+    monkeypatch.setattr(fw, "check_nuke_uf2", lambda p: None)
+    monkeypatch.setattr(FakeCatalog, "erase_tool", lambda self, p, c: "x", raising=False)
+    monkeypatch.setattr(fw, "erase_uf2", lambda *a: None)
+    d = make(cls=dialog.EraseDialog)
+    d.erase_flash()
+    wait_until(lambda: not d.running)
+    assert app.conns[app.left] is left
+    app.conns.clear()
+
+
+def test_connect_after_an_install_uses_a_free_pane(setup, monkeypatch):
+    make, _, _, app, tmp = setup
+    fake_conn(app, app.right, "/dev/ttyACM9")
+    used = []
+    monkeypatch.setattr(app, "connect_device", lambda pane: used.append(pane))
+    d = make()
+    d.result = fw.Installed("/dev/ttyACM3", "1", "Pico")
+    d._connect_new_port()
+    assert used == [app.left] and app.left.source() == "/dev/ttyACM3"
+    app.conns.clear()
