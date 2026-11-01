@@ -4,10 +4,11 @@ are fetched here on the host and uploaded, nothing runs on the board."""
 import threading
 import time
 
-from .. import cpbundle
+from .. import cpbundle, custom_libraries
 from .. import libraries as lib
 from ..errors import Cancelled
 from .common import GLib, Gtk, ask_yes_no, error, scrolled
+from .sources import SourcesDialog
 
 
 NAMES = {"micropython": "MicroPython", "circuitpython": "CircuitPython"}
@@ -21,14 +22,12 @@ class LibrariesDialog(Gtk.Dialog):
         """catalog, bundles: stand-ins for the micropython-lib catalog and the bundle catalog factory (tests)."""
         super().__init__(title="Install libraries", transient_for=app, modal=True)
         self.app, self.be, self.label = app, backend, label
-        # key -> (title, firmware the libraries are for, the catalog once made)
-        make = bundles or (lambda key: cpbundle.Catalog(key))
-        self.makers = {"micropython": lambda: catalog or lib.Catalog(), "adafruit": lambda: make("adafruit"),
-                       "community": lambda: make("community")}
-        self.titles = {"micropython": ("micropython-lib (MicroPython)", "micropython"),
-                       "adafruit": ("Adafruit bundle (CircuitPython)", "circuitpython"),
-                       "community": ("Community bundle (CircuitPython)", "circuitpython")}
+        # key -> how to make its catalog; key -> (title, firmware the libraries are for)
+        self.make_bundle = bundles or (lambda key: cpbundle.Catalog(key))
+        self.stock_catalog = catalog
+        self.makers, self.titles = {}, {}
         self.catalogs, self.source, self.load_id = {}, "micropython", 0
+        self.fill_source_table()
         self.libs, self.have, self.mpy, self.closed, self.busy, self.job = [], set(), None, False, False, None
         self.firmware, self.version, self.chose = None, "", False
         self.dest = backend.join(backend.mount, "lib") if hasattr(backend, "mount") else lib.DEST
@@ -39,9 +38,7 @@ class LibrariesDialog(Gtk.Dialog):
         top = Gtk.Box(spacing=8)
         top.pack_start(Gtk.Label(label="Libraries from", xalign=0), False, False, 0)
         self.source_box = Gtk.ComboBoxText()
-        for key, (title, _fw) in self.titles.items():
-            self.source_box.append(key, title)
-        self.source_box.set_active_id(self.source)
+        self.fill_source_box()
         self.source_box.connect("changed", lambda _c: self._source_changed())
         top.pack_start(self.source_box, False, False, 0)
         top.pack_start(Gtk.Label(label="for %s" % (label or "the board"), xalign=0), False, False, 0)
@@ -84,6 +81,7 @@ class LibrariesDialog(Gtk.Dialog):
         self.bar = Gtk.ProgressBar(no_show_all=True)
         box.pack_start(self.bar, False, False, 0)
         self.close_btn = self.add_button("Close", Gtk.ResponseType.CLOSE)
+        self.sources_btn = self.add_button("Manage sources...", Gtk.ResponseType.HELP)
         self.check_btn = self.add_button("Check for updates", Gtk.ResponseType.APPLY)
         self.check_btn.set_sensitive(False)
         self.remove_btn = self.add_button("Remove", Gtk.ResponseType.REJECT)
@@ -99,6 +97,34 @@ class LibrariesDialog(Gtk.Dialog):
         self._start_load()
         self.job = app.runner.submit(self._read_board, self._board_read, "Reading the board ...", quiet=True,
                                      inline=True, devices=(backend,))
+
+    # -- the sources: three built in, then the owner's custom ones -----------------------------------------------------
+    def fill_source_table(self):
+        stock, make = self.stock_catalog, self.make_bundle
+        self.makers = {"micropython": lambda: stock or lib.Catalog(), "adafruit": lambda: make("adafruit"),
+                       "community": lambda: make("community")}
+        self.titles = {"micropython": ("micropython-lib (MicroPython)", "micropython"),
+                       "adafruit": ("Adafruit bundle (CircuitPython)", "circuitpython"),
+                       "community": ("Community bundle (CircuitPython)", "circuitpython")}
+        for src in self.app.settings.get("sources.libraries"):
+            src = custom_libraries.validate_library_source(src)
+            key = "custom:" + src["name"]
+            self.makers[key] = lambda src=src: custom_libraries.make_catalog(src)
+            self.titles[key] = ("%s (%s)" % (src["name"], NAMES[src["for"]]), src["for"])
+
+    def fill_source_box(self):
+        self.source_box.remove_all()
+        for key, (title, _fw) in self.titles.items():
+            self.source_box.append(key, title)
+        self.source_box.set_active_id(self.source if self.source in self.titles else "micropython")
+
+    def _sources_closed(self):
+        """Sources may have been added or removed: rebuild the box, keeping the choice if it still exists."""
+        if self.closed:
+            return
+        self.fill_source_table()
+        self.catalogs = {k: c for k, c in self.catalogs.items() if k in self.titles}
+        self.fill_source_box()              # a source that is gone makes the box fall back, which reloads the list
 
     # -- loading ---------------------------------------------------------------------------------------------
     @property
@@ -249,7 +275,10 @@ class LibrariesDialog(Gtk.Dialog):
             self.remove(self.ticked())
         elif res == Gtk.ResponseType.APPLY and not self.busy:
             self.check_updates()
-        elif res not in (Gtk.ResponseType.OK, Gtk.ResponseType.REJECT, Gtk.ResponseType.APPLY):
+        elif res == Gtk.ResponseType.HELP and not self.busy:
+            SourcesDialog(self, self.app, on_close=self._sources_closed, section="libraries")
+        elif res not in (Gtk.ResponseType.OK, Gtk.ResponseType.REJECT, Gtk.ResponseType.APPLY,
+                         Gtk.ResponseType.HELP):
             if self.busy:
                 self._cancel()
             else:
@@ -265,6 +294,8 @@ class LibrariesDialog(Gtk.Dialog):
         self.view.set_sensitive(not on)
         self.search.set_sensitive(not on)
         self.show_box.set_sensitive(not on)
+        self.source_box.set_sensitive(not on)
+        self.sources_btn.set_sensitive(not on)
         self.bar.set_visible(on)
         self.close_btn.set_label("Cancel" if on else "Close")
         self._sensitive()
@@ -357,9 +388,13 @@ class LibrariesDialog(Gtk.Dialog):
             self.note.set_text("Could not install: %s" % exc)
             return
         lines, files = lib.summary(plan)
-        if not ask_yes_no(self, "Install libraries", "Write %d file(s) to /lib on %s?\n\n%s\n\n"
+        external = getattr(self.catalog, "external", [])
+        extra = ("\n\nThese also need libraries this app does not install (from PyPI): %s." % ", ".join(external)
+                 if external else "")
+        origin = "\n\nFrom %s." % self.titles[self.source][0] if self.source.startswith("custom:") else ""
+        if not ask_yes_no(self, "Install libraries", "Write %d file(s) to /lib on %s?\n\n%s%s%s\n\n"
                           "Identical files are skipped; changed files are overwritten."
-                          % (files, self.label or "the board", "\n".join(lines))):
+                          % (files, self.label or "the board", "\n".join(lines), extra, origin)):
             self._lock(False)
             self.note.set_text("Nothing written.")
             return

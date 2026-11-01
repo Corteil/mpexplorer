@@ -180,7 +180,8 @@ def test_preferences_has_a_sources_page_and_the_firmware_dialog_a_manage_button(
         nb = [w for w in prefs.get_content_area().get_children() if isinstance(w, Gtk.Notebook)][0]
         pages = [nb.get_tab_label_text(nb.get_nth_page(i)) for i in range(nb.get_n_pages())]
         assert pages == ["General", "File types", "Sources", "Settings file"]
-        assert isinstance(nb.get_nth_page(2), ui.SourcesManager)
+        page = nb.get_nth_page(2)
+        assert isinstance(page, ui.SourcesPage) and list(page.managers) == ["firmware", "libraries"]
         prefs.destroy()
     finally:
         app.destroy()
