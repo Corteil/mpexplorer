@@ -1528,6 +1528,7 @@ def test_a_folder_at_a_drop_position_is_only_a_folder(make_app, tmp_path, monkey
 
 
 def test_dragging_shows_an_icon_not_the_whole_row(make_app, tmp_path, monkeypatch):
+    from mpexplorer.gtkui import pane as pane_module
     app = make_app()
     a, b = drag_setup(app, tmp_path)
     shown, spots = [], []
@@ -1540,4 +1541,4 @@ def test_dragging_shows_an_icon_not_the_whole_row(make_app, tmp_path, monkeypatc
     select_rows(app.left, "main.py", "lib")
     app.left._drag_icon(None)
     assert shown[2] == "edit-copy" and shown[0] != shown[1] and all(shown)
-    assert set(spots) == {(16, 16)}                 # the pointer's tip is at the middle of the 32 px icon
+    assert set(spots) == {(pane_module.DRAG_ICON_SPOT, pane_module.DRAG_ICON_SPOT)}
