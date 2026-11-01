@@ -311,7 +311,7 @@ class SyncDialog(Gtk.Dialog):
             self._scanned(plan, None)
         else:
             self.job = app.runner.submit(lambda prog: build_plan(src_be, src, dst_be, dst, prog), self._scanned,
-                                         "Comparing folders ...", inline=True)
+                                         "Comparing folders ...", inline=True, devices=(src_be, dst_be))
 
     # -- phases ---------------------------------------------------------------------------------------------
     def _tick(self):
@@ -379,7 +379,7 @@ class SyncDialog(Gtk.Dialog):
         self._summary = (len(copies), sum(a.size for a in copies),
                          sum(k[0] == "delete" for k in selected) if mirror else 0)
         self.job = self.app.runner.submit(lambda prog: apply_plan(plan, prog, mirror, selected), self._applied,
-                                          "Syncing ...", inline=True)
+                                          "Syncing ...", inline=True, devices=(self.src_be, self.dst_be))
 
     def _applied(self, _res, exc):
         self.job = None

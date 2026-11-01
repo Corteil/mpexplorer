@@ -549,14 +549,20 @@ class App(Gtk.Window):
 
     def _badge_hook(self, job, phase, exc):
         """Worker thread, around every job: say what the board is doing (quiet jobs are not worth a redraw)."""
-        # a job does not say which board it uses yet, so with two connected no screen is told
-        badge = self.badge if len(self.conns) == 1 else None
-        if not badge or job.quiet:
+        if job.quiet:
             return
-        if phase == "start":
-            badge.show(job.status, kind="busy")
-        else:
-            badge.show("Cancelled" if isinstance(exc, Cancelled) else "Failed" if exc else "Done")
+        conns = list(self.conns.values())
+        if job.devices is not None:
+            conns = [c for c in conns if any(c.device is d for d in job.devices)]
+        elif len(conns) > 1:                # it does not say which board it uses: tell no screen rather than guess
+            conns = []
+        for conn in conns:
+            if not conn.badge:
+                continue
+            if phase == "start":
+                conn.badge.show(job.status, kind="busy")
+            else:
+                conn.badge.show("Cancelled" if isinstance(exc, Cancelled) else "Failed" if exc else "Done")
 
     def disconnect(self, pane=None, after=None, keep_copied=True):
         """Close the board in a pane (by default the active one, else the only one). after runs once it is closed or
@@ -615,7 +621,8 @@ class App(Gtk.Window):
                 shutil.rmtree(res[1], ignore_errors=True)   # something else was copied meanwhile
             if after:
                 after()
-        self.runner.submit(work, done, "Keeping the copied files ...", status="Downloading the copied files")
+        self.runner.submit(work, done, "Keeping the copied files ...", status="Downloading the copied files",
+                           devices=(dev,))
 
     def _release_edits(self, dev, board):
         """Disconnecting: send saves still waiting (before the board is closed), then drop the cache copies."""
@@ -740,14 +747,14 @@ class App(Gtk.Window):
         word = ("Uploading" if dst_be.key == "device" and first[0].key != "device" else
                 "Downloading" if first[0].key == "device" and dst_be.key != "device" else verb)
         status = "%s %s%s" % (word, first[0].basename(first[1]), " +%d" % rest if rest else "")
-        self.runner.submit(work, done, verb + " ...", status=status)
+        self.runner.submit(work, done, verb + " ...", status=status, devices=[be for be, _p in items] + [dst_be])
 
     def _refresh_all(self):
         for p in self.panes:
             p.refresh()
 
     # -- file operations ---------------------------------------------------
-    def _simple_job(self, fn, label, error_title):
+    def _simple_job(self, fn, label, error_title, device=None):
         def done(_res, exc):
             self._refresh_all()
             if isinstance(exc, Cancelled):
@@ -757,7 +764,7 @@ class App(Gtk.Window):
                 error(self, error_title, str(exc))
             else:
                 self.set_status("Done")
-        self.runner.submit(fn, done, label)
+        self.runner.submit(fn, done, label, devices=(device,) if device else None)
 
     def delete(self):
         pane = self._need_backend()
@@ -771,21 +778,21 @@ class App(Gtk.Window):
 
         def work(prog):
             delete_items(be, [p for _n, p in sel], prog)
-        self._simple_job(work, "Deleting ...", "Delete failed")
+        self._simple_job(work, "Deleting ...", "Delete failed", be)
 
     def new_folder(self):
         pane = self._need_backend()
         name = pane and prompt(self, "New folder", "Folder name:")
         if name:
             be, path = pane.backend, pane.backend.join(pane.cwd, name)
-            self._simple_job(lambda prog: be.mkdir(path), "Creating folder", "Cannot create folder")
+            self._simple_job(lambda prog: be.mkdir(path), "Creating folder", "Cannot create folder", be)
 
     def new_file(self):
         pane = self._need_backend()
         name = pane and prompt(self, "New file", "File name:")
         if name:
             be, path = pane.backend, pane.backend.join(pane.cwd, name)
-            self._simple_job(lambda prog: be.open_write(path).close(), "Creating file", "Cannot create file")
+            self._simple_job(lambda prog: be.open_write(path).close(), "Creating file", "Cannot create file", be)
 
     def rename(self):
         pane = self._need_backend()
@@ -802,7 +809,7 @@ class App(Gtk.Window):
             if be.stat(new) is not None:
                 raise BackendError("'%s' already exists" % new_name)
             be.rename(old, new)
-        self._simple_job(work, "Renaming", "Rename failed")
+        self._simple_job(work, "Renaming", "Rename failed", be)
 
     def properties(self):
         pane = self._need_backend()

@@ -361,7 +361,7 @@ class EditManager:
             placeholder.last_active = self._clock()
             self.sessions.append(placeholder)
             self._start(placeholder, template)
-        self.runner.submit(work, done, "Downloading " + remote, status="Downloading " + name)
+        self.runner.submit(work, done, "Downloading " + remote, status="Downloading " + name, devices=(dev,))
 
     def _start(self, s, template):
         argv = expand_command(template, s.watcher.local)
@@ -428,7 +428,7 @@ class EditManager:
                 self.refresh()
             else:
                 self.say("Not uploaded: %s" % name)
-        self.runner.submit(work, done, "Uploading " + s.remote, status="Uploading " + name)
+        self.runner.submit(work, done, "Uploading " + s.remote, status="Uploading " + name, devices=(s.dev,))
 
     # -- ending --------------------------------------------------------
     def flush(self, dev, board):
