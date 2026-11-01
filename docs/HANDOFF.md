@@ -4,6 +4,17 @@ Written so a new Claude session can take over with no other context. Update it a
 `main` = `7555f6e` plus this docs update; CI green (Python 3.11/3.12/3.13, real MicroPython
 v1.26.0 and v1.28.0, and the `gui` job: GTK windows under xvfb). Older sections below are history and may be out of date.
 
+## CircuitPython and libraries (2026-11-01, later session on the Pi)
+Plan and what was seen on real boards: `docs/CIRCUITPYTHON_PLAN.md`. Hand checks still to do: `docs/HAND_CHECKS.md`. All of it is on `main` (CI green at
+`6b7d5fd`; `ac9ca59` added the firmware choice). New modules: `libraries.py` (micropython-lib: fetch on the host, upload to `/lib`; install/remove/skip-identical),
+`cpbundle.py` (Adafruit and Community bundles from GitHub releases), `circuitpython.py` (detect, find the `CIRCUITPY` drive by USB serial = `boot_out.txt` UID,
+`DriveBackend`: files through the drive, run/console over serial), `cp_firmware.py` (CircuitPython UF2 builds for RP2040/RP2350). GUI: `gtkui/libraries.py`
+(Tools > Install libraries: source box, search, Install, Remove, "Install anyway" when the list is for the other firmware); firmware dialog has a Firmware box for Picos.
+Lessons: CircuitPython rejects MicroPython `.mpy` files (so the other firmware's list installs source); it refuses writes over serial while the host has the drive;
+it has no `time.gmtime`/`os.ilistdir`; its first boot takes up to a minute; machine reads `...rp2350a` (lower case). Test boards: Pico 2 on CircuitPython, Pico 2 and Pico W on MicroPython; the owner is remote
+and said nothing on the Picos needs keeping (switching firmware wipes the file area). Scripts that put a Pico into its bootloader: `machine.bootloader()` on MicroPython,
+`microcontroller.on_next_reset(microcontroller.RunMode.UF2); microcontroller.reset()` on CircuitPython.
+
 ## Where we stopped (2026-11-01)
 Two big features went in on 2026-10-31 and 11-01. Plans, with what was tested: `docs/FIRMWARE_PLAN.md`, `docs/SIDE_BY_SIDE_PLAN.md`. Open items: `docs/TODO.md`.
 
