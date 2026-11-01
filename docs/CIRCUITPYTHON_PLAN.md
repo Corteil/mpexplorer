@@ -85,6 +85,15 @@ Two catalogs, one dialog (Tools > Install libraries...), a target folder that is
 Suggested start: **MicroPython libraries first**, since all the hardware is on the bench and the pattern (catalog, cache, dialog)
 already exists in the firmware tools; then CircuitPython once a board is available.
 
+## Seen on a real CircuitPython 10.3.1 Pico 2 (2026-11-01, over serial and the drive)
+- `sys.implementation.name` is `circuitpython`, version `(10, 3, 1, '')`, and it reports `_mpy` 7942 (same as MicroPython 1.28 on a Pico 2).
+- **It rejects MicroPython `.mpy` files:** `ValueError: MicroPython .mpy file; use CircuitPython mpy-cross`. The libraries dialog therefore
+  installs plain source on a CircuitPython board (after "Install anyway"). Source `urequests.py` imported fine through the drive.
+- **Writes over serial fail** while the host has the drive: `OSError: [Errno 30] Read-only filesystem`. Files must go through the drive.
+- `os.ilistdir` and `time.gmtime` do not exist, and `DeviceBackend.__init__` calls `time.gmtime`: **the app cannot connect to a
+  CircuitPython board yet** (phase 1/3 work). The libraries code was run against the drive with `LocalBackend`.
+- `/media/pi/CIRCUITPY` mounts by itself and appears next to the `/dev/ttyACM4` serial; `boot_out.txt` has the UID that matches the USB serial.
+
 ## Decisions (owner, 2026-11-01)
 - **Test boards:** the Picos (Pico RP2040 and Pico 2 RP2350) can run CircuitPython. Switching a Pico between MicroPython and
   CircuitPython may need the flash **nuked** first (`flash_nuke.uf2`, which the Tools > Erase flash code already handles). The two
