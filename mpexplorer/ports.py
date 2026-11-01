@@ -9,6 +9,7 @@ from .settings import segment
 # USB ids of the boards this tool targets, for a plain-English name (the OS only says "Board in FS mode - Board CDC")
 KNOWN_BOARDS = {
     (0x2E8A, 0x0005): "Pico / Pico 2",
+    (0x16D0, 0x08C7): "Pimoroni Pico",
     (0x303A, 0x4001): "EMF badge",
 }
 

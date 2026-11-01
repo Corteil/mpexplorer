@@ -170,3 +170,14 @@ def test_circuitpython_ports_include_adafruits_vendor_id_but_not_bootloaders_or_
     assert fw.rp2_any_ports() == {"/dev/pico2", "/dev/picow"}
     monkeypatch.setattr(fw, "rp2_ports", lambda: set())              # none of them is MicroPython
     assert [d.path for d in fw.detect_running_circuitpython()] == ["/dev/pico2", "/dev/picow"]
+
+
+def test_a_pimoroni_micropython_board_is_listed_as_running_micropython(monkeypatch):
+    """A Pimoroni build reports 16d0:08c7 (seen on a real board), so it was missing from the firmware tools."""
+    import types
+    from serial.tools import list_ports as lp
+    ports = [types.SimpleNamespace(device="/dev/ttyACM5", vid=0x16D0, pid=0x08C7),
+             types.SimpleNamespace(device="/dev/ttyACM0", vid=0x16D0, pid=0x120E)]      # a Tildagon is not an RP2
+    monkeypatch.setattr(lp, "comports", lambda: ports)
+    assert fw.rp2_ports() == {"/dev/ttyACM5"} == fw.rp2_any_ports()
+    assert [d.path for d in fw.detect_running()] == ["/dev/ttyACM5"] and fw.detect_running_circuitpython() == []
