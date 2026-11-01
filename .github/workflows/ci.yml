@@ -40,7 +40,7 @@ jobs:
           python-version: "3.12"
       - name: Restore MicroPython build
         id: cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: ~/mpy-bin
           key: micropython-unix-${{ matrix.mpy }}-v2
@@ -60,7 +60,7 @@ jobs:
           cp "$RUNNER_TEMP/mpy/ports/unix/build-standard/micropython" ~/mpy-bin/micropython
       - name: Save MicroPython build
         if: always() && steps.build.outcome == 'success'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: ~/mpy-bin
           key: micropython-unix-${{ matrix.mpy }}-v2
