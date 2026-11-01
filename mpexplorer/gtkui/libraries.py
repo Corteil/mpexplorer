@@ -47,7 +47,7 @@ class LibrariesDialog(Gtk.Dialog):
         top.pack_start(Gtk.Label(label="for %s" % (label or "the board"), xalign=0), False, False, 0)
         box.pack_start(top, False, False, 0)
         self.search = Gtk.SearchEntry(placeholder_text="Search")
-        self.search.connect("search-changed", lambda _e: self.filter.refilter())
+        self.search.connect("search-changed", lambda _e: self._refilter())
         box.pack_start(self.search, False, False, 0)
         options = Gtk.Box(spacing=8)
         options.pack_start(Gtk.Label(label="Show", xalign=0), False, False, 0)
@@ -55,8 +55,10 @@ class LibrariesDialog(Gtk.Dialog):
         for key, text in SHOW:
             self.show_box.append(key, text)
         self.show_box.set_active_id("all")
-        self.show_box.connect("changed", lambda _c: self.filter.refilter())
+        self.show_box.connect("changed", lambda _c: self._refilter())
         options.pack_start(self.show_box, False, False, 0)
+        self.count = Gtk.Label(xalign=0, sensitive=False)
+        options.pack_start(self.count, False, False, 8)
         self.select_installed = Gtk.Switch(valign=Gtk.Align.CENTER, sensitive=False)
         self.select_installed.set_tooltip_text("Tick every installed library that is shown, for an update")
         self.select_installed.connect("notify::active", lambda *_a: self._select_installed())
@@ -126,6 +128,7 @@ class LibrariesDialog(Gtk.Dialog):
         self.chose = True
         self.source = key
         self.store.clear()
+        self._update_count()
         self.select_installed.set_active(False)
         self._sensitive()
         self._start_load()
@@ -194,6 +197,7 @@ class LibrariesDialog(Gtk.Dialog):
     def _mark_installed(self):
         for row in self.store:
             row[3] = "yes" if row[1].replace("-", "_") in self.have or row[1] in self.have else ""
+        self._update_count()
 
     # -- picking ---------------------------------------------------------------------------------------------
     def _visible(self, model, it, _data):
@@ -203,6 +207,16 @@ class LibrariesDialog(Gtk.Dialog):
         show, state = self.show_box.get_active_id(), model[it][3]
         return (show in (None, "all") or (show == "installed" and bool(state)) or (show == "new" and not state)
                 or (show == "updates" and state in NEEDS_UPDATE))
+
+    def _refilter(self):
+        self.filter.refilter()
+        self._update_count()
+
+    def _update_count(self):
+        """'3 of 412 shown' while a search or filter hides some, else '412 libraries'."""
+        total, shown = len(self.store), sum(1 for _ in self.filter)
+        self.count.set_text("" if not total else "%d libraries" % total if shown == total
+                            else "%d of %d shown" % (shown, total))
 
     def _select_installed(self):
         """The switch ticks (or unticks) every installed library that is shown with the current search and filter."""
@@ -285,6 +299,7 @@ class LibrariesDialog(Gtk.Dialog):
         for row in self.store:
             if row[1] in res:
                 row[3] = words[res[row[1]]]
+        self._update_count()
         newer = [n for n, v in res.items() if v != "current"]
         self.note.set_text("%d checked: %s." % (len(res), "%d to update (tick them and press Install)" % len(newer)
                                                 if newer else "all up to date"))

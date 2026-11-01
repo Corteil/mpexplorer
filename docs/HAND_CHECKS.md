@@ -45,3 +45,13 @@ lists, even a file two packages share (`urequests` and `requests`).
 2. The emulated console showed CircuitPython's terminal codes (title and colour sequences): they are stripped now (the real terminal view is unchanged).
 3. The firmware tools did not list a running CircuitPython Pico W: it uses Adafruit's USB vendor id (`239a:8120`), not Raspberry Pi's. Running CircuitPython boards are now listed (read without `uctypes`, started into their bootloader with `RunMode.UF2`; no backup for them), and the post-install port wait accepts both ids.
 4. The install-libraries confirmation now lists each library's files (reading of "does not list the packages" was uncertain: a screenshot showed the list itself loading).
+
+## Added after the first round (not yet hand-tested; passed by script, tests and a fake display only)
+Reopen the app from `main` first. The owner was not available for onsite testing on 2026-11-01, so none of these has been clicked in the real window.
+1. **Open with on the CircuitPython drive:** double-click or right-click > Open with on `code.py` on the `CIRCUITPY` pane. The program opens the file *on the drive*
+   (no copy under `~/.cache/mpexplorer/open`), and saving in it reloads the board.
+2. **Check for updates** (Tools > Install libraries, with some libraries installed): each installed row says `up to date`, `update available` or `incomplete`.
+   Edit one installed library file on the drive to see `update available`, then Install it again to fix it.
+3. **Show filter** (All, Installed, Not installed, Updates available) combined with the search box; the text next to it reads `3 of 412 shown` while something is hidden.
+4. **Select installed libraries** switch: ticks every installed library that is shown (so with Show = Updates available it ticks only those). Install then updates them.
+5. **Firmware tools list the running CircuitPython Pico W** (Tools > Install firmware / Back up or restore / Erase): `Pico W (RP2040) at /dev/ttyACM?` with `State: running CircuitPython`; Start bootloader works on it (do not do this remotely: the board then needs BOOTSEL or a reinstall).

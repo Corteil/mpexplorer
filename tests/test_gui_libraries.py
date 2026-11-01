@@ -279,3 +279,20 @@ def test_show_filter_and_select_installed_switch(tmp_path, monkeypatch):
     finally:
         dlg.destroy()
         app.destroy()
+
+
+def test_the_count_says_how_many_are_shown_when_something_is_hidden(tmp_path, monkeypatch):
+    app, dlg, _ = open_dialog(tmp_path, monkeypatch)
+    try:
+        assert dlg.count.get_text() == "2 libraries"
+        dlg.store[0][3] = "yes"
+        dlg.show_box.set_active_id("installed")
+        assert dlg.count.get_text() == "1 of 2 shown"
+        dlg.show_box.set_active_id("all")
+        dlg.search.set_text("first")
+        wait_until(lambda: dlg.count.get_text() == "1 of 2 shown")
+        dlg.search.set_text("")
+        wait_until(lambda: dlg.count.get_text() == "2 libraries")
+    finally:
+        dlg.destroy()
+        app.destroy()
