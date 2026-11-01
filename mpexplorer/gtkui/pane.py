@@ -3,7 +3,7 @@ from ..backends import human
 from .common import Gdk, GLib, Gtk, error, fmt_time, icon_button, scrolled
 
 HOST = "Host"
-DRAG_ICON_SPOT = 28        # this point of the 32 px drag icon sits under the pointer's tip: larger moves it up and left
+DRAG_ICON_X, DRAG_ICON_Y = 34, 22   # this point of the drag icon sits under the pointer: larger moves it left, or up
 DND_TARGET = [Gtk.TargetEntry.new("application/x-mpexplorer-items", Gtk.TargetFlags.SAME_APP, 0)]
 
 
@@ -262,7 +262,7 @@ class Pane(Gtk.Frame):
         """Drag a small icon, not a picture of the whole row: the item's own icon, or a stack for several."""
         model, paths = self.tree.get_selection().get_selected_rows()
         name = model[paths[0]][0] if len(paths) == 1 else "edit-copy"
-        Gtk.drag_set_icon_name(ctx, name or "text-x-generic", DRAG_ICON_SPOT, DRAG_ICON_SPOT)
+        Gtk.drag_set_icon_name(ctx, name or "text-x-generic", DRAG_ICON_X, DRAG_ICON_Y)
 
     def folder_at(self, x, y):
         """The full path of the folder under a drop, if there is one."""
