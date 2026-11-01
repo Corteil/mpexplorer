@@ -27,11 +27,8 @@ except (ImportError, ValueError) as e:                       # GTK 3 typelib mis
 import fakedisplay
 from fakedevice import FakeSerial
 from mpexplorer.backends import DeviceBackend
-from mpexplorer.settings import Settings, segment
-
-
 from mpexplorer.errors import Cancelled as common_cancelled
-from mpexplorer.settings import Settings
+from mpexplorer.settings import Settings, segment
 from mpexplorer.transport import RawREPL
 
 Gtk = common.Gtk
