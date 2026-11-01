@@ -5,6 +5,28 @@ import re
 from .transport import DeviceError
 
 _NOISE = re.compile(r'^\s*File "<(stdin|string)>".*\n?', re.M)
+# Terminal codes the plain-text console cannot draw: CircuitPython sets the window title (OSC) and colours text (CSI).
+_CODES = re.compile(r"\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)"       # OSC ... BEL or ESC \ (the text is dropped too)
+                    r"|\x1b\[[0-?]*[ -/]*[@-~]"                      # CSI
+                    r"|\x1b[@-Z\\-_]"                               # two-character codes
+                    r"|[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")                # other control characters; \t \n \r stay
+_PARTIAL = re.compile(r"\x1b(?:\](?:[^\x07\x1b]|\x1b(?!\\))*|\[[0-?]*[ -/]*)?$")      # a code cut off by the chunk end
+MAX_CODE = 300
+
+
+class CodeStripper:
+    """Removes terminal codes from output that arrives in pieces; a code split between two pieces is held back."""
+
+    def __init__(self):
+        self.held = ""
+
+    def feed(self, text):
+        text = self.held + text
+        self.held = ""
+        m = _PARTIAL.search(text)
+        if m and len(text) - m.start() <= MAX_CODE:
+            text, self.held = text[:m.start()], text[m.start():]
+        return _CODES.sub("", text)
 
 
 def clean_traceback(tb):
@@ -36,9 +58,10 @@ class ConsoleSession:
         if line.strip() and (not self.history or self.history[-1] != line):
             self.history.append(line)
         dec = codecs.getincrementaldecoder("utf-8")(errors="replace")
+        strip = CodeStripper()
 
         def emit(chunk):
-            text = dec.decode(chunk).replace("\r", "")
+            text = strip.feed(dec.decode(chunk).replace("\r", ""))
             if text:
                 on_output(text, False)
         self._sent_input = False
@@ -64,10 +87,11 @@ class ConsoleSession:
         """Like Ctrl-D at the REPL: restart the interpreter, losing all variables. Shows what the board prints while it
         starts (the banner, the output of main.py or code.py), without the prompt it ends on."""
         dec = codecs.getincrementaldecoder("utf-8")(errors="replace")
+        strip = CodeStripper()
         shown = []
 
         def emit(chunk):
-            text = dec.decode(chunk).replace("\r", "")
+            text = strip.feed(dec.decode(chunk).replace("\r", ""))
             if text:
                 shown.append(text)
         self.repl.soft_reset(emit)
