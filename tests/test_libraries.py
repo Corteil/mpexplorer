@@ -138,3 +138,13 @@ def test_board_firmware_names_the_implementation():
     assert libraries.board_firmware(Fw(b"circuitpython\n")) == "circuitpython"
     assert libraries.board_firmware(Fw(b"micropython\n")) == "micropython"
     assert libraries.board_firmware(Fw(OSError("gone"))) is None
+
+
+def test_summary_lists_each_library_with_its_files_and_cuts_a_long_list(tmp_path):
+    opener, _ = make_site()
+    plan = libraries.Catalog(str(tmp_path), opener).resolve(["zed"])
+    lines, files = libraries.summary(plan)
+    assert files == 3 and lines == ["alpha 2.0 (source)", "    pkg/__init__.py", "    pkg/mod.py",
+                                    "zed 1.0 (source)", "    a.py"]
+    short, _ = libraries.summary(plan, max_lines=2)
+    assert short == ["alpha 2.0 (source)", "    pkg/__init__.py", "    ... and 3 more line(s)"]
