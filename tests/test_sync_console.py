@@ -271,3 +271,25 @@ def test_soft_reset_of_a_silent_board_still_says_so():
     out = []
     ConsoleSession(RawREPL(BootSerial(b""))).soft_reset(lambda t, e: out.append(t))
     assert out == ["MPY: soft reboot\n"]
+
+
+def test_terminal_codes_are_removed_from_console_output_even_when_split():
+    from mpexplorer.console import CodeStripper
+    boot = ("\x1b]0;\U0001f40dcode.py | 10.3.1\x1b\\Hello \x1b[31mWorld\x1b[0m!\n\x1b[0K\x07\x00ok\t"
+            "\x1b]0;\U0001f40dDone | 10.3.1\x1b\\")
+    assert CodeStripper().feed(boot) == "Hello World!\nok\t"
+    for cut in range(1, len(boot)):                      # every way of splitting it in two
+        s = CodeStripper()
+        assert s.feed(boot[:cut]) + s.feed(boot[cut:]) == "Hello World!\nok\t", cut
+    s = CodeStripper()
+    assert s.feed("text \x1b") + s.feed("[1;32mgreen") == "text green"
+
+
+def test_soft_reset_output_has_no_terminal_codes():
+    from mpexplorer.transport import RawREPL
+    ser = BootSerial(b"\x1b]0;\xf0\x9f\x90\x8dcode.py | 10.3.1\x1b\\soft reboot\r\nHello World!\r\n"
+                     b"\x1b]0;\xf0\x9f\x90\x8dDone | 10.3.1\x1b\\Press any key to enter the REPL.\r\n")
+    out = []
+    ConsoleSession(RawREPL(ser)).soft_reset(lambda t, e: out.append(t))
+    text = "".join(out)
+    assert "Hello World!" in text and "\x1b" not in text and "10.3.1" not in text

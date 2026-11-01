@@ -297,9 +297,10 @@ class RawREPL:
             self._read_until(b"w REPL; CTRL-B to exit\r\n>", timeout)
         return False
 
-    # What the board says when it has finished starting and is waiting for the next thing: MicroPython's prompt, or
-    # CircuitPython's "Press any key" after code.py ends.
-    BOOT_DONE = (b">>> ", b"Press any key to enter the REPL")
+    # What the board says when it has finished starting: MicroPython's prompt, or CircuitPython's "Press any key"
+    # (followed by a few more words) after code.py ends.
+    BOOT_PROMPT = b">>> "
+    BOOT_WAITING = b"Press any key to enter the REPL"
 
     def soft_reset(self, on_output=None, quiet=0.6, limit=5.0):
         """Restart the interpreter like Ctrl-D at the REPL. With on_output, what the board prints while starting
@@ -320,7 +321,8 @@ class RawREPL:
             seen = bytearray()
             while True:
                 now = time.monotonic()
-                if now - start >= limit or (now - last >= quiet and now - start >= 0.5):
+                wait = 0.2 if self.BOOT_WAITING in seen else quiet      # the rest of that line is on its way
+                if now - start >= limit or (now - last >= wait and now - start >= 0.5):
                     break
                 chunk = self.ser.read(self.ser.in_waiting or 1)
                 if not chunk:
@@ -329,7 +331,7 @@ class RawREPL:
                 last = time.monotonic()
                 seen += chunk
                 on_output(chunk)
-                if any(seen.rstrip().endswith(m.rstrip()) for m in self.BOOT_DONE):
+                if seen.rstrip().endswith(self.BOOT_PROMPT.rstrip()):
                     break
             self._rx.clear()
 
