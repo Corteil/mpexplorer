@@ -19,7 +19,8 @@ def test_presets_validate_and_the_default_pattern_reads_real_pimoroni_names():
 
 def test_validation_cleans_a_source_and_refuses_the_rest():
     ok = S.validate_firmware_source({"name": " Mine ", "kind": "github", "repo": "https://github.com/a/b/"})
-    assert ok == {"name": "Mine", "kind": "github", "repo": "a/b", "pattern": S.DEFAULT_PATTERN}
+    assert ok == {"name": "Mine", "kind": "github", "repo": "a/b", "pattern": S.DEFAULT_PATTERN,
+                  "firmware": "micropython"}
     for bad in ({"name": "x" * 41, "kind": "github", "repo": "a/b"}, {"name": "x", "kind": "ftp"},
                 {"name": "x", "kind": "github", "repo": "a b/c"}, {"name": "x", "kind": "url", "url": "http://a/b"}):
         with pytest.raises(S.SourceError):

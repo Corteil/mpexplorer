@@ -1,6 +1,6 @@
 # Custom sources for libraries and firmware plan
 
-Status (2026-11-01): plan agreed with the owner (decisions below). **Phase 1 built** on branch `custom-sources-core` (`sources.py`, `custom_firmware.py`, settings keys `sources.*` and `boards.installed`, `tests/test_sources.py`, `tests/test_custom_firmware.py`): GUI-free, nothing visible changes yet; both Pimoroni presets pass Check against the live repos (35 and 17 boards). Phases 2-5 not built. Asked for by the owner: add custom repos for libraries and firmware,
+Status (2026-11-01): plan agreed with the owner (decisions below). **Phase 1 built** on branch `custom-sources-core` (`sources.py`, `custom_firmware.py`, settings keys `sources.*` and `boards.installed`, `tests/test_sources.py`, `tests/test_custom_firmware.py`): GUI-free, nothing visible changes yet; both Pimoroni presets pass Check against the live repos (35 and 17 boards). **Phase 2 built** on branch `custom-sources-firmware`: the Firmware box lists the added sources after MicroPython and CircuitPython, their boards and versions load like the others, the confirmation names the source and repo, an install is recorded (`boards.installed`, source, version, SHA-256, under the USB id), and versions newer than the board are marked. Tried on the real Pico W (stock 1.29.0 -> the live `picow-v1.29.0-2-pimoroni-micropython.uf2`, `picographics` imports -> stock again). Phases 3-5 not built. Asked for by the owner: add custom repos for libraries and firmware,
 for the makers of MicroPython and CircuitPython builds (Pimoroni, SparkFun and others), managed from one **repo manager** reachable from a button in the
 Install firmware and Install libraries dialogs and from Preferences.
 
@@ -102,6 +102,12 @@ firmware) applies unchanged.
 4. **The manager**: `SourcesManager`, the **Manage sources...** buttons, the Preferences page, Add with presets and Custom, Check and Check all, the trust prompt. Rendered screenshots
    for the owner to approve before pushing.
 5. Direct URL, local folder or zip, a custom micropython-lib index; polish, README and hand checks.
+
+## Found while building phase 2
+- A running Pimoroni build says its exact revision in `os.uname().version` (`picow v1.29.0-2 on 2026-08-31`) while `os.uname().release` says only `1.29.0`. Reading
+  `version` as well would let the update marks compare exactly even for a board whose install was not made through this app. Planned for phase 5 (`read_running` also returns it).
+- The Pimoroni repo's releases list 35 boards because older releases used other names (`pimoroni-picow`, `pimoroni-badger2040`, ...) beside the current ones; the picker lists all of them.
+- Boards are not filtered by chip in the dialog (the file name does not say): the family check refuses a wrong-chip file before anything is written.
 
 ## Still open (small, plan defaults apply)
 - Pattern syntax for a Custom firmware source: a regular expression with named groups `board` and `version` (default `^(?P<board>.+?)-(?P<version>v?\d[\w.]*(?:-\d+)?).*\.(uf2|bin)$`),
