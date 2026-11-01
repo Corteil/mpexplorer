@@ -1024,3 +1024,19 @@ def test_the_bootloader_button_remembers_what_the_board_ran(setup, monkeypatch):
     d._response(d, Gtk.ResponseType.YES)
     wait_until(lambda: not d.running)
     assert d.prior[drive.path][0] == "1.29.0" and not errors
+
+
+def test_manage_sources_opens_the_manager_and_the_firmware_box_follows_it(setup, monkeypatch):
+    make, drives, errors, app, tmp = with_maker(setup, monkeypatch)
+    opened = []
+    monkeypatch.setattr(dialog, "SourcesDialog", lambda parent, app_, on_close=None, **k: opened.append(on_close))
+    d = make()
+    d.firmware_box.set_active(2)
+    assert d.source_name == "Pimoroni MicroPython"
+    d._response(d, Gtk.ResponseType.HELP)
+    assert len(opened) == 1
+    from mpexplorer import sources as S
+    S.remove_source(app.settings, "firmware", "Pimoroni MicroPython")           # the owner removed it in the manager
+    opened[0]()                                                                  # the manager closed
+    assert [row[0] for row in d.firmware_box.get_model()] == ["MicroPython", "CircuitPython"]
+    assert d.source_name == "MicroPython" and "Pimoroni MicroPython" not in d.custom_catalogs
