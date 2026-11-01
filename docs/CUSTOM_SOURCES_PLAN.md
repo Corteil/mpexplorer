@@ -1,6 +1,6 @@
 # Custom sources for libraries and firmware plan
 
-Status (2026-11-01): plan agreed with the owner (decisions below), nothing built. Asked for by the owner: add custom repos for libraries and firmware,
+Status (2026-11-01): plan agreed with the owner (decisions below). **Phase 1 built** on branch `custom-sources-core` (`sources.py`, `custom_firmware.py`, settings keys `sources.*` and `boards.installed`, `tests/test_sources.py`, `tests/test_custom_firmware.py`): GUI-free, nothing visible changes yet; both Pimoroni presets pass Check against the live repos (35 and 17 boards). Phases 2-5 not built. Asked for by the owner: add custom repos for libraries and firmware,
 for the makers of MicroPython and CircuitPython builds (Pimoroni, SparkFun and others), managed from one **repo manager** reachable from a button in the
 Install firmware and Install libraries dialogs and from Preferences.
 

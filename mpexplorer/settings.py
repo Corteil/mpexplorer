@@ -61,6 +61,40 @@ def bool_dict(v):
     raise ValueError("expected a table of true/false values")
 
 
+def str_list(v):
+    if isinstance(v, list) and all(isinstance(x, str) for x in v):
+        return list(v)
+    raise ValueError("expected a list of text values")
+
+
+def source_list(kinds, fields):
+    """A list of custom sources (docs/CUSTOM_SOURCES_PLAN.md): each a table of text values with a name and one of
+    `kinds`; `fields` are the other keys allowed."""
+    def check(v):
+        if not isinstance(v, list):
+            raise ValueError("expected a list of sources")
+        out = []
+        for item in v:
+            if not isinstance(item, dict) or not all(isinstance(k, str) and isinstance(x, str)
+                                                     for k, x in item.items()):
+                raise ValueError("each source is a table of text values")
+            unknown = set(item) - set(fields) - {"name", "kind"}
+            if unknown:
+                raise ValueError("unknown key in a source: %s" % ", ".join(sorted(unknown)))
+            if not item.get("name", "").strip() or item.get("kind") not in kinds:
+                raise ValueError("a source needs a name and a kind (%s)" % ", ".join(kinds))
+            out.append(dict(item))
+        return out
+    return check
+
+
+def installed_table(v):
+    if (isinstance(v, dict) and all(isinstance(k, str) and isinstance(x, dict) and all(
+            isinstance(a, str) and isinstance(b, str) for a, b in x.items()) for k, x in v.items())):
+        return {k: dict(x) for k, x in v.items()}
+    raise ValueError("expected a table of install records")
+
+
 def sort_order(v):
     if isinstance(v, list) and len(v) == 2 and v[0] in ("name", "size", "modified") and isinstance(v[1], bool):
         return list(v)
@@ -94,6 +128,10 @@ SPEC = {
     "boards.firmware": ({}, str_dict),              # board id -> "micropython" | "circuitpython" (learned at connect)
     "boards.nicknames": ({}, str_dict),             # chip id (else USB id) -> the owner's name for that board
     "boards.ids": ({}, str_dict),                   # USB id -> chip id (learned at connect)
+    "boards.installed": ({}, installed_table),      # chip id -> {source, version, sha256} of a custom install
+    "sources.firmware": ([], source_list(("github", "url"), ("repo", "url", "pattern"))),
+    "sources.libraries": ([], source_list(("bundle", "mip", "folder"), ("repo", "url", "path", "prefix", "for"))),
+    "sources.trusted_hosts": ([], str_list),        # sites (other than GitHub) the owner approved for custom sources
     "open_with.auto_upload": (True, boolean),       # upload saves made in an external program (docs/OPEN_WITH_PLAN.md)
     "open_with.by_extension": ({}, str_dict),       # ".py" -> "editor" | "app:<desktop id>" | "custom:<name>"
     "open_with.custom": ({}, str_dict),             # name -> command with {file}
