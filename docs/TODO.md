@@ -88,7 +88,7 @@ label if one is missing on another theme.
 
 ## 2f. Side-by-side boards (plan: `docs/SIDE_BY_SIDE_PLAN.md`)
 - [x] Phase 1: boards are told apart by chip id for remembered folders (fake board; `unique_id` itself read on a Tildagon, Pico 2, Pico W and 2022 badge).
-- [ ] Hand test: the two 2022 badges remember separate folders.
+- [x] Hand test: the two 2022 badges each went back to their own folder (2026-11-01, owner).
 - [ ] Phases 2-5.
 
 ## 2c. Agent mode (plan: `docs/AGENT_PLAN.md`)
