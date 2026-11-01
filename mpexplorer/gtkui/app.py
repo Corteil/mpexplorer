@@ -851,7 +851,7 @@ class App(Gtk.Window):
     # -- editor and device tools ------------------------------------------
     def open_external(self, pane, path, template):
         """Open a file in an external program: a host file directly, a device file as an edit-in-place session."""
-        if pane.backend.key == "local":
+        if getattr(pane.backend, "in_place", False):        # a host file, or a CircuitPython board's drive
             err = self.edits.open_host_file(path, template)
             if err:
                 error(self, "Cannot open file", err)
@@ -866,7 +866,7 @@ class App(Gtk.Window):
         """The system default may run a program instead of showing it: ask first for an executable-looking file."""
         name = posixpath.basename(path)
         mode = None
-        if pane.backend.key == "local":
+        if getattr(pane.backend, "in_place", False):
             try:
                 mode = os.stat(path).st_mode
             except OSError:

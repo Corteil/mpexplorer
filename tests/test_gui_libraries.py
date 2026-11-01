@@ -212,3 +212,22 @@ def test_the_other_firmwares_list_needs_the_override(tmp_path, monkeypatch):
     finally:
         dlg.destroy()
         app.destroy()
+
+
+def test_open_with_on_a_circuitpython_drive_edits_the_file_where_it_is(tmp_path):
+    from mpexplorer.circuitpython import DriveBackend
+    app = App(settings=Settings.load(str(tmp_path / "cfg.json")))
+    mount = tmp_path / "CIRCUITPY"
+    mount.mkdir()
+    (mount / "code.py").write_text("print(1)\n")
+    launched, copied = [], []
+    app.edits.launch = lambda argv: launched.append(argv)
+    app.edits.edit_device_file = lambda *a: copied.append(a)             # the copy-to-cache path must not be used
+    try:
+        be = DriveBackend(str(mount), types.SimpleNamespace(exec=lambda *a, **k: b"", close=lambda *a: None))
+        app.connected(be, str(mount), "/dev/ttyACM9", "usb:xyz", pane=app.right, firmware=("circuitpython", "10.3.1"))
+        app.open_external(app.right, str(mount / "code.py"), "geany {file}")
+        assert launched == [["geany", str(mount / "code.py")]] and copied == []
+    finally:
+        app.conns.clear()
+        app.destroy()
