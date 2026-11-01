@@ -1,7 +1,8 @@
 """MicroPython libraries from micropython-lib (the `mip` index), fetched on the host and written to a board's /lib.
 
 Nothing runs on the board: the files are downloaded here and uploaded through whatever backend is given, so it works
-with no network on the board. Package format (checked 2026-11-01): `index.json` lists packages; `package/<py|mpy version>/<name>/<version>.json`
+with no network on the board. Package format (checked 2026-11-01): `index.json` lists packages;
+`package/<py|mpy version>/<name>/<version>.json`
 holds `hashes` ([path, short hash] pairs) and `deps` ([name, version]); a file is at `file/<first two of hash>/<hash>`.
 """
 import hashlib
@@ -50,8 +51,8 @@ def parse_index(data):
     """Libraries from index.json, sorted by name."""
     try:
         packages = json.loads(data)["packages"]
-        libs = [Library(p["name"], p["version"], p.get("description", ""), [v for v in p.get("versions", {}) if v != "py"])
-                for p in packages]
+        libs = [Library(p["name"], p["version"], p.get("description", ""),
+                        [v for v in p.get("versions", {}) if v != "py"]) for p in packages]
     except (ValueError, KeyError, TypeError):
         raise LibraryError("The package index is not in the expected format.")
     return sorted(libs, key=lambda lib: lib.name)
@@ -99,7 +100,8 @@ class Catalog:
         last = None
         for kind in kinds:
             try:
-                return json.loads(self._read("%s/package/%s/%s/%s.json" % (INDEX, kind, name, version), MAX_INDEX)), kind
+                url = "%s/package/%s/%s/%s.json" % (INDEX, kind, name, version)
+                return json.loads(self._read(url, MAX_INDEX)), kind
             except (LibraryError, ValueError) as e:
                 last = e
         raise LibraryError("Cannot find %s: %s" % (name, last))
