@@ -3,11 +3,13 @@ import os
 import threading
 import time
 
+from .. import boardinfo
 from .. import firmware as fw
 from ..backends import human
 from ..errors import Cancelled
 from ..cp_firmware import CircuitPythonCatalog
 from ..firmware_catalog import NUKE_FILE, Build, Catalog, default_build, saved_text
+from ..ports import board_id
 from .common import GLib, Gtk, ask_yes_no, error
 
 STEPS = ("To put a board in its bootloader:\n"
@@ -118,11 +120,18 @@ class DeviceDialog(Gtk.Dialog):
         self.prefer = None
         self._picked()
 
+    def _label(self, drive):
+        """The device row: the firmware tag and the owner's nickname for a running board, then what it is and where."""
+        nickname = ""
+        if drive.method in ("repl", "badge"):
+            nickname = boardinfo.nickname_before_connect(self.app.settings, board_id(drive.path))
+        return fw.labelled(drive, self.running_info.get(drive.path), nickname)
+
     def _fill_devices(self, chosen):
         self.filling = True
         self.board_box.remove_all()
         for d in self.drives:
-            self.board_box.append_text(fw.device_label(d, self.running_info.get(d.path)))
+            self.board_box.append_text(self._label(d))
         paths = [d.path for d in self.drives]
         if paths:
             self.board_box.set_active(paths.index(chosen) if chosen in paths else 0)
@@ -644,9 +653,20 @@ class FirmwareDialog(DeviceDialog):
         if not self.result.port:
             return ("Written and checked. The app cannot follow this board as it starts: reset it yourself and Scan "
                     "for its port.\nSHA-256 %s" % sha)
+        self._learn_install()
         self.connect_btn.show()
         return "Installed: %s %s on %s, now at %s.\nSHA-256 %s" % (
             self.firmware, self.result.release, self.result.machine, self.result.port, sha)
+
+    def _learn_install(self):
+        """The board now runs what was installed: remember it under its USB id (when that names one board), so its badge
+        is right in the port lists at once, and refresh them."""
+        kind = boardinfo.CIRCUITPYTHON if self.firmware == "CircuitPython" else boardinfo.MICROPYTHON
+        usb = board_id(self.result.port)
+        named_by_usb = usb.count(":") == 2                      # vid:pid:serial, not a path
+        if named_by_usb and boardinfo.unique_usb_serial(usb.rsplit(":", 1)[-1]):
+            boardinfo.remember_firmware(self.app.settings, usb, kind)
+        self.app.scan_ports()
 
     def _connect_new_port(self):
         port = self.result.port

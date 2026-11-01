@@ -464,9 +464,10 @@ def test_a_running_pico_is_named_described_and_can_only_be_backed_up(setup):
     make, drives, *_ = setup
     drives[0] = RUNNING
     d = make(cls=dialog.BackupDialog)
-    assert d.board_box.get_active_text() == "MicroPython board at /dev/ttyACM1" and not d.backup_btn.get_sensitive()
+    assert d.board_box.get_active_text() == "[MP] MicroPython board at /dev/ttyACM1"
+    assert not d.backup_btn.get_sensitive()
     wait_until(lambda: d.backup_btn.get_sensitive())
-    assert d.board_box.get_active_text() == "Pico 2 (RP2350) at /dev/ttyACM1"
+    assert d.board_box.get_active_text() == "[MP] Pico 2 (RP2350) at /dev/ttyACM1"
     assert "Raspberry Pi Pico2 with RP2350" in d.details.get_text() and "4 MB" in d.details.get_text()
     assert not d.restore_btn.get_sensitive() and "BOOTSEL" in d.restore_btn.get_tooltip_text()
 
@@ -493,7 +494,7 @@ def test_a_board_that_cannot_be_read_says_why(setup, monkeypatch):
     monkeypatch.setattr(fw, "read_running", busy)
     d = make(cls=dialog.BackupDialog)
     wait_until(lambda: "connected in the app" in d.details.get_text())
-    assert d.board_box.get_active_text() == "MicroPython board at /dev/ttyACM1"
+    assert d.board_box.get_active_text() == "[MP] MicroPython board at /dev/ttyACM1"
 
 
 def test_a_badge_is_named_by_its_chip(setup, monkeypatch):
@@ -752,7 +753,7 @@ def test_a_running_badge_is_listed_in_every_tool_says_what_to_do_and_is_not_touc
     monkeypatch.setattr(fw, "read_running", lambda port: pytest.fail("read a badge"))
     monkeypatch.setattr(fw, "read_esp_chip", lambda port: pytest.fail("read a badge"))
     d = make(cls=cls)
-    assert d.board_box.get_active_text() == "Tildagon (2024, 2026) at /dev/ttyACM0"
+    assert d.board_box.get_active_text() == "[MP] Tildagon (2024, 2026) at /dev/ttyACM0"
     assert "running normally" in d.details.get_text() and "Start bootloader" in d.note.get_text()
     assert d.boot_btn.get_visible() and d.boot_btn.get_sensitive()
     for name in ("install_btn", "backup_btn", "restore_btn", "erase_btn"):
@@ -764,7 +765,7 @@ def test_the_2022_badge_gets_its_buttons_not_the_bootloader_button(setup):
     make, drives, *_ = setup
     drives[0] = TIDAL_RUNNING
     d = make()
-    assert d.board_box.get_active_text() == "TiDAL (2022 badge) at /dev/ttyACM2"
+    assert d.board_box.get_active_text() == "[MP] TiDAL (2022 badge) at /dev/ttyACM2"
     assert not d.boot_btn.get_visible() and "bottom right" in d.note.get_text()
     assert "boop" not in d.note.get_text()          # only this device's steps
 
@@ -894,3 +895,42 @@ def test_a_pico_can_be_given_circuitpython_instead(setup, monkeypatch):
     wait_until(lambda: not d.running)
     assert calls == [(image, "CircuitPython")] and not errors
     assert "Installed: CircuitPython 10.3.1" in d.note.get_text()
+
+
+def test_running_boards_are_tagged_and_named_in_the_device_list(setup, monkeypatch):
+    make, drives, _, app, _ = setup
+    mp = fw.BootDrive("/dev/ttyACM2", "MicroPython", "MicroPython", None, "repl")
+    cp = fw.BootDrive("/dev/ttyACM4", "CircuitPython", "CircuitPython", None, "repl")
+    drives[:] = [mp, cp]
+    usb = {"/dev/ttyACM2": "2e8a:0005:15edd94f06289842", "/dev/ttyACM4": "2e8a:000b:559CBFCF6BBE8A64"}
+    monkeypatch.setattr(dialog, "board_id", lambda path: usb[path])
+    from mpexplorer import boardinfo
+    boardinfo.remember_chip(app.settings, usb["/dev/ttyACM4"], "chip:559cbfcf")
+    boardinfo.set_nickname(app.settings, "chip:559cbfcf", "Bench CP")
+    d = make()
+    labels = [d.board_box.get_model()[i][0] for i in range(2)]
+    assert labels == ["[MP] MicroPython board at /dev/ttyACM2", '[CP] "Bench CP"  CircuitPython board at /dev/ttyACM4']
+
+
+def test_a_board_in_its_bootloader_has_no_tag():
+    drive = fw.BootDrive("/media/pi/RPI-RP2", "Raspberry Pi RP2", "RPI-RP2", "rp2040")
+    assert fw.labelled(drive) == fw.device_label(drive)
+    badge = fw.BootDrive("/dev/ttyACM0", "Tildagon (2024, 2026)", "TILDAGON", None, "badge")
+    assert fw.labelled(badge) == "[MP] Tildagon (2024, 2026) at /dev/ttyACM0"
+
+
+def test_an_install_teaches_the_app_what_the_board_runs_now(setup, monkeypatch):
+    make, _, errors, app, tmp = setup
+    monkeypatch.setattr(dialog, "board_id", lambda path: "239a:8120:E6614104034E1931")
+    monkeypatch.setattr(fw, "install_and_verify",
+                        lambda *a, **k: fw.Installed("/dev/ttyACM3", "10.3.1", "Raspberry Pi Pico W with rp2040"))
+    monkeypatch.setattr(dialog, "CircuitPythonCatalog", FakeCircuitPythonCatalog)
+    d = make()
+    d.firmware_box.set_active(1)
+    wait_until(lambda: [b.id for b in d.boards] == ["raspberry_pi_pico"])
+    d.product_box.set_active(0)
+    wait_until(lambda: d.build() is not None)
+    d.cp_catalog.image = uf2(tmp / "cp.uf2")
+    d.install()
+    wait_until(lambda: not d.running)
+    assert not errors and app.settings.get("boards.firmware") == {"239a:8120:E6614104034E1931": "circuitpython"}

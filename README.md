@@ -12,6 +12,9 @@ board over USB serial. **Nothing is installed on the board** in normal use: it w
 
 ## Features
 - Two panes, each showing the host or a board, so two boards can be open side by side: browse, sort, filter, show hidden files
+- **Firmware badges and nicknames:** every board in the port list carries a **CP** (CircuitPython) or **MP** (MicroPython) badge, the
+  pane label names the firmware and version, and *Device > Name this board* (or the bookmark button by the port box) gives a board a
+  nickname that follows it by chip id, kept on this computer only
 - Copy files and folders between the panes (buttons, drag, or copy and paste). Dragging onto a folder copies into it, or moves
   into it within one pane
 - Copy, cut, paste, rename, delete, new file / folder, properties, free space

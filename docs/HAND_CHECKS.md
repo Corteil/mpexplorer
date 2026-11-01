@@ -55,3 +55,10 @@ Reopen the app from `main` first. The owner was not available for onsite testing
 3. **Show filter** (All, Installed, Not installed, Updates available) combined with the search box; the text next to it reads `3 of 412 shown` while something is hidden.
 4. **Select installed libraries** switch: ticks every installed library that is shown (so with Show = Updates available it ticks only those). Install then updates them.
 5. **Firmware tools list the running CircuitPython Pico W** (Tools > Install firmware / Back up or restore / Erase): `Pico W (RP2040) at /dev/ttyACM?` with `State: running CircuitPython`; Start bootloader works on it (do not do this remotely: the board then needs BOOTSEL or a reinstall).
+
+## Firmware badges and nicknames (added 2026-11-01; passed by tests and a fake display only)
+1. **Badges:** open each pane's port list: every port has a purple **CP** or teal **MP** badge (grey `??` if unknown), and the box shows the chosen port's badge. After connecting,
+   the pane label names the firmware (`MicroPython 1.29.0`, `CircuitPython 10.3.1`). Reflash a Pico to the other firmware with Tools > Install firmware and look again.
+2. **Nicknames:** connect a board, press the bookmark button (or Device > Name this board), type a name. The pane label, console title, Window menu and the port
+   list show it (a board whose USB serial is shared, like `000000000000`, shows it only once connected). Reconnect after restarting the app. Empty removes it.
+3. **Firmware tools:** running boards are listed as `[CP] "name"  ... at /dev/ttyACM?` / `[MP] ...`; after an install the main window's badge is right at once.
