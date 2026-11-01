@@ -63,7 +63,7 @@ Reopen the app from `main` first. The owner checked all five in the real window 
    list show it (a board whose USB serial is shared, like `000000000000`, shows it only once connected). Reconnect after restarting the app. Empty removes it.
 3. **Firmware tools:** running boards are listed as `[CP] "name"  ... at /dev/ttyACM?` / `[MP] ...`; after an install the main window's badge is right at once.
 
-## Custom firmware sources (added 2026-11-01; tests and a fake display only, no real window yet)
+## Custom firmware sources (added 2026-11-01; hand-tested by the owner 2026-11-01, all OK)
 1. **Preferences > Sources**, and **Install firmware > Manage sources...**: the same list. Add > *Pimoroni MicroPython* runs a check (needs the network) and adds it.
 2. Install firmware on a Pico in BOOTSEL: the **Firmware** box now lists *Pimoroni MicroPython*; pick it, then your exact board (for a Pico W: `picow`) and install. After a restart,
    `import picographics` works. (Do this only on a board you do not mind reflashing: install stock MicroPython again afterwards from the same dialog.)
