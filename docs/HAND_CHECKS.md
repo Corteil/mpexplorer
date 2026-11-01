@@ -1,6 +1,6 @@
 # Hand checks for the CircuitPython and libraries work (2026-11-01)
 
-Everything below passed by script or under a fake display; **none of it has been clicked in the real window**. Boards on the bench:
+**Done by the owner on 2026-11-01** (reported complete; not itemised beyond the three problems below, all fixed on `main` at `f804e1a`, CI green). Everything below first passed by script or under a fake display. Boards on the bench:
 Pico 2 with CircuitPython (`CIRCUITPY` drive, serial `559C...8A64`), a Pico 2 with MicroPython, and a Pico W with MicroPython 1.29.0
 (its files were wiped when it was switched to CircuitPython and back). Start the app from `main` (`ac9ca59` or later), after closing any old window.
 Tell Claude what you see; screenshots help.
@@ -39,3 +39,9 @@ Only do this on a board you don't mind wiping (switching firmware empties its fi
 Clock set/read on a CircuitPython board is refused; Open with copies through the cache instead of editing the drive in place; a CircuitPython
 board whose drive is not mounted cannot be connected (serial-only mode is not built); no "outdated library" check; Remove deletes everything a package
 lists, even a file two packages share (`urequests` and `requests`).
+
+## What the hand checks found (2026-11-01)
+1. The emulated console lost the board's output after Ctrl-D: it now shows what the board prints while restarting (banner, `code.py` / `main.py` output).
+2. The emulated console showed CircuitPython's terminal codes (title and colour sequences): they are stripped now (the real terminal view is unchanged).
+3. The firmware tools did not list a running CircuitPython Pico W: it uses Adafruit's USB vendor id (`239a:8120`), not Raspberry Pi's. Running CircuitPython boards are now listed (read without `uctypes`, started into their bootloader with `RunMode.UF2`; no backup for them), and the post-install port wait accepts both ids.
+4. The install-libraries confirmation now lists each library's files (reading of "does not list the packages" was uncertain: a screenshot showed the list itself loading).
