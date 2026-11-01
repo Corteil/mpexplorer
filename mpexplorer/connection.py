@@ -12,6 +12,8 @@ class Connection:
     device: DeviceBackend
     session: ConsoleSession
     badge: object = None    # BadgeScreen while a board with a screen is connected
+    console: object = None  # its console window while one is open
+    label: str = ""         # what to call it: '/dev/ttyACM2  Pico 2 (RP2350)'
 
     @classmethod
     def open_on(cls, device, port, board):
