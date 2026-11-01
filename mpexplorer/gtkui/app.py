@@ -13,6 +13,7 @@ from ..clipboard import Clipboard, copied_dir
 from ..connection import Connection
 from ..errors import BackendError, Cancelled
 from ..jobs import JobRunner
+from .. import circuitpython
 from ..badgescreen import BadgeScreen
 from ..openwith import (SYSTEM_OPEN, EditManager, app_template, handler_for, looks_executable, parse_handler,
                         remember_handler)
@@ -461,13 +462,17 @@ class App(Gtk.Window):
         def work(prog):
             repl, rts = RawREPL.open_board(port, rts=self.settings.get("boards.rts").get(segment(board), False))
             try:
-                dev = DeviceBackend(repl)
+                firmware, version = circuitpython.detect(repl)
+                if firmware == "circuitpython":         # files go through its CIRCUITPY drive, the rest over serial
+                    dev = circuitpython.DriveBackend(circuitpython.find_drive(board.rsplit(":", 1)[-1]), repl)
+                else:
+                    dev = DeviceBackend(repl)
                 try:
                     machine = repl.exec("import os;print(os.uname().machine)").decode().strip()
                 except Exception:
                     machine = ""            # a build without os.uname: the port list keeps its generic name
                 key = chip_key(repl) or board       # the USB id if its firmware cannot give a chip id
-                return dev, device_start(self.settings, dev, key, board), machine, rts, key
+                return dev, device_start(self.settings, dev, key, board), machine, rts, key, firmware, version
             except BaseException:
                 repl.close()
                 raise
@@ -480,17 +485,19 @@ class App(Gtk.Window):
                 error(self, "Connection failed", str(exc))
                 return
             move_folder_to_chip(self.settings, board, res[4])
-            self.connected(res[0], res[1], port, res[4], res[2], rts=res[3], usb=board, pane=pane)
+            self.connected(res[0], res[1], port, res[4], res[2], rts=res[3], usb=board, pane=pane,
+                           firmware=(res[5], res[6]))
         self.runner.submit(work, done, "Connecting", quiet=True)
 
-    def connected(self, dev, start, port, board, machine="", rts=False, usb=None, pane=None):
+    def connected(self, dev, start, port, board, machine="", rts=False, usb=None, pane=None, firmware=("", "")):
         """The connection is up: show the board, and remember the port, its model (and later its folders)."""
         pane = pane or self.right
         conn = self.conns[pane] = Connection.open_on(dev, port, board)
         self.set_active(pane)
         remember_board_name(self.settings, usb or board, machine)    # these are needed before a board can be read,
         remember_board_rts(self.settings, usb or board, rts)         # so they stay under its USB id
-        pane.detail = conn.label = "  ".join(x for x in (port, short_model(machine) if machine else "") if x)
+        kind = "CircuitPython %s" % firmware[1] if firmware[0] == "circuitpython" else ""
+        pane.detail = conn.label = "  ".join(x for x in (port, short_model(machine) if machine else "", kind) if x)
         remember_port(self.settings, port)
         remember_source(self.settings, self._side(pane), port)
         pane.set_location(dev, start)
@@ -499,7 +506,8 @@ class App(Gtk.Window):
         self.set_status("Connected to %s" % port)
         if self.settings.get("general.set_board_clock"):
             self._set_clock(dev, "Connected to %s; " % port)
-        conn.badge = BadgeScreen(dev.repl) if self.settings.get("general.badge_screen") else None
+        screen = self.settings.get("general.badge_screen") and firmware[0] != "circuitpython"
+        conn.badge = BadgeScreen(dev.repl) if screen else None
         if conn.badge:
             self.runner.submit(lambda prog: conn.badge.show(folder=start), label="Badge screen", quiet=True)
 
