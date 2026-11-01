@@ -934,3 +934,93 @@ def test_an_install_teaches_the_app_what_the_board_runs_now(setup, monkeypatch):
     d.install()
     wait_until(lambda: not d.running)
     assert not errors and app.settings.get("boards.firmware") == {"239a:8120:E6614104034E1931": "circuitpython"}
+
+
+# -- custom firmware sources (docs/CUSTOM_SOURCES_PLAN.md, phase 2) --------------------------------------------------
+class FakeMaker(FakeCatalog):
+    """A maker's repo as the dialog sees it."""
+    BOARDS = [Board("pico", "pico", "Pimoroni MicroPython"), Board("picow", "picow", "Pimoroni MicroPython")]
+    BUILDS = [Build("picow-v1.30.0-pimoroni-micropython.uf2", "v1.30.0", "2026-09-30", "", False, "https://x/a"),
+              Build("picow-v1.29.0-3-pimoroni-micropython.uf2", "v1.29.0-3", "2026-09-01", "", False, "https://x/b"),
+              Build("picow-v1.29.0-2-pimoroni-micropython.uf2", "v1.29.0-2", "2026-08-31", "", False, "https://x/c")]
+    source = {"name": "Pimoroni MicroPython", "kind": "github", "repo": "pimoroni/pimoroni-pico"}
+
+
+def with_maker(setup, monkeypatch):
+    make, drives, errors, app, tmp = setup
+    from mpexplorer import sources as S
+    S.add_source(app.settings, "firmware", S.validate_firmware_source(S.FIRMWARE_PRESETS[0]))
+    monkeypatch.setattr(dialog, "make_custom_catalog", lambda src: FakeMaker())
+    return make, drives, errors, app, tmp
+
+
+def test_a_custom_source_is_offered_after_the_built_in_firmwares(setup, monkeypatch):
+    make, *_ = with_maker(setup, monkeypatch)
+    d = make()
+    assert [row[0] for row in d.firmware_box.get_model()] == ["MicroPython", "CircuitPython", "Pimoroni MicroPython"]
+    assert d.firmware == "MicroPython"
+    d.firmware_box.set_active(2)
+    wait_until(lambda: [b.id for b in d.boards] == ["pico", "picow"])
+    assert d.firmware == "MicroPython" and d.source_name == "Pimoroni MicroPython"      # what it puts on the board
+
+
+def test_installing_from_a_custom_source_names_it_and_records_what_went_on(setup, monkeypatch):
+    make, drives, errors, app, tmp = with_maker(setup, monkeypatch)
+    asked = []
+    monkeypatch.setattr(dialog, "ask_yes_no", lambda parent, title, text: asked.append(text) or True)
+    monkeypatch.setattr(dialog, "board_id", lambda path: "2e8a:0005:15edd94f06289842")
+    monkeypatch.setattr(fw, "install_and_verify",
+                        lambda *a, **k: fw.Installed("/dev/ttyACM3", "1.29.0", "Raspberry Pi Pico W with RP2040"))
+    d = make()
+    d.firmware_box.set_active(2)
+    wait_until(lambda: d.boards)
+    d.product_box.set_active(1)
+    wait_until(lambda: d.build() is not None)
+    d.site.image = uf2(tmp / "pimoroni.uf2")
+    d.install()
+    wait_until(lambda: not d.running)
+    assert not errors and "from Pimoroni MicroPython (pimoroni/pimoroni-pico)" in asked[0]
+    record = app.settings.get("boards.installed")["2e8a:0005:15edd94f06289842"]
+    assert record["source"] == "Pimoroni MicroPython" and record["version"] == "v1.30.0" and len(record["sha256"]) == 64
+
+
+def test_versions_newer_than_the_board_are_marked(setup, monkeypatch):
+    make, drives, errors, app, tmp = with_maker(setup, monkeypatch)
+    d = make()
+    d.firmware_box.set_active(2)
+    wait_until(lambda: d.boards)
+    d.product_box.set_active(1)
+    wait_until(lambda: d.builds)
+    d.all_builds.set_active(True)
+    drive = d.drive()
+
+    def labels():
+        return [d.build_box.get_model()[i][0] for i in range(len(d.shown_builds))]
+    assert not any("newer" in t for t in labels())                 # nothing known about the board: no claim
+    d.prior[drive.path] = ("1.29.0", {})                           # it ran 1.29.0, with no record of where from
+    d._fill_builds()
+    assert ["newer" in t for t in labels()] == [True, False, False]       # only v1.30.0 is plainly newer
+    d.prior[drive.path] = ("1.29.0", {"source": "Pimoroni MicroPython", "version": "v1.29.0-2"})
+    d._fill_builds()
+    assert ["newer" in t for t in labels()] == [True, True, False]        # now v1.29.0-3 is known to be newer too
+    d.prior[drive.path] = ("1.29.0", {"source": "Some Other Source", "version": "v1.29.0-2"})
+    d._fill_builds()
+    assert ["newer" in t for t in labels()] == [True, False, False]       # a record from another source is not used
+
+
+def test_the_bootloader_button_remembers_what_the_board_ran(setup, monkeypatch):
+    make, drives, errors, *_ = setup
+    drive = drives[0]
+    drives[0] = RUNNING
+    monkeypatch.setattr(fw, "read_running", lambda port: fw.RunningInfo("Raspberry Pi Pico W with RP2040", "1.29.0", 2))
+    monkeypatch.setattr(dialog, "board_id", lambda path: "2e8a:0005:15edd94f06289842")
+    d = make()
+    wait_until(lambda: d.boot_btn.get_sensitive())
+
+    def fake(port, find=None, normal_repl=False):
+        drives[0] = drive
+        return drive
+    monkeypatch.setattr(fw, "enter_bootloader", fake)
+    d._response(d, Gtk.ResponseType.YES)
+    wait_until(lambda: not d.running)
+    assert d.prior[drive.path][0] == "1.29.0" and not errors

@@ -5,9 +5,11 @@ import time
 
 from .. import boardinfo
 from .. import firmware as fw
+from .. import sources
 from ..backends import human
 from ..errors import Cancelled
 from ..cp_firmware import CircuitPythonCatalog
+from ..custom_firmware import make_catalog as make_custom_catalog
 from ..firmware_catalog import NUKE_FILE, Build, Catalog, default_build, saved_text
 from ..ports import board_id
 from .common import GLib, Gtk, ask_yes_no, error
@@ -36,6 +38,7 @@ class DeviceDialog(Gtk.Dialog):
         self.load_id, self.closed, self.outcome, self.tool_problem = 0, False, "", ""
         self.chip_reading, self.chip_error, self.chip_retry = None, "", 0
         self.running_info, self.info_reading, self.filling, self.prefer = {}, None, False, None
+        self.prior = {}                 # bootloader path -> (the release its board ran, the install recorded for it)
         self.cancel_event = threading.Event()
         self.set_default_size(560, -1)
         box = self.get_content_area()
@@ -276,8 +279,14 @@ class DeviceDialog(Gtk.Dialog):
         drive = self.drive()
         badge = drive.method == "badge"
 
+        info = self.running_info.get(drive.path)
+        usb = board_id(drive.path)
+        record = self.app.settings.get("boards.installed").get(usb, {}) if usb.count(":") == 2 else {}
+        release = info.release if isinstance(info, fw.RunningInfo) else ""
+
         def done(found):
             self.prefer = found.path
+            self.prior[found.path] = (release, record)         # what it ran before: the version marks use it
             return "Now in its bootloader, at %s." % found.path
         extra = {"circuitpython": True} if fw.is_circuitpython(drive) else {}
         self._start(lambda: fw.enter_bootloader(drive.path, find=fw.detect_rom if badge else None, normal_repl=badge,
@@ -389,9 +398,8 @@ class FirmwareDialog(DeviceDialog):
         self.site_rows = Gtk.Grid(column_spacing=10, row_spacing=6, hexpand=True)
         self.firmware_label = Gtk.Label(label="Firmware", xalign=1, no_show_all=True)
         self.firmware_box = Gtk.ComboBoxText(hexpand=True, no_show_all=True)       # Pico boards only: both are offered
-        self.firmware_box.append_text("MicroPython")
-        self.firmware_box.append_text("CircuitPython")
-        self.firmware_box.set_active(0)
+        self.custom, self.custom_catalogs, self._installing = {}, {}, None      # custom sources by name, their catalogs
+        self.fill_firmware_box()
         self.firmware_box.connect("changed", lambda _b: self._firmware_changed())
         self.site_rows.attach(self.firmware_label, 0, 0, 1, 1)
         self.site_rows.attach(self.firmware_box, 1, 0, 1, 1)
@@ -449,13 +457,35 @@ class FirmwareDialog(DeviceDialog):
             self.list_chip = chip
             self._load_boards(chip)
 
+    def fill_firmware_box(self):
+        """MicroPython, CircuitPython, then the custom firmware sources the owner added (Manage sources)."""
+        chosen = self.firmware_box.get_active_text()
+        added = self.app.settings.get("sources.firmware")
+        self.custom = {s["name"]: sources.validate_firmware_source(s) for s in added}
+        self.firmware_box.remove_all()
+        for name in ("MicroPython", "CircuitPython", *self.custom):
+            self.firmware_box.append_text(name)
+        names = [row[0] for row in self.firmware_box.get_model()]
+        self.firmware_box.set_active(names.index(chosen) if chosen in names else 0)
+
     @property
-    def firmware(self):
-        """'MicroPython' or 'CircuitPython': the second only for Pico boards (UF2 bootloader), where it is offered."""
+    def source_name(self):
+        """What the Firmware box says: MicroPython, CircuitPython, or the name of a custom source."""
         return self.firmware_box.get_active_text() if self.firmware_box.get_visible() else "MicroPython"
 
     @property
+    def firmware(self):
+        """'MicroPython' or 'CircuitPython': what the chosen source puts on the board."""
+        src = self.custom.get(self.source_name)
+        return src["firmware"].capitalize().replace("python", "Python") if src else self.source_name
+
+    @property
     def site(self):
+        src = self.custom.get(self.source_name)
+        if src:
+            if src["name"] not in self.custom_catalogs:
+                self.custom_catalogs[src["name"]] = make_custom_catalog(src)
+            return self.custom_catalogs[src["name"]]
         return self.cp_catalog if self.firmware == "CircuitPython" else self.catalog
 
     def _firmware_changed(self):
@@ -518,10 +548,17 @@ class FirmwareDialog(DeviceDialog):
         self.shown_builds = [b for b in self.builds if everything or b is best]
         self.build_box.remove_all()
         for b in self.shown_builds:
-            self.build_box.append_text(b.label + ("  (latest)" if b is best else ""))
+            self.build_box.append_text(b.label + ("  (latest)" if b is best else "") + self._newer_mark(b))
         if self.shown_builds:
             self.build_box.set_active(self.shown_builds.index(best) if best else 0)
         self._check()
+
+    def _newer_mark(self, build):
+        """'  (newer than this board)' when the board's release (and an earlier install from this source) says so."""
+        drive = self.drive()
+        release, record = self.prior.get(drive.path, ("", {})) if drive else ("", {})
+        installed = record.get("version", "") if record.get("source") == self.source_name else ""
+        return "  (newer than this board)" if sources.newer_than(build.version, release, installed) else ""
 
     def build(self):
         i = self.build_box.get_active()
@@ -615,6 +652,9 @@ class FirmwareDialog(DeviceDialog):
             if site:
                 options["expect_badge"] = self.product().id if self.product().id in fw.BADGES else ""
         what = "%s for the %s" % (build.label, self.product().label) if site else os.path.basename(path)
+        if site and self.source_name in self.custom:
+            what += "\nfrom %s (%s)" % (self.source_name, self.site.source.get("repo") or self.site.source.get("url"))
+        self._installing = (self.source_name, build.version) if site else None
         also = "\n\nmpexplorer will disconnect from the current board first." if self.app.device else ""
         if drive.esp_chip:
             also = "\n\nThis chip reads as %s. The app cannot tell a badge from another board with the same chip, " \
@@ -650,6 +690,7 @@ class FirmwareDialog(DeviceDialog):
 
     def _installed(self, res):
         self.result, sha = res
+        self._record_install(sha)
         if not self.result.port:
             return ("Written and checked. The app cannot follow this board as it starts: reset it yourself and Scan "
                     "for its port.\nSHA-256 %s" % sha)
@@ -657,6 +698,17 @@ class FirmwareDialog(DeviceDialog):
         self.connect_btn.show()
         return "Installed: %s %s on %s, now at %s.\nSHA-256 %s" % (
             self.firmware, self.result.release, self.result.machine, self.result.port, sha)
+
+    def _record_install(self, sha):
+        """Remember what a custom source installed (source, version, SHA-256) under the board's USB id, so the next
+        version check compares exactly (a Pimoroni v1.29.0-2 and the 1.29.0 the board reports are not the same)."""
+        if not (getattr(self, "_installing", None) and self.result.port and self._installing[0] in self.custom):
+            return
+        usb = board_id(self.result.port)
+        if usb.count(":") == 2 and boardinfo.unique_usb_serial(usb.rsplit(":", 1)[-1]):
+            table = self.app.settings.get("boards.installed")
+            table[usb] = {"source": self._installing[0], "version": self._installing[1], "sha256": sha}
+            self.app.settings.set("boards.installed", table)
 
     def _learn_install(self):
         """The board now runs what was installed: remember it under its USB id (when that names one board), so its badge

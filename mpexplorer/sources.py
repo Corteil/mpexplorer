@@ -20,9 +20,10 @@ DEFAULT_PATTERN = (r"^(?P<board>.+?)-(?P<version>v?\d[\w.]*(?:-(?:\d+|(?:rc|prev
 MAX_NAME = 40
 
 FIRMWARE_PRESETS = (
-    {"name": "Pimoroni MicroPython", "kind": "github", "repo": "pimoroni/pimoroni-pico", "pattern": DEFAULT_PATTERN},
+    {"name": "Pimoroni MicroPython", "kind": "github", "repo": "pimoroni/pimoroni-pico", "pattern": DEFAULT_PATTERN,
+     "firmware": "micropython"},
     {"name": "Pimoroni MicroPython (RP2350)", "kind": "github", "repo": "pimoroni/pimoroni-pico-rp2350",
-     "pattern": DEFAULT_PATTERN},
+     "pattern": DEFAULT_PATTERN, "firmware": "micropython"},
 )
 LIBRARY_PRESETS = (
     {"name": "Pimoroni phew", "kind": "mip", "repo": "pimoroni/phew", "for": "micropython"},
@@ -63,7 +64,9 @@ def validate_firmware_source(src):
     name, kind = (src.get("name") or "").strip(), src.get("kind")
     if not name or len(name) > MAX_NAME:
         raise SourceError("Give the source a name of up to %d characters." % MAX_NAME)
-    out = {"name": name, "kind": kind}
+    out = {"name": name, "kind": kind, "firmware": src.get("firmware") or "micropython"}
+    if out["firmware"] not in ("micropython", "circuitpython"):
+        raise SourceError("The firmware is micropython or circuitpython.")
     if kind == "github":
         repo = (src.get("repo") or "").strip().removeprefix("https://github.com/").strip("/")
         if not valid_repo(repo):
