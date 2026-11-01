@@ -11,6 +11,9 @@ from .common import GLib, Gtk, ask_yes_no, error, scrolled
 
 
 NAMES = {"micropython": "MicroPython", "circuitpython": "CircuitPython"}
+SHOW = (("all", "All libraries"), ("installed", "Installed"), ("new", "Not installed"),
+        ("updates", "Updates available"))
+NEEDS_UPDATE = ("update available", "incomplete")
 
 
 class LibrariesDialog(Gtk.Dialog):
@@ -46,6 +49,20 @@ class LibrariesDialog(Gtk.Dialog):
         self.search = Gtk.SearchEntry(placeholder_text="Search")
         self.search.connect("search-changed", lambda _e: self.filter.refilter())
         box.pack_start(self.search, False, False, 0)
+        options = Gtk.Box(spacing=8)
+        options.pack_start(Gtk.Label(label="Show", xalign=0), False, False, 0)
+        self.show_box = Gtk.ComboBoxText()
+        for key, text in SHOW:
+            self.show_box.append(key, text)
+        self.show_box.set_active_id("all")
+        self.show_box.connect("changed", lambda _c: self.filter.refilter())
+        options.pack_start(self.show_box, False, False, 0)
+        self.select_installed = Gtk.Switch(valign=Gtk.Align.CENTER, sensitive=False)
+        self.select_installed.set_tooltip_text("Tick every installed library that is shown, for an update")
+        self.select_installed.connect("notify::active", lambda *_a: self._select_installed())
+        options.pack_end(self.select_installed, False, False, 0)
+        options.pack_end(Gtk.Label(label="Select installed libraries", xalign=1), False, False, 0)
+        box.pack_start(options, False, False, 0)
         self.store = Gtk.ListStore(bool, str, str, str, str)        # ticked, name, version, installed, description
         self.filter = self.store.filter_new()
         self.filter.set_visible_func(self._visible)
@@ -109,6 +126,7 @@ class LibrariesDialog(Gtk.Dialog):
         self.chose = True
         self.source = key
         self.store.clear()
+        self.select_installed.set_active(False)
         self._sensitive()
         self._start_load()
 
@@ -180,7 +198,19 @@ class LibrariesDialog(Gtk.Dialog):
     # -- picking ---------------------------------------------------------------------------------------------
     def _visible(self, model, it, _data):
         text = self.search.get_text().strip().lower()
-        return not text or text in model[it][1].lower() or text in model[it][4].lower()
+        if text and text not in model[it][1].lower() and text not in model[it][4].lower():
+            return False
+        show, state = self.show_box.get_active_id(), model[it][3]
+        return (show in (None, "all") or (show == "installed" and bool(state)) or (show == "new" and not state)
+                or (show == "updates" and state in NEEDS_UPDATE))
+
+    def _select_installed(self):
+        """The switch ticks (or unticks) every installed library that is shown with the current search and filter."""
+        on = self.select_installed.get_active()
+        for row in self.store:
+            if row[3] and self._visible(self.store, row.iter, None):
+                row[0] = on
+        self._sensitive()
 
     def _toggled(self, _cell, path):
         row = self.store[self.filter.convert_path_to_child_path(Gtk.TreePath(path))]
@@ -195,6 +225,7 @@ class LibrariesDialog(Gtk.Dialog):
         self.install_btn.set_sensitive(ready and (not self.mismatch() or self.force.get_active()))
         self.remove_btn.set_sensitive(ready)
         self.check_btn.set_sensitive(not self.busy and any(r[3] for r in self.store))
+        self.select_installed.set_sensitive(not self.busy and any(r[3] for r in self.store))
 
     # -- installing ------------------------------------------------------------------------------------------
     def _response(self, _d, res):
@@ -219,6 +250,7 @@ class LibrariesDialog(Gtk.Dialog):
         self.busy = on
         self.view.set_sensitive(not on)
         self.search.set_sensitive(not on)
+        self.show_box.set_sensitive(not on)
         self.bar.set_visible(on)
         self.close_btn.set_label("Cancel" if on else "Close")
         self._sensitive()

@@ -255,3 +255,27 @@ def test_check_for_updates_marks_the_libraries_that_differ(tmp_path, monkeypatch
     finally:
         dlg.destroy()
         app.destroy()
+
+
+def test_show_filter_and_select_installed_switch(tmp_path, monkeypatch):
+    app, dlg, _ = open_dialog(tmp_path, monkeypatch)
+    try:
+        assert not dlg.select_installed.get_sensitive()                    # nothing installed: nothing to select
+        dlg.store[0][3], dlg.store[1][3] = "update available", ""          # alpha is installed and old, zed is not
+        dlg._sensitive()
+        names = lambda: [r[1] for r in dlg.filter]                         # noqa: E731
+        assert names() == ["alpha", "zed"]
+        for key, shown in (("installed", ["alpha"]), ("new", ["zed"]), ("updates", ["alpha"]),
+                           ("all", ["alpha", "zed"])):
+            dlg.show_box.set_active_id(key)
+            assert names() == shown, key
+        dlg.select_installed.set_active(True)
+        assert dlg.ticked() == ["alpha"] and dlg.install_btn.get_sensitive()
+        dlg.select_installed.set_active(False)
+        assert dlg.ticked() == []
+        dlg.show_box.set_active_id("new")                                  # only the installed ones that are shown
+        dlg.select_installed.set_active(True)
+        assert dlg.ticked() == []
+    finally:
+        dlg.destroy()
+        app.destroy()
