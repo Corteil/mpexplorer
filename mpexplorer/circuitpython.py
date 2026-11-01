@@ -8,9 +8,11 @@ terminal) through the serial port.
 import os
 import re
 import shutil
+import time
 
 from .backends import LocalBackend
 from .errors import BackendError
+from .transport import DeviceError
 
 
 class DriveNotFound(BackendError):
@@ -142,10 +144,24 @@ class DriveBackend(LocalBackend):
         return self.repl.exec("exec(open(%r).read(),{})" % self.board_path(path), timeout).decode(errors="replace")
 
     def clock(self):
-        raise BackendError("Reading the clock is not supported for CircuitPython boards yet.")
+        """The board's clock as (year, month, day, hour, minute, second). CircuitPython has no time.gmtime, so this
+        reads localtime(), which on a board is the RTC as it was set (we set it to UTC, as for MicroPython boards)."""
+        out = self.repl.exec("import time\nt=time.localtime()\nprint(t[0],t[1],t[2],t[3],t[4],t[5])", 5).decode()
+        return tuple(int(n) for n in out.split())
 
     def set_clock(self, now=None):
-        raise BackendError("Setting the clock is not supported for CircuitPython boards yet.")
+        """Set the board's RTC to the host's UTC time (or the timestamp `now`); returns the time read back.
+        Needs the board's `rtc` module: some builds (a Pico W was seen) do not have one."""
+        t = time.gmtime(now)
+        code = ("import rtc,time\nrtc.RTC().datetime=time.struct_time((%d,%d,%d,%d,%d,%d,%d,-1,-1))"
+                % (t.tm_year, t.tm_mon, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec, t.tm_wday))
+        try:
+            self.repl.exec(code, 5)
+        except DeviceError as e:
+            if "rtc" in str(e):
+                raise BackendError("This CircuitPython build has no rtc module, so its clock cannot be set.")
+            raise
+        return self.clock()
 
     def soft_reset(self):
         self.repl.soft_reset()

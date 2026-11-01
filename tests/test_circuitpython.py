@@ -84,3 +84,20 @@ def test_drive_backend_writes_and_copies(tmp_path):
     copied = []
     be.copy_file(target, os.path.join(be.root, "b.txt"), copied.append)
     assert open(os.path.join(be.root, "b.txt"), "rb").read() == b"abc" and copied == [3]
+
+
+def test_clock_is_read_and_set_through_the_rtc_module(tmp_path):
+    repl = FakeRepl(b"2026 11 1 12 30 45\n")
+    be = DriveBackend(drive(tmp_path), repl)
+    assert be.clock() == (2026, 11, 1, 12, 30, 45)
+    assert be.set_clock(1793536245) == (2026, 11, 1, 12, 30, 45)                # 2026-11-01 12:30:45 UTC
+    sent = [c for c in repl.sent if "rtc" in c][0]
+    assert "rtc.RTC().datetime=time.struct_time((2026,11,1,12,30,45,6,-1,-1))" in sent     # a Sunday: tm_wday 6
+
+
+def test_a_build_without_rtc_says_so(tmp_path):
+    from mpexplorer.errors import BackendError
+    from mpexplorer.transport import DeviceError
+    repl = FakeRepl(DeviceError("Traceback (most recent call last):\nImportError: no module named 'rtc'\n"))
+    with pytest.raises(BackendError, match="no rtc module"):
+        DriveBackend(drive(tmp_path), repl).set_clock()
