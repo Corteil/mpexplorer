@@ -199,6 +199,46 @@ def board_mpy(backend):
         return None
 
 
+def board_firmware(backend):
+    """'micropython', 'circuitpython' or whatever `sys.implementation.name` says; None when the board cannot say."""
+    try:
+        return backend._run("import sys\nprint(sys.implementation.name)").strip().decode().lower() or None
+    except Exception:
+        return None
+
+
+def remove(catalog, backend, names, mpy=None, dest=DEST, cancelled=None):
+    """Delete the files of the named libraries (not their dependencies) from `dest`, in either the .mpy or the source
+    form, then any folder they leave empty. Returns the number of files removed."""
+    paths = set()
+    for n in names:
+        for form in {mpy, None}:
+            try:
+                plan = catalog.resolve([n], form)
+            except LibraryError:
+                continue
+            paths.update(p for _n, _v, _k, hashes in plan if _n == n for p, _h in hashes)
+    removed, folders = 0, set()
+    for path in sorted(paths):
+        if path.startswith("/") or ".." in path.split("/"):
+            raise LibraryError("Unsafe file path in a package: %s" % path)
+        if cancelled and cancelled():
+            raise LibraryError("Cancelled.")
+        target = backend.join(dest, path)
+        st = backend.stat(target)
+        if st is not None and not st.is_dir:
+            backend.remove(target)
+            removed += 1
+        parent = backend.parent(target)
+        while parent != dest and parent.startswith(dest):
+            folders.add(parent)
+            parent = backend.parent(parent)
+    for folder in sorted(folders, key=len, reverse=True):
+        if backend.stat(folder) is not None and not backend.listdir(folder):
+            backend.rmdir(folder)
+    return removed
+
+
 def summary(plan):
     """Lines for the confirmation: what will be written."""
     files = sum(len(p[3]) for p in plan)

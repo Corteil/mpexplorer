@@ -101,3 +101,38 @@ def test_saying_no_writes_nothing(tmp_path, monkeypatch):
     finally:
         dlg.destroy()
         app.destroy()
+
+
+def test_circuitpython_needs_install_anyway_but_micropython_does_not(tmp_path, monkeypatch):
+    app, dlg, asked = open_dialog(tmp_path, monkeypatch)
+    try:
+        dlg.store[1][0] = True
+        dlg._sensitive()
+        assert dlg.install_btn.get_sensitive() and dlg.remove_btn.get_sensitive() and not dlg.force.get_visible()
+        dlg.firmware = "circuitpython"
+        dlg._sensitive()
+        assert not dlg.install_btn.get_sensitive() and dlg.remove_btn.get_sensitive()
+        dlg.install(["zed"])                                    # refused without the override
+        pump(100)
+        assert not asked and not dlg.busy
+        dlg.force.set_active(True)
+        assert dlg.install_btn.get_sensitive()
+        dlg.install(["zed"])
+        wait_until(lambda: "Done" in dlg.note.get_text())
+    finally:
+        dlg.destroy()
+        app.destroy()
+
+
+def test_remove_asks_then_deletes(tmp_path, monkeypatch):
+    app, dlg, asked = open_dialog(tmp_path, monkeypatch)
+    try:
+        dlg.install(["zed"])
+        wait_until(lambda: "Done" in dlg.note.get_text())
+        dlg.remove(["alpha"])
+        wait_until(lambda: "Removed 2" in dlg.note.get_text())
+        assert "alpha" in asked[-1] and not (tmp_path / "board" / "lib" / "pkg").exists()
+        assert (tmp_path / "board" / "lib" / "a.py").exists()
+    finally:
+        dlg.destroy()
+        app.destroy()
