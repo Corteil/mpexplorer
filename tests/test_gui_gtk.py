@@ -1589,7 +1589,9 @@ PORTS = ["/dev/ttyACM1  Pico 2", "/dev/ttyACM3  Pico W"]
 
 @pytest.fixture
 def two_ports(monkeypatch):
-    monkeypatch.setattr("mpexplorer.gtkui.app.list_ports", lambda names=None: list(PORTS))
+    from mpexplorer.ports import Entry
+    monkeypatch.setattr("mpexplorer.gtkui.app.list_boards",
+                        lambda settings: [Entry(t.split("  ")[0], t, None, "") for t in PORTS])
 
 
 def test_each_pane_comes_back_with_what_it_had_chosen(make_app, two_ports, tmp_path):

@@ -1,10 +1,32 @@
 """One directory listing bound to a backend (host or device)."""
+from .. import boardinfo
 from ..backends import human
 from .common import Gdk, GLib, Gtk, error, fmt_time, icon_button, scrolled
 
 HOST = "Host"
 DRAG_ICON_X, DRAG_ICON_Y = 34, 22   # this point of the drag icon sits under the pointer: larger moves it left, or up
 DND_TARGET = [Gtk.TargetEntry.new("application/x-mpexplorer-items", Gtk.TargetFlags.SAME_APP, 0)]
+
+
+_badge_css_installed = []
+
+
+def install_badge_css():
+    """The firmware badges (CP / MP): white bold text on a filled rounded block, a fill per firmware (once)."""
+    if _badge_css_installed or Gdk.Screen.get_default() is None:
+        return
+    css = ".fw-badge { color: #ffffff; font-weight: bold; border-radius: 3px; padding: 0 5px; margin: 1px 0; }\n"
+    css += "".join(".fw-%s { background-color: %s; }\n" % (name, badge.fill) for name, badge in (
+        ("mp", boardinfo.BADGES[boardinfo.MICROPYTHON]), ("cp", boardinfo.BADGES[boardinfo.CIRCUITPYTHON]),
+        ("unknown", boardinfo.BADGES[None])))
+    provider = Gtk.CssProvider()
+    provider.load_from_data(css.encode())
+    Gtk.StyleContext.add_provider_for_screen(Gdk.Screen.get_default(), provider,
+                                             Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+    _badge_css_installed.append(True)
+
+
+KIND_CLASS = {boardinfo.MICROPYTHON: "fw-mp", boardinfo.CIRCUITPYTHON: "fw-cp", None: "fw-unknown"}
 
 
 class Pane(Gtk.Frame):
@@ -20,15 +42,26 @@ class Pane(Gtk.Frame):
         self._token = 0
         self._sort = ("name", False)
         self.paused = False             # True while a terminal owns the device
+        self.kinds = {}                 # source text -> the firmware its board runs (from the port scan)
+        self.live_kind = None           # what the connected board really runs, once connected
+        install_badge_css()
 
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2, margin=2)
         self.add(box)
         source = Gtk.Box(spacing=4)
         self.filling = False
+        self.badge = Gtk.Label(no_show_all=True, valign=Gtk.Align.CENTER)
+        self.badge.get_style_context().add_class("fw-badge")
+        source.pack_start(self.badge, False, False, 0)
         self.source_box = Gtk.ComboBoxText.new_with_entry()
+        self.badge_cell = Gtk.CellRendererText(weight=700, xpad=5, ypad=1, foreground="#ffffff")
+        self.source_box.pack_start(self.badge_cell, False)
+        self.source_box.reorder(self.badge_cell, 0)                    # in the drop-down rows: the badge, then the text
+        self.source_box.set_cell_data_func(self.badge_cell, self._badge_data)
         self.source_box.set_size_request(120, -1)
         self.source_box.get_child().set_width_chars(10)
         self.source_box.connect("changed", lambda _b: self._source_changed())
+        self.source_box.connect("changed", lambda _b: self._update_badge())
         source.pack_start(self.source_box, True, True, 0)
         self.connect_btn = icon_button("network-offline", "Connect to the board",
                                        lambda: app.toggle_connection(self), "Connect")
@@ -92,9 +125,46 @@ class Pane(Gtk.Frame):
     def source(self):
         return self.source_box.get_child().get_text().strip()
 
-    def fill_sources(self, ports, choice=None):
-        """Host, then the ports. What is chosen stays, unless choice says otherwise."""
+    # -- the firmware badge ---------------------------------------------------
+    def _badge_data(self, _layout, cell, model, it, _data=None):
+        """Drop-down rows: a CP / MP badge before each port's text, nothing before Host."""
+        text = model[it][0]
+        if text == HOST:
+            cell.set_property("text", "")
+            cell.set_property("background-set", False)
+            return
+        badge = boardinfo.BADGES[self.kinds.get(text)]
+        cell.set_property("text", badge.text)
+        cell.set_property("background", badge.fill)
+
+    def badge_kind(self):
+        """(shown, kind): the badge beside the box. What the connected board runs beats the scan's guess."""
+        text = self.source()
+        if not text or text == HOST:
+            return False, None
+        if self.live_kind and self.backend is not None and self.backend.key == "device":
+            return True, self.live_kind
+        return True, self.kinds.get(text)
+
+    def _update_badge(self):
+        shown, kind = self.badge_kind()
+        ctx = self.badge.get_style_context()
+        for name in KIND_CLASS.values():
+            ctx.remove_class(name)
+        ctx.add_class(KIND_CLASS[kind])
+        self.badge.set_text(boardinfo.BADGES[kind].text)
+        self.badge.set_visible(shown)
+
+    def set_kind(self, kind):
+        """Connect and disconnect tell the pane what the board really runs (None: no longer connected)."""
+        self.live_kind = kind
+        self._update_badge()
+
+    def fill_sources(self, ports, choice=None, kinds=None):
+        """Host, then the ports. What is chosen stays, unless choice says otherwise. kinds: port text -> firmware."""
         text = self.source() if choice is None else choice
+        if kinds is not None:
+            self.kinds = dict(kinds)
         self.filling = True
         self.source_box.remove_all()
         self.source_box.append_text(HOST)
@@ -102,6 +172,7 @@ class Pane(Gtk.Frame):
             self.source_box.append_text(port)
         self.source_box.get_child().set_text(text)
         self.filling = False
+        self._update_badge()
 
     def _source_changed(self):
         if not self.filling:
@@ -121,6 +192,8 @@ class Pane(Gtk.Frame):
                 self.refresh()
 
     def clear(self):
+        self.live_kind = None
+        self._update_badge()
         self.paused = False
         self.backend = None
         self._entries = []

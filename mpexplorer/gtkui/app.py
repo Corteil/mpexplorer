@@ -18,7 +18,8 @@ from ..badgescreen import BadgeScreen
 from ..openwith import (SYSTEM_OPEN, EditManager, app_template, handler_for, looks_executable, parse_handler,
                         remember_handler)
 from ..ops import ConflictPolicy, copy_tree, delete_items, is_within, move_item, total_size, unique_name
-from ..ports import board_id, device_of, list_ports, short_model
+from .. import boardinfo
+from ..ports import board_id, device_of, list_boards, short_model
 from ..remember import (chip_key, device_start, host_start, move_folder_to_chip, port_choice, remember_board_name,
                         remember_board_rts, remember_folder, remember_port, remember_source, source_choice)
 from ..settings import Settings, segment
@@ -96,10 +97,11 @@ class App(Gtk.Window):
         self.left.set_location(self.local, host_start(self.settings, self.local.root))
         self.right.clear()
         self.scan_ports()
-        self.left.fill_sources(self._ports, source_choice(self.settings, "left", [HOST] + self._ports) or HOST)
+        left = source_choice(self.settings, "left", [HOST] + self._ports) or HOST
+        self.left.fill_sources(self._ports, left, self._kinds)
         right = source_choice(self.settings, "right", [HOST] + self._ports)
         if right:
-            self.right.fill_sources(self._ports, right)
+            self.right.fill_sources(self._ports, right, self._kinds)
         if right == HOST:
             self._show_host(self.right)
         self.connect("delete-event", lambda *_: self._quit() or False)
@@ -412,11 +414,13 @@ class App(Gtk.Window):
 
     # -- connection --------------------------------------------------------
     def scan_ports(self):
-        self._ports = list_ports(self.settings.get("boards.names"))
+        entries = list_boards(self.settings)
+        self._ports = [e.text for e in entries]
+        self._kinds = {e.text: e.kind for e in entries}            # what each port is likely running: the badges
         choice = port_choice(self.settings, self._ports)
         first = self._ports[choice] if choice is not None and not self.right.source() else None
-        self.right.fill_sources(self._ports, first)
-        self.left.fill_sources(self._ports)
+        self.right.fill_sources(self._ports, first, self._kinds)
+        self.left.fill_sources(self._ports, None, self._kinds)
 
     def source_changed(self, pane):
         """Choosing Host takes effect at once. A port only takes effect with the pane's Connect button."""
@@ -496,11 +500,19 @@ class App(Gtk.Window):
         self.set_active(pane)
         remember_board_name(self.settings, usb or board, machine)    # these are needed before a board can be read,
         remember_board_rts(self.settings, usb or board, rts)         # so they stay under its USB id
-        kind = "CircuitPython %s" % firmware[1] if firmware[0] == "circuitpython" else ""
+        fw_kind = firmware[0] if firmware[0] in boardinfo.FIRMWARE_NAMES else None
+        if fw_kind:                  # learned: the badge no longer depends on the USB guess or the port it is on
+            serial = (usb or "").rsplit(":", 1)[-1]
+            if boardinfo.unique_usb_serial(serial):
+                boardinfo.remember_firmware(self.settings, usb, fw_kind)
+            boardinfo.remember_firmware(self.settings, board, fw_kind)
+        boardinfo.remember_chip(self.settings, usb, board)
+        kind = "%s %s" % (boardinfo.FIRMWARE_NAMES[fw_kind], firmware[1]) if fw_kind else ""
         pane.detail = conn.label = "  ".join(x for x in (port, short_model(machine) if machine else "", kind) if x)
         remember_port(self.settings, port)
         remember_source(self.settings, self._side(pane), port)
         pane.set_location(dev, start)
+        pane.set_kind(fw_kind)
         self._connect_state("disconnect", pane)
         pane.connect_btn.set_sensitive(True)
         self.set_status("Connected to %s" % port)
@@ -598,7 +610,7 @@ class App(Gtk.Window):
             pane.clear()
             if pane is self.left:
                 self._show_host(pane)       # nothing connected here: the left pane goes back to the host
-                pane.fill_sources(self._ports, HOST)
+                pane.fill_sources(self._ports, HOST, self._kinds)
                 remember_source(self.settings, "left", HOST)
             reset = self.settings.get("general.reset_on_disconnect")
             if conn.badge and not reset:
