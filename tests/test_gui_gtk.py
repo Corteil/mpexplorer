@@ -28,6 +28,10 @@ import fakedisplay
 from fakedevice import FakeSerial
 from mpexplorer.backends import DeviceBackend
 from mpexplorer.settings import Settings, segment
+
+
+from mpexplorer.errors import Cancelled as common_cancelled
+from mpexplorer.settings import Settings
 from mpexplorer.transport import RawREPL
 
 Gtk = common.Gtk
@@ -1172,7 +1176,7 @@ def test_paste_from_a_board_no_longer_connected_explains_and_copies_nothing(make
     monkeypatch.setattr("mpexplorer.gtkui.app.info", lambda parent, title, text: said.append(text))
     monkeypatch.setattr(app, "_start_copy", lambda *a: started.append(a))
     app.paste()
-    assert not started and "no longer connected" in said[0] and "Host pane" in said[0]
+    assert not started and "no longer connected" in said[0] and "copy them again" in said[0]
     assert not app.clipboard.items
 
 
@@ -1186,3 +1190,131 @@ def test_paste_from_the_connected_board_still_works(make_app, tmp_path, monkeypa
     monkeypatch.setattr(app, "_start_copy", lambda *a: started.append(a))
     app.paste()
     assert len(started) == 1
+
+
+def board_with(tmp_path, name="b1"):
+    folder = tmp_path / name
+    folder.mkdir()
+    return DeviceBackend(RawREPL(FakeSerial())), folder
+
+
+def until(test, ms=5000):
+    end = time.time() + ms / 1000
+    while not test() and time.time() < end:
+        pump(20)
+    assert test()
+
+
+@pytest.fixture
+def private_cache(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+
+
+def test_copy_on_one_board_paste_on_another(make_app, tmp_path, private_cache):
+    app = make_app()
+    first, a = board_with(tmp_path, "a")
+    (a / "main.py").write_text("hello")
+    (a / "lib").mkdir()
+    (a / "lib" / "x.py").write_text("deep")
+    app.connected(first, str(a), "/dev/ttyACM1", "2e8a:0005:AAA")
+    pump()
+    app.clipboard.set("copy", [(first, str(a / "main.py")), (first, str(a / "lib"))])
+    closed = []
+    real_close = first.close
+    first.close = lambda reset=False: closed.append(True) or real_close(reset)
+    went_on = []
+    app.disconnect(after=lambda: went_on.append(True))
+    until(lambda: went_on)
+    assert closed and app.clipboard.folder and all(be is app.local for be, _p in app.clipboard.items)
+    second, b = board_with(tmp_path, "b")
+    app.connected(second, str(b), "/dev/ttyACM3", "2e8a:0005:BBB")
+    pump()
+    app.active = app.right
+    app.paste()
+    until(lambda: (b / "main.py").exists() and (b / "lib" / "x.py").exists())
+    assert (b / "main.py").read_text() == "hello" and (b / "lib" / "x.py").read_text() == "deep"
+    assert app.clipboard.items                      # can be pasted again
+
+
+def test_a_cut_becomes_a_copy_once_the_board_has_gone(make_app, tmp_path, private_cache):
+    app = make_app()
+    first, a = board_with(tmp_path, "a")
+    (a / "main.py").write_text("hello")
+    app.connected(first, str(a), "/dev/ttyACM1", "2e8a:0005:AAA")
+    pump()
+    app.clipboard.set("cut", [(first, str(a / "main.py"))])
+    went_on = []
+    app.disconnect(after=lambda: went_on.append(True))
+    until(lambda: went_on)
+    assert app.clipboard.mode == "copy" and (a / "main.py").exists()
+
+
+def test_cancel_keeps_nothing_still_closes_the_board_and_carries_on(make_app, tmp_path, private_cache, monkeypatch):
+    app = make_app()
+    first, a = board_with(tmp_path, "a")
+    (a / "main.py").write_text("hello")
+    app.connected(first, str(a), "/dev/ttyACM1", "2e8a:0005:AAA")
+    pump()
+    app.clipboard.set("copy", [(first, str(a / "main.py"))])
+    closed, went_on = [], []
+    real_close = first.close
+    first.close = lambda reset=False: closed.append(True) or real_close(reset)
+
+    def cancelled(*a, **k):
+        raise common_cancelled()
+    monkeypatch.setattr(app.clipboard, "keep_copies", cancelled)
+    app.disconnect(after=lambda: went_on.append(True))
+    until(lambda: went_on)
+    assert closed and not app.clipboard.items
+
+
+def test_a_failure_to_keep_says_so_closes_and_carries_on(make_app, tmp_path, private_cache, monkeypatch):
+    app = make_app()
+    first, a = board_with(tmp_path, "a")
+    app.connected(first, str(a), "/dev/ttyACM1", "2e8a:0005:AAA")
+    pump()
+    app.clipboard.set("copy", [(first, str(a / "gone.py"))])
+    said, went_on = [], []
+    monkeypatch.setattr("mpexplorer.gtkui.app.error", lambda parent, title, text: said.append(title))
+    app.disconnect(after=lambda: went_on.append(True))
+    until(lambda: went_on)
+    assert said == ["Could not keep the copied files"] and not app.clipboard.items
+
+
+def test_nothing_copied_from_the_board_disconnects_at_once(make_app, tmp_path, private_cache):
+    app = make_app()
+    first, a = board_with(tmp_path, "a")
+    app.connected(first, str(a), "/dev/ttyACM1", "2e8a:0005:AAA")
+    pump()
+    app.clipboard.set("copy", [(app.local, str(tmp_path))])
+    went_on = []
+    app.disconnect(after=lambda: went_on.append(True))
+    assert went_on and app.clipboard.folder is None
+
+
+def test_disconnecting_for_a_firmware_job_does_not_stop_to_download(make_app, tmp_path, private_cache):
+    app = make_app()
+    first, a = board_with(tmp_path, "a")
+    (a / "main.py").write_text("hello")
+    app.connected(first, str(a), "/dev/ttyACM1", "2e8a:0005:AAA")
+    pump()
+    app.clipboard.set("copy", [(first, str(a / "main.py"))])
+    app.disconnect(keep_copied=False)
+    pump()
+    assert app.clipboard.folder is None
+
+
+def test_copying_something_new_removes_the_kept_copies(make_app, tmp_path, private_cache):
+    app = make_app()
+    first, a = board_with(tmp_path, "a")
+    (a / "main.py").write_text("hello")
+    app.connected(first, str(a), "/dev/ttyACM1", "2e8a:0005:AAA")
+    pump()
+    app.clipboard.set("copy", [(first, str(a / "main.py"))])
+    went_on = []
+    app.disconnect(after=lambda: went_on.append(True))
+    until(lambda: went_on)
+    folder = app.clipboard.folder
+    assert os.path.isdir(folder)
+    app.clipboard.set("copy", [(app.local, str(tmp_path))])
+    assert not os.path.exists(folder)

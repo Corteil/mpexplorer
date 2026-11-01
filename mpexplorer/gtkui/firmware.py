@@ -269,7 +269,7 @@ class DeviceDialog(Gtk.Dialog):
     # -- running a job -----------------------------------------------------
     def _start(self, work, done):
         """Run a slow job with the window locked; done(result) gives what to say when it has worked."""
-        self.app.disconnect()
+        self.app.disconnect(keep_copied=False)     # the job needs the port now
         self.running, self.outcome = True, ""
         self.cancel_event.clear()
         self.cancel_btn.set_sensitive(True)
