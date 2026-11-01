@@ -2,13 +2,14 @@
 import os
 import posixpath
 import queue
+import shutil
 import threading
 import time
 import weakref
 
 from .. import __version__
 from ..backends import CHUNK, DeviceBackend, Entry, LocalBackend, human
-from ..clipboard import Clipboard
+from ..clipboard import Clipboard, copied_dir
 from ..console import ConsoleSession
 from ..errors import BackendError, Cancelled
 from ..jobs import JobRunner
@@ -421,7 +422,9 @@ class App(Gtk.Window):
         if not port:
             info(self, "No port", "Pick a serial port first (Scan).")
             return
-        self.disconnect()
+        self.disconnect(after=lambda: self._connect_to(port))
+
+    def _connect_to(self, port):
         self.set_status("Connecting to %s ..." % port)
         self._connect_state("connecting")
         self.connect_btn.set_sensitive(False)
@@ -494,7 +497,11 @@ class App(Gtk.Window):
         else:
             badge.show("Cancelled" if isinstance(exc, Cancelled) else "Failed" if exc else "Done")
 
-    def disconnect(self):
+    def disconnect(self, after=None, keep_copied=True):
+        """after runs once the board is closed or queued to close. keep_copied: files copied from this board are
+        downloaded first, so they can be pasted on the next one."""
+        if not self.device and after:
+            after()
         if self.device:
             dev, self.device, board = self.device, None, self.board
             self.board = None
@@ -507,10 +514,42 @@ class App(Gtk.Window):
             if self.badge and not reset:
                 self._badge_draw(status="press reset button", kind="gone")
             self.badge = None
-            self.runner.submit(lambda prog: dev.close(reset), label="Disconnecting", quiet=True)
             self._connect_state("connect")
             self.connect_btn.set_sensitive(True)
             self.set_status("Disconnected")
+            if keep_copied and self.clipboard.holds(dev):
+                self._keep_copied(dev, reset, after)
+                return
+            self.runner.submit(lambda prog: dev.close(reset), label="Disconnecting", quiet=True)
+            if after:
+                after()
+
+    def _keep_copied(self, dev, reset, after):
+        """One job, so that Cancel cannot lose the close: it empties the queue. What follows starts when it ends."""
+        items = self.clipboard.items
+
+        def work(prog):
+            try:
+                policy = ConflictPolicy(self.ask_conflict)
+                return self.clipboard.keep_copies(dev, self.local, copied_dir(), prog, policy)
+            finally:
+                dev.close(reset)
+
+        def done(res, exc):
+            if isinstance(exc, Cancelled) or exc:
+                if self.clipboard.items is items:
+                    self.clipboard.clear()
+                self.set_status("Copied files not kept")
+                if not isinstance(exc, Cancelled):
+                    error(self, "Could not keep the copied files", str(exc))
+            elif self.clipboard.items is items:
+                self.clipboard.use_copies(*res)
+                self.set_status("Copied files kept: connect to another board and paste")
+            else:
+                shutil.rmtree(res[1], ignore_errors=True)   # something else was copied meanwhile
+            if after:
+                after()
+        self.runner.submit(work, done, "Keeping the copied files ...", status="Downloading the copied files")
 
     def _release_edits(self, dev, board):
         """Disconnecting: send saves still waiting (before the board is closed), then drop the cache copies."""
@@ -527,6 +566,7 @@ class App(Gtk.Window):
 
     def _quit(self):
         self.save_state()
+        self.clipboard.clear()
         self.runner.cancel_all()
         for _ in range(20):                         # an interrupted script needs a moment to let go of the serial line
             if not self.runner.busy:
@@ -562,10 +602,8 @@ class App(Gtk.Window):
             if any(isinstance(be, DeviceBackend) and be is not self.device for be, _path in self.clipboard.items):
                 self.clipboard.clear()      # that board's connection is closed, so these can no longer be read
                 info(self, "Copied from another board",
-                     "Those files were copied from a board that is no longer connected, and only one board can be "
-                     "connected at a time.\n\nConnect to that board, download the files to the Host pane, then "
-                     "connect to this board and upload them. If this is the same board, reconnected, just copy them "
-                     "again.")
+                     "Those files were copied from a board that is no longer connected, and could not be kept.\n\n"
+                     "Connect to that board and copy them again.")
                 return
             move = self.clipboard.mode == "cut"
             self._start_copy(self.clipboard.items, pane.backend, pane.cwd, move)

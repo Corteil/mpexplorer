@@ -12,6 +12,8 @@ board over USB serial. **Nothing is installed on the board**: it works through t
 - Host and Device panes: browse, sort, filter, show hidden files
 - Upload / download files and folders (buttons, drag between panes, or copy and paste)
 - Copy, cut, paste, rename, delete, new file / folder, properties, free space
+- Copy from one board and paste on another: copied files are downloaded when you disconnect, so a large copy takes
+  time then. A cut becomes a copy, because the first board has gone
 - Conflict handling (overwrite / skip / keep both / apply to all), progress, speed and cancel
 - **REPL console** (Device > REPL console), emulated mode: run Python on the board, output streams as it arrives.
   `_` holds the last result, Ctrl+D soft-resets, Esc interrupts, Up/Down is history, Shift+Enter adds a line.
