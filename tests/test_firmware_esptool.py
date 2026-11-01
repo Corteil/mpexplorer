@@ -75,6 +75,20 @@ def test_check_refuses(tmp_path, kw, message):
 def test_check_image_picks_the_rule_by_chip(tmp_path):
     path = write(tmp_path, esp_image())
     assert fw.check_image(path, "esp32s3").cpu == "Xtensa"
+    with pytest.raises(fw.FirmwareError, match="for an ESP32 board.*selected is a RP2040.*Device list"):
+        fw.check_image(path, "rp2040")
+
+
+def test_a_uf2_for_an_esp_chip_names_the_mismatch(tmp_path):
+    path = write(tmp_path, struct.pack("<I", fw.MAGIC_START0) + bytes(508), "pico.uf2")
+    with pytest.raises(fw.FirmwareError, match="such as a Pico.*selected is an ESP32-S3.*Device list"):
+        fw.check_image(path, "esp32s3")
+
+
+def test_a_file_of_neither_kind_still_gets_the_chips_own_check(tmp_path):
+    path = write(tmp_path, b"hello" * 200, "notes.bin")
+    with pytest.raises(fw.FirmwareError, match="not an ESP firmware"):
+        fw.check_image(path, "esp32s3")
     with pytest.raises(fw.FirmwareError, match="not a UF2"):
         fw.check_image(path, "rp2040")
 
