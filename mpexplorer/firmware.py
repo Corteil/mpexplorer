@@ -276,7 +276,26 @@ def check_esp_image(path, flash_bytes=ESP_FLASH_BYTES):
     return EspInfo("Xtensa", size)
 
 
+def _file_kind(path):
+    try:
+        with open(path, "rb") as f:
+            head = f.read(4)
+    except OSError:
+        return None
+    if head == struct.pack("<I", MAGIC_START0):
+        return "uf2"
+    return "esp" if head[:1] == bytes([ESP_IMAGE_MAGIC]) else None
+
+
 def check_image(path, chip, flash_bytes=ESP_FLASH_BYTES):
+    """The check for this chip, after saying plainly if the file is for another kind of board altogether."""
+    name, kind = os.path.basename(path), _file_kind(path)
+    if kind == "esp" and chip != "esp32s3":
+        raise FirmwareError("%s is for an ESP32 board such as a badge, but the device selected is a %s. Check the "
+                            "Device list." % (name, CHIP_NAMES.get(chip, chip)))
+    if kind == "uf2" and chip == "esp32s3":
+        raise FirmwareError("%s is for a board with a UF2 drive such as a Pico, but the device selected is an "
+                            "ESP32-S3. Check the Device list." % name)
     return check_esp_image(path, flash_bytes) if chip == "esp32s3" else check_uf2(path, chip)
 
 

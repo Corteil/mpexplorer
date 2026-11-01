@@ -598,6 +598,17 @@ def test_a_backup_for_the_wrong_chip_is_never_restored(setup, monkeypatch):
     assert not d.running and "not for the" in errors[0]
 
 
+def test_a_badge_backup_on_a_pico_names_the_mismatch(setup, monkeypatch):
+    make, _, errors, _, tmp = setup             # the fixture's stub fails the test if a write starts
+    path = tmp / "tidal-backup.bin"
+    path.write_bytes(bytes([0xE9]) + bytes(1023))
+    d = make(cls=dialog.BackupDialog)
+    monkeypatch.setattr(d, "_ask_restore_path", lambda: str(path))
+    d.restore()
+    pump(50)
+    assert not d.running and "for an ESP32 board" in errors[0] and "Device list" in errors[0]
+
+
 def test_declining_a_restore_writes_nothing(setup, monkeypatch):
     make, _, _, _, tmp = setup
     monkeypatch.setattr(dialog, "ask_yes_no", lambda *a: False)

@@ -77,12 +77,13 @@ label if one is missing on another theme.
 - [x] Phase 4, Tildagon: install through the dialog worked on a real badge (2026-10-31, confirmed by the owner); files survive.
 - [x] A chip that does not read as a Tildagon is not offered its image (confirmed on a real Tildagon; not tried on a breakout).
 - [x] Phase 5, 2022 badge: install through the dialog worked on a real badge (2026-10-31, reported by the owner).
-- [ ] Second 2022 badge: does it read the same? Erase on a 2022 badge.
+- [x] Second 2022 badge reads the same; erase on a 2022 badge works.
 - [x] Tildagon install re-run on this code (2026-10-31, reported working).
 - [ ] Try a real ESP32-S3 breakout: the "does not match" message, then a micropython.org build and the erase option.
 - [x] Back up flash and erase only, in the dialog (fakes only).
 - [x] Real boards, from scripts using the tools' code (2026-11-01): Pico, Pico 2, Tildagon and 2022 badge backup, erase and restore, all compared.
-- [ ] The owner clicks through the tools on a real board.
+- [x] Restore clicked through the tool on a real 2022 badge (2026-11-01, reported working).
+- [ ] Click Start bootloader, Back up and Erase on a real board.
 - [ ] Recording installs in the settings.
 
 ## 2c. Agent mode (plan: `docs/AGENT_PLAN.md`)
