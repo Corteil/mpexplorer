@@ -207,6 +207,16 @@ def board_firmware(backend):
         return None
 
 
+def board_implementation(backend):
+    """('circuitpython', '10.3.1') or ('micropython', '1.28.0'); (None, '') when the board cannot say."""
+    try:
+        out = backend._run("import sys\nprint(sys.implementation.name)\n"
+                           "print('.'.join(str(n) for n in sys.implementation.version[:3]))").decode().split()
+        return (out[0].lower(), out[1]) if len(out) >= 2 else (None, "")
+    except Exception:
+        return None, ""
+
+
 def remove(catalog, backend, names, mpy=None, dest=DEST, cancelled=None):
     """Delete the files of the named libraries (not their dependencies) from `dest`, in either the .mpy or the source
     form, then any folder they leave empty. Returns the number of files removed."""

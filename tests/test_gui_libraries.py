@@ -156,3 +156,59 @@ def test_a_circuitpython_board_shows_its_drive_and_is_labelled(tmp_path, monkeyp
     finally:
         app.conns.clear()
         app.destroy()
+
+
+def open_bundle_dialog(tmp_path, monkeypatch):
+    from test_cpbundle import site
+    from mpexplorer import cpbundle
+    monkeypatch.setattr(lib, "DEST", str(tmp_path / "board" / "lib"))
+    asked = []
+    monkeypatch.setattr(dialog, "ask_yes_no", lambda parent, title, text: asked.append(text) or True)
+    app = App(settings=Settings.load(str(tmp_path / "cfg.json")))
+    APP[:] = [app]
+    opener, _ = make_site()
+    bopener, _ = site()
+    dlg = dialog.LibrariesDialog(app, LocalBackend(), "CP board", lib.Catalog(str(tmp_path / "cache"), opener),
+                                 lambda key: cpbundle.Catalog(key, str(tmp_path / "bundles"), bopener))
+    wait_until(lambda: len(dlg.store) == 2 and dlg.job is None)
+    return app, dlg, asked
+
+
+def test_a_circuitpython_board_starts_on_the_adafruit_bundle_and_needs_no_override(tmp_path, monkeypatch):
+    app, dlg, asked = open_bundle_dialog(tmp_path, monkeypatch)
+    try:
+        dlg._board_read((6, set(), ("circuitpython", "10.3.1")), None)      # what reading a CircuitPython board gives
+        assert dlg.source == "adafruit"
+        wait_until(lambda: len(dlg.store) == 3)
+        assert [r[1] for r in dlg.store][0] == "adafruit_bus_device" and not dlg.mismatch()
+        assert not dlg.force.get_visible() and dlg.resolve_arg() == 10
+        dlg.store[1][0] = True                                  # adafruit_thing, needs adafruit_bus_device
+        dlg._sensitive()
+        assert dlg.install_btn.get_sensitive()
+        dlg.install(dlg.ticked())
+        wait_until(lambda: "Done" in dlg.note.get_text())
+        assert "adafruit_bus_device" in asked[0] and ".mpy 10" in asked[0]
+        assert (tmp_path / "board" / "lib" / "adafruit_thing.mpy").read_bytes() == b"thing 10.x-mpy"
+    finally:
+        dlg.destroy()
+        app.destroy()
+
+
+def test_the_other_firmwares_list_needs_the_override(tmp_path, monkeypatch):
+    app, dlg, asked = open_bundle_dialog(tmp_path, monkeypatch)
+    try:
+        # a CircuitPython board with micropython-lib picked
+        dlg.firmware, dlg.version, dlg.chose = "circuitpython", "10.3.1", True
+        dlg.store[1][0] = True
+        dlg._sensitive()
+        assert dlg.mismatch() and dlg.resolve_arg() is None and not dlg.install_btn.get_sensitive()
+        dlg._mismatch_note()
+        text = dlg.note.get_text()
+        assert dlg.force.get_visible() and "CircuitPython" in text and "MicroPython" in text
+        dlg.firmware, dlg.version = "micropython", "1.28.0"      # a MicroPython board, CircuitPython bundle
+        dlg.source_box.set_active_id("adafruit")
+        wait_until(lambda: len(dlg.store) == 3)
+        assert dlg.mismatch() and dlg.resolve_arg() is None
+    finally:
+        dlg.destroy()
+        app.destroy()

@@ -1,27 +1,48 @@
-"""Tools > Install libraries: pick MicroPython libraries and write them to the connected board's /lib.
-The logic is in ..libraries; the files are fetched here on the host and uploaded, nothing runs on the board."""
+"""Tools > Install libraries: pick libraries (micropython-lib, or the Adafruit and Community CircuitPython
+bundles) and write them to the connected board's lib folder. The logic is in ..libraries and ..cpbundle; the files
+are fetched here on the host and uploaded, nothing runs on the board."""
 import threading
 import time
 
+from .. import cpbundle
 from .. import libraries as lib
 from ..errors import Cancelled
 from .common import GLib, Gtk, ask_yes_no, error, scrolled
 
 
+NAMES = {"micropython": "MicroPython", "circuitpython": "CircuitPython"}
+
+
 class LibrariesDialog(Gtk.Dialog):
-    def __init__(self, app, backend, label="", catalog=None):
+    def __init__(self, app, backend, label="", catalog=None, bundles=None):
+        """catalog, bundles: stand-ins for the micropython-lib catalog and the bundle catalog factory (tests)."""
         super().__init__(title="Install libraries", transient_for=app, modal=True)
         self.app, self.be, self.label = app, backend, label
-        self.catalog = catalog or lib.Catalog()
+        # key -> (title, firmware the libraries are for, the catalog once made)
+        make = bundles or (lambda key: cpbundle.Catalog(key))
+        self.makers = {"micropython": lambda: catalog or lib.Catalog(), "adafruit": lambda: make("adafruit"),
+                       "community": lambda: make("community")}
+        self.titles = {"micropython": ("micropython-lib (MicroPython)", "micropython"),
+                       "adafruit": ("Adafruit bundle (CircuitPython)", "circuitpython"),
+                       "community": ("Community bundle (CircuitPython)", "circuitpython")}
+        self.catalogs, self.source, self.load_id = {}, "micropython", 0
         self.libs, self.have, self.mpy, self.closed, self.busy, self.job = [], set(), None, False, False, None
-        self.firmware = None
+        self.firmware, self.version, self.chose = None, "", False
         self.dest = backend.join(backend.mount, "lib") if hasattr(backend, "mount") else lib.DEST
         self.set_default_size(620, 520)
         box = self.get_content_area()
         box.set_spacing(6)
         box.set_border_width(10)
-        box.pack_start(Gtk.Label(label="Libraries from micropython-lib, written to /lib on %s" % (label or "the board"),
-                                 xalign=0), False, False, 0)
+        top = Gtk.Box(spacing=8)
+        top.pack_start(Gtk.Label(label="Libraries from", xalign=0), False, False, 0)
+        self.source_box = Gtk.ComboBoxText()
+        for key, (title, _fw) in self.titles.items():
+            self.source_box.append(key, title)
+        self.source_box.set_active_id(self.source)
+        self.source_box.connect("changed", lambda _c: self._source_changed())
+        top.pack_start(self.source_box, False, False, 0)
+        top.pack_start(Gtk.Label(label="for %s" % (label or "the board"), xalign=0), False, False, 0)
+        box.pack_start(top, False, False, 0)
         self.search = Gtk.SearchEntry(placeholder_text="Search")
         self.search.connect("search-changed", lambda _e: self.filter.refilter())
         box.pack_start(self.search, False, False, 0)
@@ -54,20 +75,43 @@ class LibrariesDialog(Gtk.Dialog):
         self.show_all()
         self.bar.hide()
         GLib.timeout_add(150, self._tick)
-        threading.Thread(target=self._load, daemon=True).start()
+        self._start_load()
         self.job = app.runner.submit(self._read_board, self._board_read, "Reading the board ...", quiet=True,
                                      inline=True, devices=(backend,))
 
     # -- loading ---------------------------------------------------------------------------------------------
-    def _load(self):
+    @property
+    def catalog(self):
+        if self.source not in self.catalogs:
+            self.catalogs[self.source] = self.makers[self.source]()
+        return self.catalogs[self.source]
+
+    def _start_load(self):
+        self.load_id += 1
+        self.note.set_text("Loading the list ...")
+        threading.Thread(target=self._load, args=(self.load_id, self.catalog), daemon=True).start()
+
+    def _load(self, load_id, catalog):
         try:
-            res = self.catalog.libraries(), None
+            res = catalog.libraries(), None
         except Exception as e:
             res = None, e
-        GLib.idle_add(self._loaded, *res)
+        GLib.idle_add(self._loaded, res[0], res[1], load_id)
+
+    def _source_changed(self):
+        key = self.source_box.get_active_id()
+        if not key or key == self.source or self.busy:
+            if self.busy:
+                self.source_box.set_active_id(self.source)
+            return
+        self.chose = True
+        self.source = key
+        self.store.clear()
+        self._sensitive()
+        self._start_load()
 
     def _read_board(self, _prog):
-        return lib.board_mpy(self.be), set(lib.installed(self.be, self.dest)), lib.board_firmware(self.be)
+        return lib.board_mpy(self.be), set(lib.installed(self.be, self.dest)), lib.board_implementation(self.be)
 
     def _board_read(self, res, exc):
         self.job = None
@@ -76,17 +120,42 @@ class LibrariesDialog(Gtk.Dialog):
         if exc:
             self.note.set_text("Could not read the board: %s" % exc)
             return
-        self.mpy, self.have, self.firmware = res
+        self.mpy, self.have, (self.firmware, self.version) = res
         self._mark_installed()
-        if self.is_circuitpython():
-            self.mpy = None             # CircuitPython refuses MicroPython .mpy files (seen on a real board)
-            self.force.show()
-            self.note.set_text("This board runs CircuitPython. These are MicroPython libraries: tick "
-                               "\"Install anyway\" only if you know they will work there (source files are used).")
+        if self.firmware == "circuitpython" and not self.chose and self.source == "micropython":
+            self.source_box.set_active_id("adafruit")       # the usual choice for this board; the user can change it
+        else:
+            self._mismatch_note()
         self._sensitive()
 
-    def _loaded(self, res, exc):
-        if self.closed:
+    def libs_for(self):
+        return self.titles[self.source][1]
+
+    def mismatch(self):
+        """True when this list is for the other firmware than the board runs: needs 'Install anyway'."""
+        return bool(self.firmware) and self.firmware != self.libs_for()
+
+    def _mismatch_note(self):
+        self.force.set_visible(self.mismatch())
+        if self.mismatch():
+            self.note.set_text("This board runs %s but these libraries are for %s: tick \"Install anyway\" only if you "
+                               "know they will work there (source files are used)." % (
+                                   NAMES.get(self.firmware, self.firmware), NAMES[self.libs_for()]))
+
+    def resolve_arg(self):
+        """What `catalog.resolve` needs to pick the right files: micropython-lib wants the board's .mpy format number,
+        the bundles want its CircuitPython major version. Libraries for the other firmware always get source files."""
+        if self.mismatch() or not self.firmware:
+            return None
+        if self.libs_for() == "micropython":
+            return self.mpy
+        try:
+            return int(self.version.split(".")[0])
+        except ValueError:
+            return None
+
+    def _loaded(self, res, exc, load_id=None):
+        if self.closed or (load_id is not None and load_id != self.load_id):
             return
         if exc:
             self.note.set_text("Could not load the list: %s" % exc)
@@ -99,6 +168,7 @@ class LibrariesDialog(Gtk.Dialog):
         self.note.set_text("%d libraries%s." % (len(self.libs), "" if saved is None else
                                                 " (saved list from %s: no network)" % time.strftime(
                                                     "%Y-%m-%d", time.localtime(saved))))
+        self._mismatch_note()
         self._sensitive()
 
     def _mark_installed(self):
@@ -118,12 +188,9 @@ class LibrariesDialog(Gtk.Dialog):
     def ticked(self):
         return [r[1] for r in self.store if r[0]]
 
-    def is_circuitpython(self):
-        return self.firmware == "circuitpython"
-
     def _sensitive(self):
         ready = bool(self.ticked()) and not self.busy
-        self.install_btn.set_sensitive(ready and (not self.is_circuitpython() or self.force.get_active()))
+        self.install_btn.set_sensitive(ready and (not self.mismatch() or self.force.get_active()))
         self.remove_btn.set_sensitive(ready)
 
     # -- installing ------------------------------------------------------------------------------------------
@@ -157,7 +224,7 @@ class LibrariesDialog(Gtk.Dialog):
                 "Libraries they depend on are left alone." % (", ".join(names), self.label or "the board")):
             return
         self._lock(True)
-        be, catalog, mpy = self.be, self.catalog, self.mpy
+        be, catalog, mpy = self.be, self.catalog, self.resolve_arg()
 
         def work(prog):
             return lib.remove(catalog, be, names, mpy, self.dest, cancelled=lambda: prog.check() or False)
@@ -180,14 +247,16 @@ class LibrariesDialog(Gtk.Dialog):
 
     def install(self, names):
         """Work out what the ticked libraries need (host, network), ask, then write them."""
-        if not names or (self.is_circuitpython() and not self.force.get_active()):
+        if not names or (self.mismatch() and not self.force.get_active()):
             return
         self._lock(True)
         self.note.set_text("Working out what is needed ...")
+        catalog, arg = self.catalog, self.resolve_arg()
+        catalog.on_progress = lambda done, total: GLib.idle_add(self._download, done, total)
 
         def work():
             try:
-                res = self.catalog.resolve(names, self.mpy), None
+                res = catalog.resolve(names, arg), None
             except Exception as e:
                 res = None, e
             GLib.idle_add(self._resolved, *res)
@@ -208,6 +277,7 @@ class LibrariesDialog(Gtk.Dialog):
             self.note.set_text("Nothing written.")
             return
         be, catalog = self.be, self.catalog
+        catalog.on_progress = None
 
         def write(prog):
             prog.items_total, prog.items_word = files, "written"
@@ -233,6 +303,11 @@ class LibrariesDialog(Gtk.Dialog):
         self.close_btn.set_sensitive(True)
         self.job = self.app.runner.submit(self._read_board, self._board_read, "Reading the board ...", quiet=True,
                                           inline=True, devices=(self.be,))
+
+    def _download(self, done, total):
+        if not self.closed and self.busy and self.job is None:
+            self.bar.set_fraction(done / total)
+            self.note.set_text("Downloading the bundle ... %d of %d MB" % (done >> 20, total >> 20))
 
     def _tick(self):
         if self.closed:
