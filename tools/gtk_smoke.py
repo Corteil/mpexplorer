@@ -5,6 +5,7 @@ from gi.repository import Gtk, GLib
 from fakedevice import FakeSerial
 from mpexplorer.transport import RawREPL
 from mpexplorer.backends import DeviceBackend
+from mpexplorer.connection import Connection
 from mpexplorer.console import ConsoleSession
 from mpexplorer.gtkui.app import App
 app = App()
@@ -14,7 +15,7 @@ def pump(ms):
         while Gtk.events_pending(): Gtk.main_iteration()
         time.sleep(0.01)
 repl = RawREPL(FakeSerial(paste="on")); repl.enter_raw()
-dev = DeviceBackend(repl); app.device = dev; app.session = ConsoleSession(repl)
+dev = DeviceBackend(repl); app.conn = Connection("fake", "fake", dev, ConsoleSession(repl))
 app.right.set_location(dev, dev.root)
 tmp = tempfile.mkdtemp(); open(tmp + "/hello.txt", "w").write("hi there\n"); os.mkdir(tmp + "/sub")
 devdir = tempfile.mkdtemp(); app.right.go(devdir); app.left.go(tmp); pump(1500)

@@ -1316,3 +1316,15 @@ def test_copying_something_new_removes_the_kept_copies(make_app, tmp_path, priva
     assert os.path.isdir(folder)
     app.clipboard.set("copy", [(app.local, str(tmp_path))])
     assert not os.path.exists(folder)
+
+
+def test_a_connection_holds_the_boards_state_and_goes_on_disconnect(make_app, tmp_path):
+    app = make_app()
+    assert (app.device, app.board, app.session, app.badge) == (None, None, None, None)
+    dev = DeviceBackend(RawREPL(FakeSerial()))
+    app.connected(dev, str(tmp_path), "/dev/ttyACM1", "chip:aa")
+    pump()
+    assert app.conn.port == "/dev/ttyACM1" and app.device is dev and app.board == "chip:aa" and app.session
+    app.disconnect()
+    pump()
+    assert app.conn is None and app.device is None and app.session is None and app.badge is None
