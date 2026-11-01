@@ -1,7 +1,7 @@
-# Firmware icons and board nicknames plan
+# Firmware markers (emoji) and board nicknames plan
 
 Status (2026-11-01): plan only, nothing built. Asked for by the owner: the port list does not make clear which firmware a board
-runs; add an icon per firmware type (the snake and the "inverted M") and a nickname for each unique board.
+runs; add a marker per firmware type (the snake and the "inverted M") and a nickname for each unique board.
 
 ## What there is today
 - The port list (`ports.list_ports` / `port_label`) is `"/dev/ttyACM4  Pico 2 (rp2350a)  #8a64"`: port, a model name (USB guess, or what the board
@@ -41,10 +41,10 @@ runs; add an icon per firmware type (the snake and the "inverted M") and a nickn
 ### A. Firmware kind of a board (GUI-free, new `mpexplorer/boardinfo.py`)
 `firmware_kind(usb_info, learned)` returns `"micropython"`, `"circuitpython"` or `None`.
 1. **Learned wins:** `boards.firmware[<usb key>]` is written when the app connects (`circuitpython.detect` already returns the name) and by the firmware tools
-   after an install (`Installed`) or when they read a running board. A reinstall of the other firmware therefore corrects the icon at once.
+   after an install (`Installed`) or when they read a running board. A reinstall of the other firmware therefore corrects the marker at once.
 2. **Otherwise guess from USB:** manufacturer `MicroPython` -> MicroPython; vendor `239a` -> CircuitPython; vendor `2e8a` with any other product
    (a non-MicroPython RP2 USB string) -> CircuitPython; the EMF badge ids (`16d0:120e`, `16d0:1114`, `303a:4001`) -> MicroPython; everything else `None`.
-3. The guess is shown as the icon without any mark; nothing says "guessed". A wrong guess is fixed by one connect.
+3. The guess is shown as the marker without any hint; nothing says "guessed". A wrong guess is fixed by one connect.
 `ports.list_ports` and the firmware tools use this one function.
 
 ### B. Markers (the owner chose emoji, 2026-11-01)
@@ -66,7 +66,7 @@ runs; add an icon per firmware type (the snake and the "inverted M") and a nickn
   once shows its nickname in the port list next time, **before** connecting.
 - **Shared serials** (`000000000000`, `123456`): the USB key is not unique, so the nickname only shows after connecting, from the chip id; the port list
   shows no nickname for those rows (a nickname on the wrong board would be worse than none). The Name dialog says so when it applies.
-- Where it shows: the port list (`<icon> /dev/ttyACM4  "Bench CP"  Pico 2 (rp2350a)  #8a64`: the nickname right after the port, in quotes, so the existing
+- Where it shows: the port list (`<marker> /dev/ttyACM4  "Bench CP"  Pico 2 (rp2350a)  #8a64`: the nickname right after the port, in quotes, so the existing
   `device_of` split still finds the port), the pane label, the console title, the Window menu, status messages (`Connected to "Bench CP"`), and the firmware tools'
   running-board rows (by USB key only).
 - Editing: `Device > Name this board...` (needs a connected board in the active pane: its chip id is known) using the existing `prompt()` dialog, showing the
