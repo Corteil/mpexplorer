@@ -1531,7 +1531,8 @@ def test_dragging_shows_an_icon_not_the_whole_row(make_app, tmp_path, monkeypatc
     app = make_app()
     a, b = drag_setup(app, tmp_path)
     shown, spots = [], []
-    monkeypatch.setattr("mpexplorer.gtkui.pane.Gtk.drag_set_icon_name", lambda ctx, name, x, y: (shown.append(name), spots.append((x, y))))
+    monkeypatch.setattr("mpexplorer.gtkui.pane.Gtk.drag_set_icon_name",
+                        lambda ctx, name, x, y: (shown.append(name), spots.append((x, y))))
     select_rows(app.left, "lib")
     app.left._drag_icon(None)
     select_rows(app.left, "main.py")
