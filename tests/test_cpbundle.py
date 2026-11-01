@@ -119,3 +119,17 @@ def test_offline_uses_the_saved_tag_and_list(tmp_path):
     assert saved and len(libs) == 3
     with pytest.raises(libraries.LibraryError):
         cpbundle.Catalog("adafruit", str(tmp_path / "empty"), down).libraries()
+
+
+def test_compare_tells_current_from_edited_and_missing_files(tmp_path):
+    opener, _ = site()
+    cat = cpbundle.Catalog("adafruit", str(tmp_path / "c"), opener)
+    dest = str(tmp_path / "lib")
+    libraries.install(cat, LocalBackend(), cat.resolve(["adafruit_thing"], 10), dest)
+    be = LocalBackend()
+    assert libraries.compare(cat, be, ["adafruit_thing", "adafruit_bus_device"], 10, dest) == {
+        "adafruit_thing": "current", "adafruit_bus_device": "current"}
+    (tmp_path / "lib" / "adafruit_thing.mpy").write_bytes(b"an older one")
+    (tmp_path / "lib" / "adafruit_bus_device" / "i2c_device.mpy").unlink()
+    got = libraries.compare(cat, be, ["adafruit_thing", "adafruit_bus_device", "not_in_bundle"], 10, dest)
+    assert got == {"adafruit_thing": "differs", "adafruit_bus_device": "incomplete"}      # the unknown name is left out

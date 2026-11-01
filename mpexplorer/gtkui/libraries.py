@@ -65,6 +65,8 @@ class LibrariesDialog(Gtk.Dialog):
         self.bar = Gtk.ProgressBar(no_show_all=True)
         box.pack_start(self.bar, False, False, 0)
         self.close_btn = self.add_button("Close", Gtk.ResponseType.CLOSE)
+        self.check_btn = self.add_button("Check for updates", Gtk.ResponseType.APPLY)
+        self.check_btn.set_sensitive(False)
         self.remove_btn = self.add_button("Remove", Gtk.ResponseType.REJECT)
         self.remove_btn.set_sensitive(False)
         self.install_btn = self.add_button("Install", Gtk.ResponseType.OK)
@@ -192,6 +194,7 @@ class LibrariesDialog(Gtk.Dialog):
         ready = bool(self.ticked()) and not self.busy
         self.install_btn.set_sensitive(ready and (not self.mismatch() or self.force.get_active()))
         self.remove_btn.set_sensitive(ready)
+        self.check_btn.set_sensitive(not self.busy and any(r[3] for r in self.store))
 
     # -- installing ------------------------------------------------------------------------------------------
     def _response(self, _d, res):
@@ -199,7 +202,9 @@ class LibrariesDialog(Gtk.Dialog):
             self.install(self.ticked())
         elif res == Gtk.ResponseType.REJECT and not self.busy:
             self.remove(self.ticked())
-        elif res not in (Gtk.ResponseType.OK, Gtk.ResponseType.REJECT):
+        elif res == Gtk.ResponseType.APPLY and not self.busy:
+            self.check_updates()
+        elif res not in (Gtk.ResponseType.OK, Gtk.ResponseType.REJECT, Gtk.ResponseType.APPLY):
             if self.busy:
                 self._cancel()
             else:
@@ -216,6 +221,41 @@ class LibrariesDialog(Gtk.Dialog):
         self.search.set_sensitive(not on)
         self.bar.set_visible(on)
         self.close_btn.set_label("Cancel" if on else "Close")
+        self._sensitive()
+
+    def installed_names(self):
+        return [r[1] for r in self.store if r[3]]
+
+    def check_updates(self):
+        """Compare every library already in /lib with the catalog's current copy (one bundle download, then cached)."""
+        names = self.installed_names()
+        if not names:
+            return
+        self._lock(True)
+        self.note.set_text("Checking %d installed librar%s ..." % (len(names), "y" if len(names) == 1 else "ies"))
+        be, catalog, arg, dest = self.be, self.catalog, self.resolve_arg(), self.dest
+        catalog.on_progress = lambda done, total: GLib.idle_add(self._download, done, total)
+
+        def work(prog):
+            return lib.compare(catalog, be, names, arg, dest, cancelled=lambda: prog.check() or False)
+        self.job = self.app.runner.submit(work, self._checked, "Checking libraries ...", inline=True, devices=(be,))
+
+    def _checked(self, res, exc):
+        self.job = None
+        if self.closed:
+            return
+        self._lock(False)
+        self.catalog.on_progress = None
+        if exc:
+            self.note.set_text("Could not check: %s" % exc)
+            return
+        words = {"current": "up to date", "differs": "update available", "incomplete": "incomplete"}
+        for row in self.store:
+            if row[1] in res:
+                row[3] = words[res[row[1]]]
+        newer = [n for n, v in res.items() if v != "current"]
+        self.note.set_text("%d checked: %s." % (len(res), "%d to update (tick them and press Install)" % len(newer)
+                                                if newer else "all up to date"))
         self._sensitive()
 
     def remove(self, names):

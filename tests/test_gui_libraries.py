@@ -231,3 +231,27 @@ def test_open_with_on_a_circuitpython_drive_edits_the_file_where_it_is(tmp_path)
     finally:
         app.conns.clear()
         app.destroy()
+
+
+def test_check_for_updates_marks_the_libraries_that_differ(tmp_path, monkeypatch):
+    app, dlg, _ = open_dialog(tmp_path, monkeypatch)
+    try:
+        assert not dlg.check_btn.get_sensitive()                       # nothing is installed yet
+        dlg.install(["zed"])
+        wait_until(lambda: "Done" in dlg.note.get_text())
+        dlg.have = {"a", "pkg"}
+        dlg._mark_installed()
+        # zed's file is 'a.py'; the fake packages are named differently, so name the rows by what is installed
+        for row in dlg.store:
+            row[3] = "yes"
+        (tmp_path / "board" / "lib" / "a.py").write_text("edited on the board")
+        dlg._sensitive()
+        assert dlg.check_btn.get_sensitive()
+        dlg.check_updates()
+        wait_until(lambda: "checked" in dlg.note.get_text())
+        states = {r[1]: r[3] for r in dlg.store}
+        assert states == {"alpha": "up to date", "zed": "update available"}
+        assert "1 to update" in dlg.note.get_text()
+    finally:
+        dlg.destroy()
+        app.destroy()

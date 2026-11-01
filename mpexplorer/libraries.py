@@ -190,6 +190,37 @@ def installed(backend, dest=DEST):
     return sorted(os.path.splitext(e.name)[0] for e in backend.listdir(dest))
 
 
+def compare(catalog, backend, names, mpy=None, dest=DEST, cancelled=None):
+    """How each named installed library compares with the catalog's current copy, by file contents:
+    {name: 'current' | 'differs' | 'incomplete'}. 'differs' covers an older version and a file edited on the board; a
+    name the catalog does not have is left out. 'incomplete': some of its files are missing."""
+    out = {}
+    for name in names:
+        if cancelled and cancelled():
+            raise LibraryError("Cancelled.")
+        try:
+            plan = catalog.resolve([name], mpy)
+        except LibraryError:
+            continue
+        files = [f for n, _v, _k, hashes in plan if n == name for f in hashes]
+        state = "current"
+        for path, key in files:
+            target = backend.join(dest, path)
+            st = backend.stat(target)
+            if st is None or st.is_dir:
+                state = "incomplete"
+                break
+            data = catalog.fetch(key)
+            if st.size != len(data):
+                state = "differs"
+                continue
+            with backend.open_read(target) as f:
+                if f.read(len(data) + 1) != data:
+                    state = "differs"
+        out[name] = state
+    return out
+
+
 def board_mpy(backend):
     """The board's .mpy format number, or None when it cannot say (then plain source is used)."""
     try:
