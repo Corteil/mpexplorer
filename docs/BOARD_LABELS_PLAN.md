@@ -1,6 +1,6 @@
 # Firmware badges (CP / MP) and board nicknames plan
 
-Status (2026-11-01): phase 1 built on branch `board-info` (`mpexplorer/boardinfo.py`, `ports.list_boards`, settings `boards.firmware` / `boards.nicknames` / `boards.ids`, `tests/test_boardinfo.py`): no screen yet, nothing visible changes. Phases 2-4 not built. Asked for by the owner: the port list does not make clear which firmware a board
+Status (2026-11-01): phase 2 (badges) built on branch `board-badges`: coloured CP / MP cell in the drop-down rows (`ComboBoxText` kept, extra cell with a data function), a badge label beside the box, the firmware named in the pane label (`MicroPython 1.29.0`), firmware and chip id learned at connect. The badge is beside the box, not inside the frame label (keeps `Frame.get_label()` text). Phase 1 built on branch `board-info` (`mpexplorer/boardinfo.py`, `ports.list_boards`, settings `boards.firmware` / `boards.nicknames` / `boards.ids`, `tests/test_boardinfo.py`): no screen yet, nothing visible changes. Phases 2-4 not built. Asked for by the owner: the port list does not make clear which firmware a board
 runs; add a marker per firmware type and a nickname for each unique board. **Settled 2026-11-01:** the markers are the letters **CP** and **MP**
 shown as filled badges (text and background colours swapped, "inverted"); no emoji. (The owner first asked for 🐍 and an inverted M, then clarified.)
 
