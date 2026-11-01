@@ -1228,7 +1228,8 @@ def test_copy_on_one_board_paste_on_another(make_app, tmp_path, private_cache):
     pump()
     app.active = app.right
     app.paste()
-    until(lambda: (b / "main.py").exists() and (b / "lib" / "x.py").exists())
+    until(lambda: app.status.get_text().startswith("Done"))     # not just the files: the job must end before the window
+    assert (b / "main.py").exists() and (b / "lib" / "x.py").exists()
     assert (b / "main.py").read_text() == "hello" and (b / "lib" / "x.py").read_text() == "deep"
     assert app.clipboard.items                      # can be pasted again
 
