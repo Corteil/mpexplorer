@@ -21,7 +21,7 @@ Python >= 3.11, line length 120, ruff rules E/F/W only, no type-annotation churn
 ## Layout
 - Core (GUI-free, fully tested): `transport.py` (raw REPL, raw-paste, trace, input, terminal ownership), `backends.py`
   (Local + Device over snippets), `ops.py` (copy/move/delete/conflicts), `sync.py`, `jobs.py` (one worker thread owns
-  the serial line), `console.py` (emulated REPL), `terminal.py` (real-REPL terminal), `badgescreen.py` (status page on a badge's screen), `clipboard.py`, `firmware.py` + `firmware_catalog.py` (install firmware).
+  the serial line), `console.py` (emulated REPL), `terminal.py` (real-REPL terminal), `badgescreen.py` (status page on a badge's screen), `clipboard.py`, `firmware.py` + `firmware_catalog.py` (install firmware), `connection.py` (one connected board's state).
 - GUI, default (`mpexplorer/gtkui/`, GTK 3.24 via `python3-gi`, Wayland-native): `app.py`, `pane.py`, `editor.py`,
   `console.py`, `terminal.py` (VTE, optional), `dialogs.py`, `firmware.py`, `common.py` (import GTK only through it: it pins the versions).
   `python -m mpexplorer` runs it, or prints how to install PyGObject if it is missing. (The Tk GUI was removed on 2026-10-29;

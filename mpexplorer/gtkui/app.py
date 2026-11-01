@@ -10,7 +10,7 @@ import weakref
 from .. import __version__
 from ..backends import CHUNK, DeviceBackend, Entry, LocalBackend, human
 from ..clipboard import Clipboard, copied_dir
-from ..console import ConsoleSession
+from ..connection import Connection
 from ..errors import BackendError, Cancelled
 from ..jobs import JobRunner
 from ..badgescreen import BadgeScreen
@@ -61,19 +61,16 @@ class App(Gtk.Window):
         self.runner = JobRunner()
         me = weakref.ref(self)              # the worker thread outlives windows: do not keep this one alive
         self.runner.hook = lambda job, phase, exc: me() and me()._badge_hook(job, phase, exc)
-        self.badge = None                   # BadgeScreen while a board with a screen is connected
         self._popup, self._popup_job, self._popup_since, self._popup_dismissed = None, None, 0.0, False
         self._status_timer = None
         self.clipboard = Clipboard()
         self.local = LocalBackend()
         self.edits = EditManager(self.runner, cache_dir(), self._edit_say, self._edit_conflict, self._refresh_all)
         self.edits.set_paused(not self.settings.get("open_with.auto_upload"))
-        self.device = None
-        self.session = None
+        self.conn = None                            # the connected board
         self.console = None
         self.windows = []                           # open editors and the console
         self.show_hidden = self.settings.get("general.show_hidden")
-        self.board = None                           # settings key of the connected board
         self.settings.subscribe(self._setting_changed)
         self.drag_source = None
         self._asks = queue.Queue()
@@ -458,12 +455,10 @@ class App(Gtk.Window):
 
     def connected(self, dev, start, port, board, machine="", rts=False, usb=None):
         """The connection is up: show the board, and remember the port, its model (and later its folders)."""
-        self.device = dev
+        self.conn = Connection.open_on(dev, port, board)
         remember_board_name(self.settings, usb or board, machine)    # these are needed before a board can be read,
         remember_board_rts(self.settings, usb or board, rts)         # so they stay under its USB id
         self.right.detail = "  ".join(x for x in (port, short_model(machine) if machine else "") if x)
-        self.board = board
-        self.session = ConsoleSession(dev.repl)
         remember_port(self.settings, port)
         self.right.set_location(dev, start)
         self._connect_state("disconnect")
@@ -471,8 +466,25 @@ class App(Gtk.Window):
         self.set_status("Connected to %s" % port)
         if self.settings.get("general.set_board_clock"):
             self._set_clock(dev, "Connected to %s; " % port)
-        self.badge = BadgeScreen(dev.repl) if self.settings.get("general.badge_screen") else None
+        self.conn.badge = BadgeScreen(dev.repl) if self.settings.get("general.badge_screen") else None
         self._badge_draw(folder=start)
+
+    # What the rest of the window asks about the board, none when nothing is connected
+    @property
+    def device(self):
+        return self.conn.device if self.conn else None
+
+    @property
+    def board(self):
+        return self.conn.board if self.conn else None
+
+    @property
+    def session(self):
+        return self.conn.session if self.conn else None
+
+    @property
+    def badge(self):
+        return self.conn.badge if self.conn else None
 
     def _connect_state(self, state):
         """The Connect button shows what a click would do: plug in, unplug, or wait."""
@@ -503,17 +515,16 @@ class App(Gtk.Window):
         if not self.device and after:
             after()
         if self.device:
-            dev, self.device, board = self.device, None, self.board
-            self.board = None
+            conn, self.conn = self.conn, None
+            dev, board = conn.device, conn.board
             self._release_edits(dev, board)
-            self.session = None
             if self.console:
                 self.console.close()
             self.right.clear()
             reset = self.settings.get("general.reset_on_disconnect")
-            if self.badge and not reset:
-                self._badge_draw(status="press reset button", kind="gone")
-            self.badge = None
+            if conn.badge and not reset:
+                self.runner.submit(lambda prog: conn.badge.show(status="press reset button", kind="gone"),
+                                   label="Badge screen", quiet=True)
             self._connect_state("connect")
             self.connect_btn.set_sensitive(True)
             self.set_status("Disconnected")
@@ -581,9 +592,9 @@ class App(Gtk.Window):
         if self.device:
             try:
                 reset = self.settings.get("general.reset_on_disconnect")
-                if self.badge and not reset:
-                    self.badge.show("press reset button", kind="gone")
-                self.badge = None
+                if self.conn.badge and not reset:
+                    self.conn.badge.show("press reset button", kind="gone")
+                self.conn.badge = None
                 self.device.close(reset)
             except Exception:
                 pass
