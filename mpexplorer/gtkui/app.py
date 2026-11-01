@@ -68,8 +68,6 @@ class App(Gtk.Window):
         self.edits = EditManager(self.runner, cache_dir(), self._edit_say, self._edit_conflict, self._refresh_all)
         self.edits.set_paused(not self.settings.get("open_with.auto_upload"))
         self.conns = {}                             # pane -> the board connected in it
-        self.console_conn = None                    # the board the console window belongs to
-        self.console = None
         self.windows = []                           # open editors and the console
         self.show_hidden = self.settings.get("general.show_hidden")
         self.settings.subscribe(self._setting_changed)
@@ -390,9 +388,9 @@ class App(Gtk.Window):
             return None
         return pane
 
-    def set_device_paused(self, paused):
+    def set_device_paused(self, paused, conn):
         """Terminal mode owns the serial line, so the device pane is frozen until it is released."""
-        pane = self._pane_of(self.console_conn)
+        pane = self._pane_of(conn)
         if pane and pane.backend:
             pane.set_paused(paused)
 
@@ -472,7 +470,7 @@ class App(Gtk.Window):
         self.set_active(pane)
         remember_board_name(self.settings, usb or board, machine)    # these are needed before a board can be read,
         remember_board_rts(self.settings, usb or board, rts)         # so they stay under its USB id
-        pane.detail = "  ".join(x for x in (port, short_model(machine) if machine else "") if x)
+        pane.detail = conn.label = "  ".join(x for x in (port, short_model(machine) if machine else "") if x)
         remember_port(self.settings, port)
         pane.set_location(dev, start)
         self._connect_state("disconnect", pane)
@@ -495,6 +493,11 @@ class App(Gtk.Window):
 
     def _pane_of(self, conn):
         return next((pane for pane, c in self.conns.items() if c is conn), None)
+
+    @property
+    def console(self):
+        """The console of the active pane's board."""
+        return self.conn.console if self.conn else None
 
     @property
     def port_box(self):
@@ -555,8 +558,8 @@ class App(Gtk.Window):
             del self.conns[pane]
             dev, board = conn.device, conn.board
             self._release_edits(dev, board)
-            if self.console and self.console_conn is conn:
-                self.console.close()
+            if conn.console:
+                conn.console.close()
             pane.clear()
             if pane is self.left:
                 self._show_host(pane)       # nothing connected here: the left pane goes back to the host
@@ -965,13 +968,13 @@ class App(Gtk.Window):
                            "Running " + path, quiet=True, on_cancel=be.repl.interrupt)     # Cancel / Quit send Ctrl-C
 
     def open_console(self):
-        if not self.session:
+        conn = self.conn
+        if not conn:
             info(self, "Not connected", "Connect to a device first.")
-        elif self.console:
-            self.console.present()
+        elif conn.console:
+            conn.console.present()
         else:
-            self.console_conn = self.conn
-            self.console = ConsoleWindow(self, self.session)
+            conn.console = ConsoleWindow(self, conn)
 
     def sync_folders(self):
         src = self.active

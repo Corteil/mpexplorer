@@ -10,9 +10,10 @@ from .common import Gdk, GLib, Gtk, icon_button, info, monospace_view, scrolled,
 
 
 class ConsoleWindow(Gtk.Window):
-    def __init__(self, app, session):
-        super().__init__(title="REPL console")
-        self.app, self.session = app, session
+    def __init__(self, app, conn):
+        self.base_title = "REPL console - %s" % (conn.label or conn.port)
+        super().__init__(title=self.base_title)
+        self.app, self.conn, self.session = app, conn, conn.session
         self.set_default_size(780, 500)
         self.set_icon(app.get_icon())
         self.busy = False
@@ -105,8 +106,8 @@ class ConsoleWindow(Gtk.Window):
             return
         for w in (self.activity, self.run_btn, self.stop_btn):
             w.set_sensitive(False)
-        self.app.set_device_paused(True)
-        self.set_title("REPL console - terminal (real REPL)")
+        self.app.set_device_paused(True, self.conn)
+        self.set_title(self.base_title + " - terminal (real REPL)")
 
     def _leave_terminal(self):
         if self.term is None:
@@ -117,8 +118,8 @@ class ConsoleWindow(Gtk.Window):
         self.emu.show()
         for w in (self.activity, self.run_btn, self.stop_btn):
             w.set_sensitive(True)
-        self.app.set_device_paused(False)
-        self.set_title("REPL console")
+        self.app.set_device_paused(False, self.conn)
+        self.set_title(self.base_title)
         self.inp.grab_focus()
 
     # -- output ------------------------------------------------------------
@@ -241,7 +242,7 @@ class ConsoleWindow(Gtk.Window):
         GLib.source_remove(self._drain_id)
         self.session.repl.trace = None
         self.interrupt()
-        self.app.console = None
+        self.conn.console = None
         if self in self.app.windows:
             self.app.windows.remove(self)
         self.destroy()

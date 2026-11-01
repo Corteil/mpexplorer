@@ -94,6 +94,7 @@ label if one is missing on another theme.
 - [x] Phase 3: two boards at once, a source list and Connect in each pane (fake boards).
 - [x] Dragging onto a folder in the same pane moves into it (owner confirmed by hand, 2026-11-01).
 - [ ] Hand test phase 3 on real boards.
+- [x] One console per board, titled with the board (fake boards).
 - [ ] Phases 4-5.
 
 ## 2c. Agent mode (plan: `docs/AGENT_PLAN.md`)

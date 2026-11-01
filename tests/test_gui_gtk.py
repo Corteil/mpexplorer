@@ -1431,19 +1431,59 @@ def test_connect_with_no_board_chosen_says_so(make_app, monkeypatch):
     assert said == ["No port"]
 
 
-def test_the_console_belongs_to_its_board(make_app, tmp_path):
+def test_each_board_has_its_own_console_named_for_it(make_app, tmp_path):
     app = make_app()
     first, second, a, b = two_boards(app, tmp_path)
     app.set_active(app.left)
     app.open_console()
+    left = app.console
+    app.set_active(app.right)
+    assert app.console is None                      # the right board has none yet
+    app.open_console()
+    right = app.console
     pump()
-    assert app.console and app.console_conn is app.conns[app.left]
+    assert left is not right and left.session.repl is first.repl and right.session.repl is second.repl
+    assert "/dev/ttyACM1" in left.get_title() and "/dev/ttyACM3" in right.get_title()
+    assert left in app.windows and right in app.windows
+    app.set_active(app.left)
+    app.open_console()
+    assert app.console is left                      # asking again brings up the same one
+
+
+def test_a_console_closes_with_its_own_board_only(make_app, tmp_path):
+    app = make_app()
+    two_boards(app, tmp_path)
+    app.set_active(app.left)
+    app.open_console()
+    left = app.console
+    app.set_active(app.right)
+    app.open_console()
+    right = app.conns[app.right].console
+    pump()
     app.disconnect(app.right)
     pump()
-    assert app.console                              # the other board's closing leaves it open
-    app.disconnect(app.left)
+    assert right not in app.windows and left in app.windows and app.conns[app.left].console is left
+    left.close()
     pump()
-    assert not app.console
+    assert app.conns[app.left].console is None and left not in app.windows
+
+
+def test_terminal_mode_pauses_only_its_own_boards_pane(make_app, tmp_path):
+    app = make_app()
+    two_boards(app, tmp_path)
+    left = app.conns[app.left]
+    app.set_device_paused(True, left)
+    assert app.left.paused and not app.right.paused
+    app.set_device_paused(False, left)
+    assert not app.left.paused
+
+
+def test_the_console_title_keeps_the_board_through_terminal_mode(make_app, tmp_path):
+    app = make_app()
+    two_boards(app, tmp_path)
+    app.set_active(app.right)
+    app.open_console()
+    assert app.console.base_title.endswith("/dev/ttyACM3")
 
 
 def test_the_arrows_say_copy_and_the_host_starts_on_the_left(make_app):
