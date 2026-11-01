@@ -1,8 +1,43 @@
 # Handoff / project memory
 
-Written so a new Claude session can take over with no other context. Update it as you work. Last updated at
-`main` = `f1791d8` (2026-10-30); CI green (Python 3.11/3.12/3.13, real MicroPython
-v1.26.0 and v1.28.0, and the `gui` job: GTK windows under xvfb).
+Written so a new Claude session can take over with no other context. Update it as you work. Last updated 2026-11-01, at
+`main` = `7555f6e` plus this docs update; CI green (Python 3.11/3.12/3.13, real MicroPython
+v1.26.0 and v1.28.0, and the `gui` job: GTK windows under xvfb). Older sections below are history and may be out of date.
+
+## Where we stopped (2026-11-01)
+Two big features went in on 2026-10-31 and 11-01. Plans, with what was tested: `docs/FIRMWARE_PLAN.md`, `docs/SIDE_BY_SIDE_PLAN.md`. Open items: `docs/TODO.md`.
+
+**Firmware tools (Tools menu).** `firmware.py`, `firmware_catalog.py`, `gtkui/firmware.py`.
+- **Install firmware:** from micropython.org (RP2040, RP2350, ESP32-S3 boards) or the EMF flasher sites (Tildagon, TiDAL), or a local file. The image is checked before writing. Erase first is an option.
+- **Back up or restore flash** and **Erase flash** are separate tools. The list names each device, with a details panel, and the message below gives that device's way to its bootloader.
+- **Start bootloader** appears for a running Pico and Tildagon.
+- esptool is an external need (`pipx install esptool`, version 5). A Pico needs nothing extra.
+- Run on real boards: Pico, Pico 2, Tildagon and 2022 badge backup, erase and restore, each compared with the original afterwards, from scripts using the tools' code. Clicked by the owner: install on all four, restore on a 2022 badge. Never run on real hardware: the 13 other ESP32-S3 boards listed.
+
+**Two boards side by side.** Each pane has its own list (Host, then the ports) and Connect. `App.conns` maps pane to `Connection` (`connection.py`). `App.device`/`board`/`session`/`badge` mean the active pane's board, else the only one. One worker thread still runs every job, so a long job on one board makes the other wait, and Cancel empties the queue for both.
+- A job says which boards it uses (`devices=`), so each badge's screen shows its own. A job that does not say tells no screen when two are connected.
+- Each board has its own console window. Firmware tools close only the board they use.
+- Copied files from a board being disconnected are downloaded to `~/.cache/mpexplorer/copied/` so they can be pasted on the next board; a cut becomes a copy then. Download and close are one job, because Cancel empties the queue.
+- Dragging onto a folder moves within a pane and copies across panes.
+- Boards are told apart by `machine.unique_id()` for remembered folders (`chip:<hex>`). RTS and the port list's model stay on the USB id, needed before a board can be read. Nothing is written to the board: an id file was considered and dropped.
+
+**Board facts learned.**
+- **Tildagon bootloader:** power off from the menu, hold boop while plugging in, keep holding a few seconds. The README in the badge repo (bat + boop for 20 s) did not apply.
+- **`machine.bootloader()`:** a Tildagon hangs until replugged when asked from the raw REPL, and obeys from the normal REPL, so badges use that; Picos use the raw REPL, which works. It does not work on the 2022 badge.
+- **After esptool:** `--after hard-reset` left a Tildagon in its ROM; `watchdog-reset` works. `--no-stub` fails if a stub is already running, so the chip read does not use it. `--before no-reset`, since the chip is already in its ROM.
+- **Reading a chip:** Tildagon `ESP32-S3-PICO-1`, 8 MB, 2 MB PSRAM; 2022 badge `ESP32-S3`, 8 MB embedded, no PSRAM (a commoner chip, so more breakouts can read the same). Two 2022 badges read the same.
+- **OTA data proves nothing after a write:** the image blanks it, and `main.py` at boot writes it back. Trust esptool's hash. This led to a wrong "nothing was written" report on 2026-10-31.
+- **A blank file area** boots on the Tildagon and answers on the REPL on a 2022 badge. `sponsors-vfs.bin` is not needed. The GitHub releases' `micropython.bin` is app-only: never for a fresh install.
+- **The firmware runs its frozen `main.py` first** (`pyexec_file_if_exists`), so a stray file of that name on a badge does not stop it booting.
+- **Board output cap:** see "Board output" below. No firmware fix planned: badge files are tiny on average.
+- **This firmware has no `display.get_framebuffer`**, so the badge's screen cannot be captured. `ctx.text_width` measures text: the round screen has about 161 px at y=80.
+
+**Lessons from these sessions.**
+- Check the ports before any script touches a board (`fuser`), and stop if the owner's app holds one. On 2026-11-01 a test ran on ports the app held, printed that they were busy, and copied a file to a badge anyway. Put the check and the stop in the command itself.
+- An app that is already open keeps its code. Compare its start time with the branch switch before believing a hand test of new code.
+- The clone is what the desktop shortcut runs, so develop in a worktree under the scratchpad, and switch the clone only when the owner asks.
+- `cancel_all` empties the queue, so a job that must not be lost cannot be queued behind a cancellable one.
+- A scratch venv installed with `pip install -e` follows the last path installed: reinstall it after moving between a worktree and the clone.
 
 **The Tk GUI was removed (2026-10-30).** `python -m mpexplorer` is GTK only and prints how to install PyGObject if
 it is missing. `AnsiScreen` (the Tk terminal's emulator) moved to `tests/ansiscreen.py` because the terminal-session tests use it; Tk's key

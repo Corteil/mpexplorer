@@ -189,5 +189,19 @@ Size differs -> changed; same size -> compare SHA-256 (`Backend.checksum`, compu
 If a board has no `hashlib`, equal-size files are assumed identical and the plan says so. Deletes are always
 planned but only run when the user ticks "mirror". A file/folder type clash aborts planning rather than guessing.
 
+## Two boards
+A `Connection` (`connection.py`) holds one board's port, settings key, backend, console session, badge screen and console window. `App.conns`
+maps a pane to its connection, and a port can be open in one pane only. Backends do not care: `copy_tree` and Sync take any two.
+There is still one `JobRunner`, so every job runs in turn and no serial line is shared; the cost is that a long job on one board makes
+the other wait, and `cancel_all` affects both. Jobs name the boards they use with `devices=`, for the badge screens.
+
+Boards are keyed by `machine.unique_id()` (`chip:<hex>`) for remembered folders, since USB serials can be shared. Anything needed before a board
+can be read, RTS and the port list's model, stays under the USB id.
+
+## Firmware tools
+The one exception to installing nothing: they write only to a board in its bootloader, and only when the user starts them. The logic is in `firmware.py`
+and `firmware_catalog.py`, the three dialogs in `gtkui/firmware.py` on a shared `DeviceDialog`. A UF2 drive is written by copying (erase: Raspberry Pi's `flash_nuke.uf2`);
+an ESP32-S3 by esptool as a subprocess; a running RP2 board is backed up over the raw REPL with a checksum per piece, as a UF2 Install accepts. See `docs/FIRMWARE_PLAN.md`.
+
 ## Later
 Persistent connection profiles; agent mode if measured speed demands it.

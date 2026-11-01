@@ -1,6 +1,6 @@
 # Side-by-side boards plan
 
-Status (2026-11-01): plan only, nothing built. Goal: either pane can show the host or a board, so two boards can be connected
+Status (2026-11-01): phases 1-5 built and merged, see `docs/TODO.md` for hand tests still open. Goal: either pane can show the host or a board, so two boards can be connected
 at once and files copied straight between them. Each board is told apart by its chip id, whatever its USB serial says.
 
 ## Telling boards apart: the chip id (decided by the owner, 2026-11-01)
