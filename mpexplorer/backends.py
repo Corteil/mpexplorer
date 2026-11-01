@@ -25,6 +25,7 @@ class Entry:
 class LocalBackend:
     key = "local"
     label = "Host"
+    in_place = True         # its files are on this computer: a program can open them where they are, no copy needed
 
     def __init__(self):
         self.root = os.path.expanduser("~")
