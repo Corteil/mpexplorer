@@ -297,12 +297,41 @@ class RawREPL:
             self._read_until(b"w REPL; CTRL-B to exit\r\n>", timeout)
         return False
 
-    def soft_reset(self):
+    # What the board says when it has finished starting and is waiting for the next thing: MicroPython's prompt, or
+    # CircuitPython's "Press any key" after code.py ends.
+    BOOT_DONE = (b">>> ", b"Press any key to enter the REPL")
+
+    def soft_reset(self, on_output=None, quiet=0.6, limit=5.0):
+        """Restart the interpreter like Ctrl-D at the REPL. With on_output, what the board prints while starting
+        (its banner, the output of main.py / code.py) is handed to it as it arrives; reading stops when the board is
+        waiting at a prompt, or has said nothing for `quiet` seconds, or after `limit` seconds."""
         with self.lock:
             self._trace("info", "soft reset")
-            self.ser.write(b"\x02\x04")         # leave raw mode, Ctrl-D
+            self.ser.write(b"\x02")            # leave raw mode (this makes the board print its banner: not wanted)
             self.raw = False
-            time.sleep(0.5)
+            if not on_output:
+                self.ser.write(b"\x04")
+                time.sleep(0.5)
+                return
+            time.sleep(0.15)
+            self._drain()
+            self.ser.write(b"\x04")
+            start = last = time.monotonic()
+            seen = bytearray()
+            while True:
+                now = time.monotonic()
+                if now - start >= limit or (now - last >= quiet and now - start >= 0.5):
+                    break
+                chunk = self.ser.read(self.ser.in_waiting or 1)
+                if not chunk:
+                    time.sleep(0.005)
+                    continue
+                last = time.monotonic()
+                seen += chunk
+                on_output(chunk)
+                if any(seen.rstrip().endswith(m.rstrip()) for m in self.BOOT_DONE):
+                    break
+            self._rx.clear()
 
     def close(self, reset=False):
         """Leave raw mode and close the port. reset=True also soft-resets the board first, which brings a badge's
