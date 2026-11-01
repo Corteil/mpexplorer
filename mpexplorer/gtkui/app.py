@@ -31,7 +31,7 @@ from .dialogs import (OutputWindow, SyncDialog, TransferPopup, ask_conflict, ask
 from .editor import Editor
 from .firmware import BackupDialog, EraseDialog, FirmwareDialog
 from .viewer import Viewer
-from .pane import Pane
+from .pane import HOST, Pane
 from .prefs import PreferencesDialog
 
 MAX_EDIT_BYTES = 256 * 1024
@@ -67,7 +67,8 @@ class App(Gtk.Window):
         self.local = LocalBackend()
         self.edits = EditManager(self.runner, cache_dir(), self._edit_say, self._edit_conflict, self._refresh_all)
         self.edits.set_paused(not self.settings.get("open_with.auto_upload"))
-        self.conn = None                            # the connected board
+        self.conns = {}                             # pane -> the board connected in it
+        self.console_conn = None                    # the board the console window belongs to
         self.console = None
         self.windows = []                           # open editors and the console
         self.show_hidden = self.settings.get("general.show_hidden")
@@ -94,6 +95,8 @@ class App(Gtk.Window):
             pane._sort = (key, reverse)
         self.left.set_location(self.local, host_start(self.settings, self.local.root))
         self.right.clear()
+        self.scan_ports()
+        self.left.fill_sources(self._ports, HOST)
         self.connect("delete-event", lambda *_: self._quit() or False)
         self.connect("configure-event", self._configured)
         self.connect("destroy", lambda _w: (self._stop_status_timer(), self.watchdog.stop(), Gtk.main_quit()))
@@ -175,7 +178,8 @@ class App(Gtk.Window):
             for p in self.panes:
                 p._render()
         elif key == "general.device_mtimes":
-            self.right.refresh()
+            for pane in self.conns:
+                pane.refresh()
         elif key == "open_with.auto_upload":
             self.edits.set_paused(not value)
             self._sync_pause_button()
@@ -212,12 +216,13 @@ class App(Gtk.Window):
         return False
 
     def folder_changed(self, pane):
-        remember_folder(self.settings, pane is self.right, pane.cwd, self.board)
-        if pane is self.right:
-            self._badge_draw(folder=pane.cwd)
+        conn = self.conns.get(pane)
+        remember_folder(self.settings, bool(conn), pane.cwd, conn.board if conn else None)
+        if conn and conn.badge:
+            self.runner.submit(lambda prog: conn.badge.show(folder=pane.cwd), label="Badge screen", quiet=True)
 
     def sort_changed(self, pane):
-        which = "device" if pane is self.right else "host"
+        which = "device" if pane.title == "Device" else "host"
         self.settings.set("general.sort." + which, list(pane._sort))
         self.settings.save()
 
@@ -253,23 +258,17 @@ class App(Gtk.Window):
     def _build_toolbar(self):
         """Two groups that share one row when the window is wide enough and wrap onto a second row when it is not."""
         conn = Gtk.Box(spacing=4)
-        conn.pack_start(Gtk.Label(label="Port"), False, False, 0)
-        self.port_box = Gtk.ComboBoxText.new_with_entry()
-        self.port_box.set_size_request(340, -1)
-        conn.pack_start(self.port_box, False, False, 4)
         conn.pack_start(icon_button("view-refresh", "Scan for serial ports", self.scan_ports, "Scan"), False, False, 0)
-        self.connect_btn = icon_button("network-offline", "Connect to the board", self.toggle_connection, "Connect")
-        conn.pack_start(self.connect_btn, False, False, 4)
         self.send_time_btn = icon_button(("appointment-soon", "appointment-new", "x-office-calendar"),
                                          "Set the board's clock to this computer's time (UTC)",
                                          self.set_board_clock, "Send time")
         conn.pack_start(self.send_time_btn, False, False, 0)
         files = Gtk.Box(spacing=4)
         for icon, tip, cb, label, pad in (
-                ("go-next", "Upload selected to the device", lambda: self.transfer(self.left, self.right),
-                 "Upload >>", 0),
-                ("go-previous", "Download selected to the host", lambda: self.transfer(self.right, self.left),
-                 "<< Download", 4),
+                ("go-next", "Copy selected to the right pane", lambda: self.transfer(self.left, self.right),
+                 "Copy to right", 0),
+                ("go-previous", "Copy selected to the left pane", lambda: self.transfer(self.right, self.left),
+                 "Copy to left", 4),
                 ("edit-copy", "Copy (Ctrl+C)", lambda: self.copy("copy"), "Copy", 0),
                 ("edit-cut", "Cut (Ctrl+X)", lambda: self.copy("cut"), "Cut", 0),
                 ("edit-paste", "Paste (Ctrl+V)", self.paste, "Paste", 0),
@@ -283,7 +282,6 @@ class App(Gtk.Window):
         bar.add(files)
         for child in bar.get_children():
             child.set_can_focus(False)          # the buttons take focus, not the row wrappers
-        self.scan_ports()
         return bar
 
     def _build_statusbar(self):
@@ -394,37 +392,51 @@ class App(Gtk.Window):
 
     def set_device_paused(self, paused):
         """Terminal mode owns the serial line, so the device pane is frozen until it is released."""
-        if self.right.backend:
-            self.right.set_paused(paused)
+        pane = self._pane_of(self.console_conn)
+        if pane and pane.backend:
+            pane.set_paused(paused)
 
     # -- connection --------------------------------------------------------
     def scan_ports(self):
-        ports = list_ports(self.settings.get("boards.names"))
-        self.port_box.remove_all()
-        for p in ports:
-            self.port_box.append_text(p)
-        entry = self.port_box.get_child()
-        choice = port_choice(self.settings, ports)
-        if choice is not None and not entry.get_text():
-            self.port_box.set_active(choice)
+        self._ports = list_ports(self.settings.get("boards.names"))
+        choice = port_choice(self.settings, self._ports)
+        first = self._ports[choice] if choice is not None and not self.right.source() else None
+        self.right.fill_sources(self._ports, first)
+        self.left.fill_sources(self._ports)
 
-    def toggle_connection(self):
-        if self.device:
-            self.disconnect()
+    def source_changed(self, pane):
+        """Choosing Host takes effect at once. A port only takes effect with the pane's Connect button."""
+        if pane.source() == HOST:
+            self.disconnect(pane, after=lambda: self._show_host(pane))
+
+    def _show_host(self, pane):
+        pane.detail = ""
+        pane.set_location(self.local, host_start(self.settings, self.local.root))
+
+    def toggle_connection(self, pane=None):
+        pane = pane or self.right
+        if pane in self.conns:
+            self.disconnect(pane)
         else:
-            self.connect_device()
+            self.connect_device(pane)
 
-    def connect_device(self):
-        port = device_of(self.port_box.get_child().get_text())
-        if not port:
-            info(self, "No port", "Pick a serial port first (Scan).")
+    def connect_device(self, pane=None):
+        if not pane:
+            pane = self.active if device_of(self.active.source()) not in ("", HOST) else self.right
+        port = device_of(pane.source())
+        if not port or port == HOST:
+            info(self, "No port", "Pick a board in this pane's list first (Scan).")
             return
-        self.disconnect(after=lambda: self._connect_to(port))
+        if any(conn.port == port and where is not pane for where, conn in self.conns.items()):
+            info(self, "Already connected", "%s is connected in the other pane. A board can be open in one pane "
+                 "at a time." % port)
+            return
+        self.disconnect(pane, after=lambda: self._connect_to(port, pane))
 
-    def _connect_to(self, port):
+    def _connect_to(self, port, pane):
         self.set_status("Connecting to %s ..." % port)
-        self._connect_state("connecting")
-        self.connect_btn.set_sensitive(False)
+        self._connect_state("connecting", pane)
+        pane.connect_btn.set_sensitive(False)
 
         board = board_id(port)
 
@@ -443,33 +455,55 @@ class App(Gtk.Window):
                 raise
 
         def done(res, exc):
-            self.connect_btn.set_sensitive(True)
+            pane.connect_btn.set_sensitive(True)
             if exc:
-                self._connect_state("connect")
+                self._connect_state("connect", pane)
                 self.set_status("Connection failed")
                 error(self, "Connection failed", str(exc))
                 return
             move_folder_to_chip(self.settings, board, res[4])
-            self.connected(res[0], res[1], port, res[4], res[2], rts=res[3], usb=board)
+            self.connected(res[0], res[1], port, res[4], res[2], rts=res[3], usb=board, pane=pane)
         self.runner.submit(work, done, "Connecting", quiet=True)
 
-    def connected(self, dev, start, port, board, machine="", rts=False, usb=None):
+    def connected(self, dev, start, port, board, machine="", rts=False, usb=None, pane=None):
         """The connection is up: show the board, and remember the port, its model (and later its folders)."""
-        self.conn = Connection.open_on(dev, port, board)
+        pane = pane or self.right
+        conn = self.conns[pane] = Connection.open_on(dev, port, board)
+        self.set_active(pane)
         remember_board_name(self.settings, usb or board, machine)    # these are needed before a board can be read,
         remember_board_rts(self.settings, usb or board, rts)         # so they stay under its USB id
-        self.right.detail = "  ".join(x for x in (port, short_model(machine) if machine else "") if x)
+        pane.detail = "  ".join(x for x in (port, short_model(machine) if machine else "") if x)
         remember_port(self.settings, port)
-        self.right.set_location(dev, start)
-        self._connect_state("disconnect")
-        self.connect_btn.set_sensitive(True)
+        pane.set_location(dev, start)
+        self._connect_state("disconnect", pane)
+        pane.connect_btn.set_sensitive(True)
         self.set_status("Connected to %s" % port)
         if self.settings.get("general.set_board_clock"):
             self._set_clock(dev, "Connected to %s; " % port)
-        self.conn.badge = BadgeScreen(dev.repl) if self.settings.get("general.badge_screen") else None
-        self._badge_draw(folder=start)
+        conn.badge = BadgeScreen(dev.repl) if self.settings.get("general.badge_screen") else None
+        if conn.badge:
+            self.runner.submit(lambda prog: conn.badge.show(folder=start), label="Badge screen", quiet=True)
 
-    # What the rest of the window asks about the board, none when nothing is connected
+    # What the rest of the window asks about "the" board: the active pane's, else the only one connected
+    @property
+    def conn(self):
+        return self.conns.get(self.active) or next(iter(self.conns.values()), None)
+
+    @conn.setter
+    def conn(self, value):
+        self.conns[self.right] = value
+
+    def _pane_of(self, conn):
+        return next((pane for pane, c in self.conns.items() if c is conn), None)
+
+    @property
+    def port_box(self):
+        return self.right.source_box
+
+    @property
+    def connect_btn(self):
+        return self.right.connect_btn
+
     @property
     def device(self):
         return self.conn.device if self.conn else None
@@ -486,12 +520,12 @@ class App(Gtk.Window):
     def badge(self):
         return self.conn.badge if self.conn else None
 
-    def _connect_state(self, state):
+    def _connect_state(self, state, pane=None):
         """The Connect button shows what a click would do: plug in, unplug, or wait."""
         icon, tip, label = {"connect": ("network-offline", "Connect to the board", "Connect"),
                             "connecting": ("emblem-synchronizing", "Connecting...", "Connecting..."),
                             "disconnect": ("network-wired", "Disconnect from the board", "Disconnect")}[state]
-        set_icon(self.connect_btn, icon, tip, label)
+        set_icon((pane or self.right).connect_btn, icon, tip, label)
 
     def _badge_draw(self, **kw):
         """Queue a redraw of the badge's status screen (a no-op without one)."""
@@ -501,7 +535,8 @@ class App(Gtk.Window):
 
     def _badge_hook(self, job, phase, exc):
         """Worker thread, around every job: say what the board is doing (quiet jobs are not worth a redraw)."""
-        badge = self.badge
+        # a job does not say which board it uses yet, so with two connected no screen is told
+        badge = self.badge if len(self.conns) == 1 else None
         if not badge or job.quiet:
             return
         if phase == "start":
@@ -509,24 +544,29 @@ class App(Gtk.Window):
         else:
             badge.show("Cancelled" if isinstance(exc, Cancelled) else "Failed" if exc else "Done")
 
-    def disconnect(self, after=None, keep_copied=True):
-        """after runs once the board is closed or queued to close. keep_copied: files copied from this board are
-        downloaded first, so they can be pasted on the next one."""
-        if not self.device and after:
+    def disconnect(self, pane=None, after=None, keep_copied=True):
+        """Close the board in a pane (by default the active one, else the only one). after runs once it is closed or
+        queued to close. keep_copied: files copied from it are downloaded first, to paste on the next board."""
+        pane = pane or self._pane_of(self.conn)
+        conn = self.conns.get(pane)
+        if not conn and after:
             after()
-        if self.device:
-            conn, self.conn = self.conn, None
+        if conn:
+            del self.conns[pane]
             dev, board = conn.device, conn.board
             self._release_edits(dev, board)
-            if self.console:
+            if self.console and self.console_conn is conn:
                 self.console.close()
-            self.right.clear()
+            pane.clear()
+            if pane is self.left:
+                self._show_host(pane)       # nothing connected here: the left pane goes back to the host
+                pane.fill_sources(self._ports, HOST)
             reset = self.settings.get("general.reset_on_disconnect")
             if conn.badge and not reset:
                 self.runner.submit(lambda prog: conn.badge.show(status="press reset button", kind="gone"),
                                    label="Badge screen", quiet=True)
-            self._connect_state("connect")
-            self.connect_btn.set_sensitive(True)
+            self._connect_state("connect", pane)
+            pane.connect_btn.set_sensitive(True)
             self.set_status("Disconnected")
             if keep_copied and self.clipboard.holds(dev):
                 self._keep_copied(dev, reset, after)
@@ -583,19 +623,19 @@ class App(Gtk.Window):
             if not self.runner.busy:
                 break
             time.sleep(0.1)
-        if self.device and not self.runner.busy:
-            try:
-                self.edits.flush(self.device, self.board)         # saves still waiting go up before the board is closed
-                self.edits.close_board(self.board)
-            except Exception:
-                pass
-        if self.device:
+        for conn in list(self.conns.values()):
+            if not self.runner.busy:
+                try:
+                    self.edits.flush(conn.device, conn.board)     # saves still waiting go up before the board is closed
+                    self.edits.close_board(conn.board)
+                except Exception:
+                    pass
             try:
                 reset = self.settings.get("general.reset_on_disconnect")
-                if self.conn.badge and not reset:
-                    self.conn.badge.show("press reset button", kind="gone")
-                self.conn.badge = None
-                self.device.close(reset)
+                if conn.badge and not reset:
+                    conn.badge.show("press reset button", kind="gone")
+                conn.badge = None
+                conn.device.close(reset)
             except Exception:
                 pass
 
@@ -610,7 +650,8 @@ class App(Gtk.Window):
     def paste(self):
         pane = self._need_backend()
         if pane and self.clipboard.items:
-            if any(isinstance(be, DeviceBackend) and be is not self.device for be, _path in self.clipboard.items):
+            live = [conn.device for conn in self.conns.values()]
+            if any(isinstance(be, DeviceBackend) and be not in live for be, _path in self.clipboard.items):
                 self.clipboard.clear()      # that board's connection is closed, so these can no longer be read
                 info(self, "Copied from another board",
                      "Those files were copied from a board that is no longer connected, and could not be kept.\n\n"
@@ -894,7 +935,7 @@ class App(Gtk.Window):
         self.runner.submit(work, done, "Saving " + path, quiet=True)
 
     def run_script(self):
-        pane = self.right
+        pane = self._pane_of(self.conn) or self.right
         sel = pane.selected() if pane.backend and pane.backend.key == "device" else []
         if len(sel) != 1 or not sel[0][0].endswith(".py"):
             info(self, "Run", "Select one .py file on the device first.")
@@ -915,6 +956,7 @@ class App(Gtk.Window):
         elif self.console:
             self.console.present()
         else:
+            self.console_conn = self.conn
             self.console = ConsoleWindow(self, self.session)
 
     def sync_folders(self):
@@ -935,7 +977,7 @@ class App(Gtk.Window):
         SyncDialog(self, s_be, s_dir, d_be, d_dir)
 
     def free_space(self):
-        if self.device and self._need_backend(self.right):
+        if self.device and self._need_backend(self._pane_of(self.conn)):
             dev = self.device
             self.runner.submit(lambda prog: dev.free_space("/"),
                                lambda res, exc: info(self, "Free space",
@@ -943,7 +985,7 @@ class App(Gtk.Window):
                                "Checking space", quiet=True)
 
     def set_board_clock(self):
-        if self.device and self._need_backend(self.right):
+        if self.device and self._need_backend(self._pane_of(self.conn)):
             self._set_clock(self.device)
 
     def _set_clock(self, dev, prefix=""):
@@ -953,7 +995,7 @@ class App(Gtk.Window):
         self.runner.submit(lambda prog: dev.set_clock(), done, "Setting the clock", quiet=True)
 
     def soft_reset(self):
-        if not (self.device and self._need_backend(self.right)):
+        if not (self.device and self._need_backend(self._pane_of(self.conn))):
             return
         if ask_yes_no(self, "Soft reset", "Soft-reset the board? Any running program stops."):
             dev = self.device
