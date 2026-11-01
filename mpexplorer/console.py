@@ -61,6 +61,18 @@ class ConsoleSession:
         self.repl.send_input(text)
 
     def soft_reset(self, on_output):
-        """Like Ctrl-D at the REPL: restart the interpreter, losing all variables."""
-        self.repl.soft_reset()
-        on_output("MPY: soft reboot\n", False)
+        """Like Ctrl-D at the REPL: restart the interpreter, losing all variables. Shows what the board prints while it
+        starts (the banner, the output of main.py or code.py), without the prompt it ends on."""
+        dec = codecs.getincrementaldecoder("utf-8")(errors="replace")
+        shown = []
+
+        def emit(chunk):
+            text = dec.decode(chunk).replace("\r", "")
+            if text:
+                shown.append(text)
+        self.repl.soft_reset(emit)
+        text = "".join(shown)
+        if text.endswith(">>> "):
+            text = text[:-4]
+        text = text.strip("\n")
+        on_output((text if text.strip() else "MPY: soft reboot") + "\n", False)

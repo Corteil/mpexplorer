@@ -162,7 +162,8 @@ def test_console_soft_reset_clears_state(repl):
     emit = lambda t, e: out.append((t, e))          # noqa: E731
     s.run("x = 5", emit)
     s.soft_reset(emit)
-    assert out[-1] == ("MPY: soft reboot\n", False) and repl.ser.resets == 1
+    assert out[-1][0].startswith("MPY: soft reboot") and out[-1][1] is False and repl.ser.resets == 1
+    assert not out[-1][0].rstrip().endswith(">>>")      # the prompt it ends on is left out
     assert s.run("x", emit) is False                  # variables are gone, console still works
     assert s.run("1+1", emit) is True
 
@@ -231,3 +232,42 @@ def test_apply_plan_runs_only_the_selected_items(env):
     # a ticked deletion still needs include_delete
     apply_plan(plan, Progress(), include_delete=False, selected={("delete", "keep.txt")})
     assert (dst / "keep.txt").exists()
+
+
+class BootSerial:
+    """Just enough of a port to watch a soft reset: after Ctrl-D it prints what a CircuitPython board does."""
+
+    def __init__(self, reply):
+        self.reply, self.out, self.written, self.in_waiting = reply, bytearray(), [], 0
+
+    def write(self, data):
+        self.written.append(bytes(data))
+        if data == b"\x04":
+            self.out += self.reply
+            self.in_waiting = len(self.out)
+
+    def read(self, n=1):
+        chunk, self.out = bytes(self.out[:n]), self.out[n:]
+        self.in_waiting = len(self.out)
+        return chunk
+
+    def flush(self):
+        pass
+
+
+def test_soft_reset_shows_what_the_board_prints_while_starting():
+    from mpexplorer.transport import RawREPL
+    ser = BootSerial(b"soft reboot\r\n\r\nAuto-reload is on.\r\nHello World!\r\n\r\nCode done running.\r\n\r\n"
+                     b"Press any key to enter the REPL. Use CTRL-D to reload.\r\n")
+    out = []
+    ConsoleSession(RawREPL(ser)).soft_reset(lambda t, e: out.append(t))
+    text = "".join(out)
+    assert "Hello World!" in text and "Code done running." in text and "\r" not in text
+    assert ser.written[0] == b"\x02" and ser.written[-1] == b"\x04"
+
+
+def test_soft_reset_of_a_silent_board_still_says_so():
+    from mpexplorer.transport import RawREPL
+    out = []
+    ConsoleSession(RawREPL(BootSerial(b""))).soft_reset(lambda t, e: out.append(t))
+    assert out == ["MPY: soft reboot\n"]
