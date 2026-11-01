@@ -1525,3 +1525,17 @@ def test_a_folder_at_a_drop_position_is_only_a_folder(make_app, tmp_path, monkey
     assert app.left.folder_at(1, 1) is None
     monkeypatch.setattr(app.left.tree, "get_dest_row_at_pos", lambda x, y: None)
     assert app.left.folder_at(1, 1) is None
+
+
+def test_dragging_shows_an_icon_not_the_whole_row(make_app, tmp_path, monkeypatch):
+    app = make_app()
+    a, b = drag_setup(app, tmp_path)
+    shown = []
+    monkeypatch.setattr("mpexplorer.gtkui.pane.Gtk.drag_set_icon_name", lambda ctx, name, x, y: shown.append(name))
+    select_rows(app.left, "lib")
+    app.left._drag_icon(None)
+    select_rows(app.left, "main.py")
+    app.left._drag_icon(None)
+    select_rows(app.left, "main.py", "lib")
+    app.left._drag_icon(None)
+    assert shown[2] == "edit-copy" and shown[0] != shown[1] and all(shown)

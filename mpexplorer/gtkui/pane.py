@@ -75,6 +75,7 @@ class Pane(Gtk.Frame):
         t.enable_model_drag_source(Gdk.ModifierType.BUTTON1_MASK, DND_TARGET, Gdk.DragAction.COPY)
         t.enable_model_drag_dest(DND_TARGET, Gdk.DragAction.COPY)
         t.connect("drag-begin", lambda _w, _c: app.set_drag_source(self))
+        t.connect_after("drag-begin", lambda _w, ctx: self._drag_icon(ctx))     # after: GTK sets the whole row first
         t.connect("drag-data-get", lambda _w, _c, sel, _i, _t: sel.set(sel.get_target(), 8, b"items"))
         t.connect("drag-data-received", self._dropped)
         self._set_label(self._caption(" (not connected)"))
@@ -255,6 +256,12 @@ class Pane(Gtk.Frame):
             self.app.context_menu().popup_at_pointer(ev)
             return True
         return False
+
+    def _drag_icon(self, ctx):
+        """Drag a small icon, not a picture of the whole row: the item's own icon, or a stack for several."""
+        model, paths = self.tree.get_selection().get_selected_rows()
+        name = model[paths[0]][0] if len(paths) == 1 else "edit-copy"
+        Gtk.drag_set_icon_name(ctx, name or "text-x-generic", 0, 0)
 
     def folder_at(self, x, y):
         """The full path of the folder under a drop, if there is one."""

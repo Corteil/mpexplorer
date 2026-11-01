@@ -92,6 +92,7 @@ label if one is missing on another theme.
 - [x] Paste between boards: Pico 2 to Pico W by hand (2026-11-01, owner reports it worked). Owner reports all of it worked, including folder, cut and conflict.
 - [x] Phase 2: one board's state lives in `connection.py`, with no visible change (fake board, then by hand on real boards; owner reports it worked, 2026-11-01).
 - [x] Phase 3: two boards at once, a source list and Connect in each pane (fake boards).
+- [x] Dragging onto a folder in the same pane moves into it (owner confirmed by hand, 2026-11-01).
 - [ ] Hand test phase 3 on real boards.
 - [ ] Phases 4-5.
 
