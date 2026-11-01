@@ -222,6 +222,11 @@ class DeviceBackend:
     def free_space(self, p):
         return int(self._run("st=os.statvfs(%r);print(st[1]*st[4])" % p).strip())
 
+    def memory(self):
+        """Flash, file system and RAM sizes (meminfo.read); read-only."""
+        from . import meminfo
+        return meminfo.read(lambda code: self._run(code, 15.0))
+
     def checksum(self, p):
         """SHA-256 computed on the device (no data crosses the link); None if it has no hashlib."""
         out = self._run(

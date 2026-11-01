@@ -134,6 +134,11 @@ class DriveBackend(LocalBackend):
         """Code run on the board (the libraries tools ask what firmware it is, for one)."""
         return self.repl.exec(code, timeout)
 
+    def memory(self):
+        """Flash, file system and RAM sizes as the board reports them (meminfo.read); read-only."""
+        from . import meminfo
+        return meminfo.read(lambda code: self._run(code, 15.0))
+
     def board_path(self, p):
         """'/media/pi/CIRCUITPY/lib/x.py' -> '/lib/x.py', the path the board itself uses."""
         rel = os.path.relpath(p, self.mount)
