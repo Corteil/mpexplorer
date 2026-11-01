@@ -13,6 +13,7 @@ from ..custom_firmware import make_catalog as make_custom_catalog
 from ..firmware_catalog import NUKE_FILE, Build, Catalog, default_build, saved_text
 from ..ports import board_id
 from .common import GLib, Gtk, ask_yes_no, error
+from .sources import SourcesDialog
 
 STEPS = ("To put a board in its bootloader:\n"
          "Pico or Pico 2: %s.\n"
@@ -431,10 +432,11 @@ class FirmwareDialog(DeviceDialog):
         self.connect_btn.set_no_show_all(True)
         self.connect_btn.hide()                                     # add_button has already shown it
         self.install_btn = self.add_button("Install", Gtk.ResponseType.OK)
+        self.sources_btn = self.add_button("Manage sources...", Gtk.ResponseType.HELP)
 
     def locked_widgets(self):
         return (self.install_btn, self.close_btn, self.board_box, self.chooser, self.site_rows, self.use_site,
-                self.use_file, self.erase)
+                self.use_file, self.erase, self.sources_btn)
 
     def unlocked_widgets(self):
         return (self.board_box, self.use_site, self.use_file)
@@ -447,6 +449,15 @@ class FirmwareDialog(DeviceDialog):
             self.install()
         elif response == Gtk.ResponseType.APPLY:
             self._connect_new_port()
+        elif response == Gtk.ResponseType.HELP:
+            SourcesDialog(self, self.app, on_close=self._sources_closed)
+
+    def _sources_closed(self):
+        """Sources may have been added or removed: rebuild the Firmware box, keeping the choice if it still exists."""
+        if self.closed:
+            return
+        self.fill_firmware_box()
+        self.custom_catalogs = {n: c for n, c in self.custom_catalogs.items() if n in self.custom}
 
     def device_changed(self, drive):
         pico = bool(drive and drive.method == "uf2" and drive.chip in ("rp2040", "rp2350"))

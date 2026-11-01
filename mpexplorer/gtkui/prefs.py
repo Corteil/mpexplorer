@@ -2,6 +2,7 @@
 from ..openwith import describe_handler, forget_handler, normalize_extension, remember_handler
 from .common import Gio, Gtk, ask_yes_no, error, info, prompt, scrolled
 from .dialogs import ask_open_with
+from .sources import SourcesManager
 
 GENERAL = [
     ("general.show_hidden", "Show hidden files (names starting with a dot)"),
@@ -36,6 +37,7 @@ class PreferencesDialog(Gtk.Dialog):
         nb.append_page(general, Gtk.Label(label="General"))
 
         nb.append_page(self._file_types_page(), Gtk.Label(label="File types"))
+        nb.append_page(SourcesManager(app, self), Gtk.Label(label="Sources"))
 
         files = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8, margin=12)
         files.pack_start(Gtk.Label(label="Settings are stored in:", xalign=0), False, False, 0)
