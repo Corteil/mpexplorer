@@ -233,15 +233,15 @@ def test_send_time_button_sets_the_board_clock(make_app, tmp_path, monkeypatch):
     assert "board clock set to" in app.status.get_text()
 
 
-def test_toolbar_wraps_onto_a_second_row_when_narrow(make_app):
+def test_toolbar_stays_on_one_row_when_narrow(make_app):
     app = make_app()
-    bar = app.send_time_btn.get_parent().get_parent().get_parent()          # button > group > FlowBoxChild > FlowBox
+    bar = app.send_time_btn.get_parent().get_parent().get_parent()          # button > group > FlowBoxChild > bar
     app.resize(1800, 600)
     pump(600)
     one_row = bar.get_allocated_height()
-    app.resize(width_for(app, 900), 600)                                     # below the width of both groups together
+    app.resize(width_for(app, 900), 600)                                     # the port lists have moved to the panes
     pump(600)
-    assert bar.get_allocated_height() > one_row * 1.5
+    assert bar.get_allocated_height() == one_row
 
 
 def test_disconnect_resets_the_board_only_when_the_setting_is_on(make_app, tmp_path):
@@ -1328,3 +1328,125 @@ def test_a_connection_holds_the_boards_state_and_goes_on_disconnect(make_app, tm
     app.disconnect()
     pump()
     assert app.conn is None and app.device is None and app.session is None and app.badge is None
+
+
+def two_boards(app, tmp_path):
+    a, b = tmp_path / "a", tmp_path / "b"
+    a.mkdir()
+    b.mkdir()
+    first = DeviceBackend(RawREPL(FakeSerial()))
+    second = DeviceBackend(RawREPL(FakeSerial()))
+    app.connected(first, str(a), "/dev/ttyACM1", "chip:aa", pane=app.left)
+    app.connected(second, str(b), "/dev/ttyACM3", "chip:bb", pane=app.right)
+    pump()
+    return first, second, a, b
+
+
+def test_two_boards_side_by_side(make_app, tmp_path):
+    app = make_app()
+    first, second, a, b = two_boards(app, tmp_path)
+    assert app.left.backend is first and app.right.backend is second and len(app.conns) == 2
+    assert app.left.get_label().startswith("Device: /dev/ttyACM1")
+    assert app.right.get_label().startswith("Device: /dev/ttyACM3")
+    app.set_active(app.left)
+    assert app.device is first and app.board == "chip:aa"
+    app.set_active(app.right)
+    assert app.device is second and app.board == "chip:bb"
+
+
+def test_copy_straight_between_two_connected_boards(make_app, tmp_path):
+    app = make_app()
+    first, second, a, b = two_boards(app, tmp_path)
+    (a / "main.py").write_text("hello")
+    app.left.refresh()
+    until(lambda: any(r[1] == "main.py" for r in app.left.store))
+    i = [n for n, r in enumerate(app.left.store) if r[1] == "main.py"][0]
+    app.left.tree.get_selection().select_path(Gtk.TreePath.new_from_string(str(i)))
+    app.transfer(app.left, app.right)
+    until(lambda: app.status.get_text().startswith("Done"))
+    assert (b / "main.py").read_text() == "hello" and (a / "main.py").exists()
+
+
+def test_paste_between_two_connected_boards_needs_no_temporary_copy(make_app, tmp_path, private_cache):
+    app = make_app()
+    first, second, a, b = two_boards(app, tmp_path)
+    (a / "main.py").write_text("hello")
+    app.clipboard.set("copy", [(first, str(a / "main.py"))])
+    app.set_active(app.right)
+    app.paste()
+    until(lambda: app.status.get_text().startswith("Done"))
+    assert (b / "main.py").read_text() == "hello" and app.clipboard.folder is None
+
+
+def test_closing_one_board_leaves_the_other(make_app, tmp_path):
+    app = make_app()
+    first, second, a, b = two_boards(app, tmp_path)
+    closed = []
+    first.close = lambda reset=False: closed.append("first")
+    second.close = lambda reset=False: closed.append("second")
+    app.disconnect(app.left)
+    pump()
+    assert closed == ["first"] and app.right.backend is second and app.right in app.conns
+    assert app.left.backend is app.local and app.left.source() == "Host"    # the left pane goes back to the host
+    app.disconnect(app.right)
+    pump()
+    assert closed == ["first", "second"] and not app.right.backend
+
+
+def test_each_pane_remembers_its_own_boards_folder(make_app, tmp_path):
+    app = make_app()
+    first, second, a, b = two_boards(app, tmp_path)
+    folders = app.settings.get("folders.boards")
+    assert folders["chip:aa"] == str(a) and folders["chip:bb"] == str(b)
+
+
+def test_a_board_cannot_be_opened_in_both_panes(make_app, tmp_path, monkeypatch):
+    app = make_app()
+    two_boards(app, tmp_path)
+    app.disconnect(app.right)
+    pump()
+    said = []
+    monkeypatch.setattr("mpexplorer.gtkui.app.info", lambda parent, title, text: said.append(title))
+    monkeypatch.setattr(app, "_connect_to", lambda *a: pytest.fail("opened it twice"))
+    app.right.source_box.get_child().set_text("/dev/ttyACM1  Pico")
+    app.connect_device(app.right)
+    assert said == ["Already connected"]
+
+
+def test_choosing_host_closes_that_panes_board_and_shows_the_host(make_app, tmp_path):
+    app = make_app()
+    first, second, a, b = two_boards(app, tmp_path)
+    app.right.source_box.get_child().set_text("Host")
+    pump()
+    assert app.right.backend is app.local and app.right not in app.conns and app.left in app.conns
+    assert app.right.get_label().startswith("Host")
+
+
+def test_connect_with_no_board_chosen_says_so(make_app, monkeypatch):
+    app = make_app()
+    said = []
+    monkeypatch.setattr("mpexplorer.gtkui.app.info", lambda parent, title, text: said.append(title))
+    app.left.fill_sources([], "Host")
+    app.connect_device(app.left)
+    assert said == ["No port"]
+
+
+def test_the_console_belongs_to_its_board(make_app, tmp_path):
+    app = make_app()
+    first, second, a, b = two_boards(app, tmp_path)
+    app.set_active(app.left)
+    app.open_console()
+    pump()
+    assert app.console and app.console_conn is app.conns[app.left]
+    app.disconnect(app.right)
+    pump()
+    assert app.console                              # the other board's closing leaves it open
+    app.disconnect(app.left)
+    pump()
+    assert not app.console
+
+
+def test_the_arrows_say_copy_and_the_host_starts_on_the_left(make_app):
+    app = make_app()
+    assert app.left.source() == "Host" and app.left.backend is app.local and app.right.backend is None
+    assert app.left.connect_btn is not app.right.connect_btn

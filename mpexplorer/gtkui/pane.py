@@ -2,6 +2,7 @@
 from ..backends import human
 from .common import Gdk, GLib, Gtk, error, fmt_time, icon_button, scrolled
 
+HOST = "Host"
 DND_TARGET = [Gtk.TargetEntry.new("application/x-mpexplorer-items", Gtk.TargetFlags.SAME_APP, 0)]
 
 
@@ -21,6 +22,17 @@ class Pane(Gtk.Frame):
 
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2, margin=2)
         self.add(box)
+        source = Gtk.Box(spacing=4)
+        self.filling = False
+        self.source_box = Gtk.ComboBoxText.new_with_entry()
+        self.source_box.set_size_request(120, -1)
+        self.source_box.get_child().set_width_chars(10)
+        self.source_box.connect("changed", lambda _b: self._source_changed())
+        source.pack_start(self.source_box, True, True, 0)
+        self.connect_btn = icon_button("network-offline", "Connect to the board",
+                                       lambda: app.toggle_connection(self), "Connect")
+        source.pack_start(self.connect_btn, False, False, 0)
+        box.pack_start(source, False, False, 0)
         bar = Gtk.Box(spacing=4)
         bar.pack_start(icon_button("go-up", "Parent folder (Backspace)", self.up, "Up"), False, False, 0)
         bar.pack_start(icon_button("view-refresh", "Refresh (F5)", self.refresh, "Refresh"), False, False, 0)
@@ -75,7 +87,26 @@ class Pane(Gtk.Frame):
     def _set_label(self, text):
         self.set_label(text)
 
+    def source(self):
+        return self.source_box.get_child().get_text().strip()
+
+    def fill_sources(self, ports, choice=None):
+        """Host, then the ports. What is chosen stays, unless choice says otherwise."""
+        text = self.source() if choice is None else choice
+        self.filling = True
+        self.source_box.remove_all()
+        self.source_box.append_text(HOST)
+        for port in ports:
+            self.source_box.append_text(port)
+        self.source_box.get_child().set_text(text)
+        self.filling = False
+
+    def _source_changed(self):
+        if not self.filling:
+            self.app.source_changed(self)
+
     def set_location(self, backend, path):
+        self.title = "Device" if backend and backend.key == "device" else "Host" if backend else self.title
         self.backend, self.cwd, self._good = backend, path, ""
         self._set_label(self._caption() if backend else self._caption(" (not connected)"))
         self.refresh()
@@ -177,7 +208,7 @@ class Pane(Gtk.Frame):
         show_hidden = self.app.show_hidden
         rows = [e for e in self._entries
                 if (show_hidden or not e.name.startswith(".")) and flt in e.name.lower()]
-        show_mtime = self.title != "Device" or self.app.settings.get("general.device_mtimes")
+        show_mtime = self.title == "Host" or self.app.settings.get("general.device_mtimes")
         order = self._sort[0] if show_mtime or self._sort[0] != "modified" else "name"     # no times: sort by name
         key = {"name": lambda e: e.name.lower(), "size": lambda e: e.size,
                "modified": lambda e: e.mtime}[order]
