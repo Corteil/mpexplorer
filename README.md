@@ -8,6 +8,8 @@ board over USB serial. **Nothing is installed on the board** in normal use: it w
 
 ![REPL console](docs/images/console.png)
 
+![REPL console in Terminal mode (the board's real REPL)](docs/images/terminal.png)
+
 ## Features
 - Two panes, each showing the host or a board, so two boards can be open side by side: browse, sort, filter, show hidden files
 - Copy files and folders between the panes (buttons, drag, or copy and paste). Dragging onto a folder copies into it, or moves

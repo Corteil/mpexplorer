@@ -122,8 +122,8 @@ label if one is missing on another theme.
 ## 3. Release and housekeeping
 - [ ] Tag `v0.1.0` to exercise `release.yml`, then merge Dependabot PR #2 (`softprops/action-gh-release` v3).
 - [x] Screenshots in the README (main window, console; 2026-10-31, rendered against the fake board, path boxes set by hand for the picture).
-- [ ] Terminal mode screenshot in the README. (Main window screenshot redone for side-by-side, 2026-11-01.)
-- [ ] Owner to decide: delete the leftover GitHub branches (`claude/micropython-file-explorer-gui-7tsgfy`, `handoff-pi`, `wire-settings` have nothing unmerged; `todo-refresh` has one older TODO commit).
+- [x] Terminal mode screenshot in the README (2026-11-01, rendered against the fake board). (Main window screenshot redone for side-by-side, 2026-11-01.)
+- [x] Deleted the leftover GitHub branches (`claude/micropython-file-explorer-gui-7tsgfy`, `handoff-pi`, `wire-settings` were fully merged; `todo-refresh` was a stale 2026-10-30 TODO snapshot), by the owner's word 2026-11-01. Only `main` and the Dependabot branch are left.
 - [ ] Optional: add `mpexplorer.desktop` and the icon to the repo with an install note, instead of README text only.
 
 ## 4. Later / ideas
