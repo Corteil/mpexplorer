@@ -69,7 +69,7 @@ Reopen the app from `main` first. The owner checked all five in the real window 
    `import picographics` works. (Do this only on a board you do not mind reflashing: install stock MicroPython again afterwards from the same dialog.)
 3. **Check all** shows the newest version of each source; **Custom...** with a direct `https://` link to a `.uf2` asks you to trust a site that is not GitHub.
 
-## Custom library sources (added 2026-11-01; tests, fake display and real boards by script; no real window yet)
+## Custom library sources (added 2026-11-01; hand-tested by the owner 2026-11-01, all OK)
 1. **Preferences > Sources** now has a *Library sources* list under the firmware one, and **Install libraries > Manage sources...** opens it. Add the presets *Pimoroni phew* and *SparkFun Qwiic*.
 2. Install libraries: the source box lists them (*Pimoroni phew (MicroPython)*, *SparkFun Qwiic (CircuitPython)*). On a MicroPython board install `phew`, then in the console `import phew`.
    On a CircuitPython board pick *SparkFun Qwiic* and install one library; **Check for updates** works on both.
