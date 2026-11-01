@@ -561,10 +561,11 @@ class App(Gtk.Window):
         if pane and self.clipboard.items:
             if any(isinstance(be, DeviceBackend) and be is not self.device for be, _path in self.clipboard.items):
                 self.clipboard.clear()      # that board's connection is closed, so these can no longer be read
-                info(self, "Copied from another board", "Those files were copied from a board that is no longer "
-                     "connected, and only one board can be connected at a time.\n\nConnect to that board, download "
-                     "the files to the Host pane, then connect to this board and upload them. If this is the same board, "
-                     "reconnected, just copy them again.")
+                info(self, "Copied from another board",
+                     "Those files were copied from a board that is no longer connected, and only one board can be "
+                     "connected at a time.\n\nConnect to that board, download the files to the Host pane, then "
+                     "connect to this board and upload them. If this is the same board, reconnected, just copy them "
+                     "again.")
                 return
             move = self.clipboard.mode == "cut"
             self._start_copy(self.clipboard.items, pane.backend, pane.cwd, move)
