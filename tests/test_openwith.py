@@ -273,7 +273,7 @@ class SyncRunner:
     def __init__(self):
         self.labels = []
 
-    def submit(self, fn, on_done=None, label="", quiet=False, status=None, inline=False):
+    def submit(self, fn, on_done=None, label="", quiet=False, status=None, inline=False, devices=None):
         from mpexplorer.ops import Progress
         self.labels.append(label)
         try:
