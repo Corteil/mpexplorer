@@ -119,3 +119,106 @@ def test_a_micropython_board_is_named_too_and_a_shared_serial_is_not_learned_by_
     finally:
         app.conns.clear()
         app.destroy()
+
+
+# -- nicknames (docs/BOARD_LABELS_PLAN.md, phase 3) ------------------------------------------------------------
+def connect_cp(app, tmp_path, pane=None, board="chip:559cbfcf", usb="2e8a:000b:559CBFCF6BBE8A64", port="/dev/ttyACM4"):
+    mount = tmp_path / "CIRCUITPY"
+    mount.mkdir(exist_ok=True)
+    be = DriveBackend(str(mount), types.SimpleNamespace(exec=lambda *a, **k: b"", close=lambda *a: None))
+    app.connected(be, str(mount), port, board, "Raspberry Pi Pico 2 with rp2350a", usb=usb, pane=pane or app.right,
+                  firmware=("circuitpython", "10.3.1"))
+    return (pane or app.right)
+
+
+def ask(monkeypatch, answers, confirm=True):
+    from mpexplorer.gtkui import app as appmod
+    shown = []
+    monkeypatch.setattr(appmod, "prompt", lambda parent, title, label, initial="", allow_empty=False:
+                        shown.append((label, initial)) or answers.pop(0))
+    monkeypatch.setattr(appmod, "ask_yes_no", lambda *a: confirm)
+    monkeypatch.setattr(appmod, "info", lambda parent, title, text: shown.append(("info", text)))
+    return shown
+
+
+def test_naming_a_board_updates_every_label_and_the_port_list(tmp_path, monkeypatch):
+    app = make(tmp_path, monkeypatch)
+    try:
+        pane = connect_cp(app, tmp_path)
+        assert pane.name_btn.get_sensitive() and '"' not in pane.detail
+        shown = ask(monkeypatch, ["  Bench\tCP  "])
+        app.name_board(pane)
+        assert app.settings.get("boards.nicknames") == {"chip:559cbfcf": "Bench CP"}
+        assert pane.detail == '/dev/ttyACM4  "Bench CP"  Pico 2 (rp2350a)  CircuitPython 10.3.1'
+        assert app.conn.label == pane.detail and 'Named /dev/ttyACM4 "Bench CP"' in app.status.get_text()
+        assert "up to 24 characters" in shown[0][0] and shown[0][1] == ""
+        assert app.settings.get("boards.ids") == {"2e8a:000b:559CBFCF6BBE8A64": "chip:559cbfcf"}
+    finally:
+        app.conns.clear()
+        app.destroy()
+
+
+def test_a_name_survives_reconnecting_and_shows_in_the_port_list(tmp_path, monkeypatch):
+    app = make(tmp_path, monkeypatch)
+    try:
+        from mpexplorer import ports
+        pane = connect_cp(app, tmp_path)
+        ask(monkeypatch, ["Bench CP"])
+        app.name_board(pane)
+        app.conns.clear()
+        pane.clear()
+        listed = ports.Entry("/dev/ttyACM4", '/dev/ttyACM4  "Bench CP"  Pico 2  #8a64', bi.CIRCUITPYTHON, "Bench CP")
+        monkeypatch.setattr("mpexplorer.gtkui.app.list_boards", lambda settings: [listed])
+        app.scan_ports()
+        assert listed.text in app._ports
+        pane = connect_cp(app, tmp_path)                                                      # a later session
+        assert '"Bench CP"' in pane.detail and 'Connected to "Bench CP"' in app.status.get_text()
+    finally:
+        app.conns.clear()
+        app.destroy()
+
+
+def test_the_source_box_keeps_pointing_at_the_renamed_port(tmp_path, monkeypatch):
+    app = make(tmp_path, monkeypatch)
+    try:
+        from mpexplorer import ports
+        app.right.source_box.get_child().set_text(ENTRIES[1].text)                 # what the owner picked to connect
+        pane = connect_cp(app, tmp_path)
+        before = pane.source()
+        renamed = [ports.Entry("/dev/ttyACM4", '/dev/ttyACM4  "Bench CP"  Pico 2  #8a64', bi.CIRCUITPYTHON,
+                               "Bench CP")]
+        monkeypatch.setattr("mpexplorer.gtkui.app.list_boards", lambda settings: list(renamed))
+        ask(monkeypatch, ["Bench CP"])
+        app.name_board(pane)
+        assert pane.source() == renamed[0].text != before and badge(pane)[1] == "CP"
+    finally:
+        app.conns.clear()
+        app.destroy()
+
+
+def test_clearing_a_name_and_the_duplicate_and_shared_serial_cases(tmp_path, monkeypatch):
+    app = make(tmp_path, monkeypatch)
+    try:
+        pane = connect_cp(app, tmp_path)
+        bi.set_nickname(app.settings, "chip:other", "Bench CP")                               # another board has it
+        shown = ask(monkeypatch, ["bench cp"], confirm=False)
+        app.name_board(pane)                                                                  # refused at the question
+        assert bi.nickname_of(app.settings, "chip:559cbfcf") == ""
+        ask(monkeypatch, ["Bench CP", ""])
+        app.name_board(pane)                                                                  # accepted: both may share
+        assert bi.nickname_of(app.settings, "chip:559cbfcf") == "Bench CP"
+        app.name_board(pane)                                                                  # then removed with ''
+        assert bi.nickname_of(app.settings, "chip:559cbfcf") == "" and '"' not in pane.detail
+        app.conns.clear()
+        pane.clear()
+        assert not pane.name_btn.get_sensitive()
+        shown = ask(monkeypatch, [])
+        app.name_board(pane)                                                                  # nothing connected
+        assert shown and shown[0][0] == "info" and "Connect to the board first" in shown[0][1]
+        pane = connect_cp(app, tmp_path, board="2e8a:0005:000000000000", usb="2e8a:0005:000000000000")
+        shown = ask(monkeypatch, [None])
+        app.name_board(pane)                                                       # no chip id, shared serial
+        assert "would apply to every board" in shown[0][0]
+    finally:
+        app.conns.clear()
+        app.destroy()
