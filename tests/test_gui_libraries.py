@@ -85,7 +85,8 @@ def test_installs_with_dependencies_after_asking(tmp_path, monkeypatch):
         assert "alpha" in asked[0] and "zed" in asked[0] and "3 file(s)" in asked[0]
         assert (tmp_path / "board" / "lib" / "pkg" / "mod.py").read_bytes() == FILES["pkg/mod.py"]
         assert "3 written, 0 already there" in dlg.note.get_text()
-        wait_until(lambda: dlg.have == {"a", "pkg"})      # /lib was read again (the fake packages are not named like their files)
+        # /lib was read again (the fake packages are not named like their files)
+        wait_until(lambda: dlg.have == {"a", "pkg"})
     finally:
         dlg.destroy()
         app.destroy()
