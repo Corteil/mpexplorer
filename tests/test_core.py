@@ -8,7 +8,7 @@ import pytest
 import fakedisplay
 from fakedevice import FakeSerial
 from mpexplorer.backends import CHUNK, DeviceBackend, LocalBackend, human_duration
-from mpexplorer.badgescreen import BadgeScreen, fit
+from mpexplorer.badgescreen import BadgeScreen, fit, screen_code
 from mpexplorer.errors import BackendError, Cancelled
 from mpexplorer.jobs import JobRunner
 from mpexplorer.ops import (ConflictPolicy, Progress, copy_tree, delete_items, delete_tree, is_within,
@@ -303,6 +303,12 @@ def test_fit_shortens_text_and_keeps_the_end_of_a_path():
     assert fit("/apps/Corteil_tildagon_gps_clock", tail=True).startswith("..")
     assert fit("/apps/Corteil_tildagon_gps_clock", tail=True).endswith("gps_clock") and len(fit("x" * 99, 10)) == 10
     assert fit("tab\there\n") == "tabhere"                      # control characters never reach the board
+
+
+def test_the_status_line_is_small_enough_for_the_round_screen():
+    code = screen_code("busy", "pi", "/", "Copying a_long_file_name.txt", "since 03:12")
+    assert " t(76,15," in code and " t(100,13," in code and "t(80,18," not in code
+    assert "Copying a_long_fil.." in code
 
 
 def test_badge_screen_draws_the_status_page_and_skips_repeats(monkeypatch, tmp_path):
