@@ -81,7 +81,8 @@ label if one is missing on another theme.
 - [x] Tildagon install re-run on this code (2026-10-31, reported working).
 - [ ] Try a real ESP32-S3 breakout: the "does not match" message, then a micropython.org build and the erase option.
 - [x] Back up flash and erase only, in the dialog (fakes only).
-- [ ] Try on real boards: Pico and Pico 2 backup, then erase, then restore; badge backup and erase.
+- [x] Real boards, from scripts using the tools' code (2026-11-01): Pico, Pico 2, Tildagon and 2022 badge backup, erase and restore, all compared.
+- [ ] The owner clicks through the tools on a real board.
 - [ ] Recording installs in the settings.
 
 ## 2c. Agent mode (plan: `docs/AGENT_PLAN.md`)
