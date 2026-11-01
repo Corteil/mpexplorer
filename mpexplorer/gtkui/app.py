@@ -30,6 +30,7 @@ from .dialogs import (OutputWindow, SyncDialog, TransferPopup, ask_conflict, ask
                       ask_sync_target)
 from .editor import Editor
 from .firmware import BackupDialog, EraseDialog, FirmwareDialog
+from .libraries import LibrariesDialog
 from .viewer import Viewer
 from .pane import HOST, Pane
 from .prefs import PreferencesDialog
@@ -162,6 +163,7 @@ class App(Gtk.Window):
         t = menu("Tools")
         add(t, "Sync folders...", self.sync_folders)
         add(t, "Install firmware...", self.install_firmware)
+        add(t, "Install libraries...", self.install_libraries)
         add(t, "Back up or restore flash...", lambda: BackupDialog(self))
         add(t, "Erase flash...", lambda: EraseDialog(self))
         w = menu("Window")
@@ -194,6 +196,14 @@ class App(Gtk.Window):
 
     def install_firmware(self):
         FirmwareDialog(self)
+
+    def install_libraries(self):
+        if not self.conn:
+            info(self, "Not connected", "Connect to a device first.")
+            return
+        pane = self._need_backend(self._pane_of(self.conn))
+        if pane:
+            LibrariesDialog(self, pane.backend, self.conn.label or self.conn.port)
 
     # -- remembered state --------------------------------------------------
     def _restore_window(self):

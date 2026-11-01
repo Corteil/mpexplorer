@@ -186,3 +186,20 @@ def installed(backend, dest=DEST):
     if backend.stat(dest) is None:
         return []
     return sorted(os.path.splitext(e.name)[0] for e in backend.listdir(dest))
+
+
+def board_mpy(backend):
+    """The board's .mpy format number, or None when it cannot say (then plain source is used)."""
+    try:
+        out = backend._run("import sys\nprint(getattr(sys.implementation,'_mpy',0))").strip()
+        return mpy_version(int(out))
+    except Exception:
+        return None
+
+
+def summary(plan):
+    """Lines for the confirmation: what will be written."""
+    files = sum(len(p[3]) for p in plan)
+    lines = ["%s %s (%s)" % (name, version, "source" if kind == "py" else ".mpy %s" % kind)
+             for name, version, kind, _h in plan]
+    return lines, files
