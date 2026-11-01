@@ -66,6 +66,10 @@ class Pane(Gtk.Frame):
         self.connect_btn = icon_button("network-offline", "Connect to the board",
                                        lambda: app.toggle_connection(self), "Connect")
         source.pack_start(self.connect_btn, False, False, 0)
+        self.name_btn = icon_button(("bookmark-new", "user-bookmarks", "emblem-favorite"),
+                                    "Name this board (the name follows it)", lambda: app.name_board(self), "Name")
+        self.name_btn.set_sensitive(False)               # only a connected board can be named: its chip id is read then
+        source.pack_start(self.name_btn, False, False, 0)
         box.pack_start(source, False, False, 0)
         bar = Gtk.Box(spacing=4)
         bar.pack_start(icon_button("go-up", "Parent folder (Backspace)", self.up, "Up"), False, False, 0)
@@ -181,6 +185,7 @@ class Pane(Gtk.Frame):
     def set_location(self, backend, path):
         self.title = "Device" if backend and backend.key == "device" else "Host" if backend else self.title
         self.backend, self.cwd, self._good = backend, path, ""
+        self.name_btn.set_sensitive(bool(backend and backend.key == "device"))
         self._set_label(self._caption() if backend else self._caption(" (not connected)"))
         self.refresh()
 
@@ -192,6 +197,7 @@ class Pane(Gtk.Frame):
                 self.refresh()
 
     def clear(self):
+        self.name_btn.set_sensitive(False)
         self.live_kind = None
         self._update_badge()
         self.paused = False

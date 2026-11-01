@@ -102,3 +102,16 @@ def other_boards_named(settings, text, board):
 
 def quoted(nickname):
     return '"%s"' % nickname if nickname else ""
+
+
+def connection_label(port, nickname="", model="", firmware=""):
+    """'/dev/ttyACM4  "Bench CP"  Pico 2 (rp2350a)  CircuitPython 10.3.1': the port, the owner's name, what it is."""
+    return "  ".join(x for x in (port, quoted(nickname), model, firmware) if x)
+
+
+def shared_usb_warning(board):
+    """For the Name dialog: a warning when the board is known only by a USB id that boards may share ('' if fine)."""
+    if board and not board.startswith("chip:") and not unique_usb_serial(board.rsplit(":", 1)[-1]):
+        return ("This board could not give its chip id and its USB serial is shared with other boards, so the name "
+                "would apply to every board with that serial.")
+    return ""

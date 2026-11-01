@@ -39,8 +39,8 @@ def ask_yes_no(parent, title, text):
     return _message(parent, Gtk.MessageType.QUESTION, title, text, Gtk.ButtonsType.YES_NO) == Gtk.ResponseType.YES
 
 
-def prompt(parent, title, label, initial=""):
-    """One-line text prompt; returns the text or None."""
+def prompt(parent, title, label, initial="", allow_empty=False):
+    """One-line text prompt; returns the text or None (cancelled). An empty answer is None unless allow_empty."""
     dlg = Gtk.Dialog(title=title, transient_for=parent, modal=True)
     dlg.add_buttons("Cancel", Gtk.ResponseType.CANCEL, "OK", Gtk.ResponseType.OK)
     dlg.set_default_response(Gtk.ResponseType.OK)
@@ -55,7 +55,7 @@ def prompt(parent, title, label, initial=""):
     res = dlg.run()
     text = entry.get_text()
     dlg.destroy()
-    return text if res == Gtk.ResponseType.OK and text else None
+    return text if res == Gtk.ResponseType.OK and (text or allow_empty) else None
 
 
 def button(label, callback, tooltip=None):

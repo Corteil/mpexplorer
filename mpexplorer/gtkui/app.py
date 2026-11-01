@@ -162,6 +162,7 @@ class App(Gtk.Window):
         add(d, "Run selected script", self.run_script)
         add(d, "Free space", self.free_space)
         add(d, "Set board time now", self.set_board_clock)
+        add(d, "Name this board...", self.name_board)
         add(d, "Soft reset", self.soft_reset)
         t = menu("Tools")
         add(t, "Sync folders...", self.sync_folders)
@@ -507,21 +508,69 @@ class App(Gtk.Window):
                 boardinfo.remember_firmware(self.settings, usb, fw_kind)
             boardinfo.remember_firmware(self.settings, board, fw_kind)
         boardinfo.remember_chip(self.settings, usb, board)
-        kind = "%s %s" % (boardinfo.FIRMWARE_NAMES[fw_kind], firmware[1]) if fw_kind else ""
-        pane.detail = conn.label = "  ".join(x for x in (port, short_model(machine) if machine else "", kind) if x)
+        conn.usb = usb or ""
+        conn.model = short_model(machine) if machine else ""
+        conn.firmware = "%s %s" % (boardinfo.FIRMWARE_NAMES[fw_kind], firmware[1]) if fw_kind else ""
+        pane.detail = conn.label = self._label_of(conn)
         remember_port(self.settings, port)
         remember_source(self.settings, self._side(pane), port)
         pane.set_location(dev, start)
         pane.set_kind(fw_kind)
         self._connect_state("disconnect", pane)
         pane.connect_btn.set_sensitive(True)
-        self.set_status("Connected to %s" % port)
+        shown = boardinfo.quoted(boardinfo.nickname_of(self.settings, board)) or port
+        self.set_status("Connected to %s" % shown)
         if self.settings.get("general.set_board_clock"):
-            self._set_clock(dev, "Connected to %s; " % port)
+            self._set_clock(dev, "Connected to %s; " % shown)
         screen = self.settings.get("general.badge_screen") and firmware[0] != "circuitpython"
         conn.badge = BadgeScreen(dev.repl) if screen else None
         if conn.badge:
             self.runner.submit(lambda prog: conn.badge.show(folder=start), label="Badge screen", quiet=True)
+
+    def _label_of(self, conn):
+        """'/dev/ttyACM4  "Bench CP"  Pico 2 (rp2350a)  CircuitPython 10.3.1'."""
+        return boardinfo.connection_label(conn.port, boardinfo.nickname_of(self.settings, conn.board), conn.model,
+                                          conn.firmware)
+
+    def name_board(self, pane=None):
+        """Device > Name this board (and the pencil button): a nickname for the connected board, kept on this PC."""
+        pane = pane if pane in self.conns else (self._pane_of(self.conn) if self.conn else None)
+        conn = self.conns.get(pane)
+        if not conn:
+            info(self, "Name this board", "Connect to the board first: its chip id is read when it connects, and "
+                 "that is what keeps the name with the right board.")
+            return
+        warning = boardinfo.shared_usb_warning(conn.board)
+        old = boardinfo.nickname_of(self.settings, conn.board)
+        text = prompt(self, "Name this board", "Name for %s (up to %d characters; empty removes the name):%s"
+                      % (conn.port, boardinfo.MAX_NICKNAME, "\n\n" + warning if warning else ""), old, allow_empty=True)
+        if text is None:
+            return
+        clean = boardinfo.clean_nickname(text)
+        taken = clean and clean != old and boardinfo.other_boards_named(self.settings, clean, conn.board)
+        if taken and not ask_yes_no(self, "Name this board",
+                                    'Another board is already called "%s". Use it for this one as well?' % clean):
+            return
+        boardinfo.set_nickname(self.settings, conn.board, clean)
+        self.apply_names()
+        self.set_status('Named %s "%s"' % (conn.port, clean) if clean else "Removed the name of %s" % conn.port)
+
+    def apply_names(self):
+        """A nickname changed: rebuild every place that shows it (labels, console titles, the port lists)."""
+        for pane, conn in self.conns.items():
+            pane.detail = conn.label = self._label_of(conn)
+            pane._set_label(pane._caption(" (terminal active - paused)" if pane.paused else ""))
+            if conn.console:
+                conn.console.base_title = "REPL console - %s" % (conn.label or conn.port)
+                conn.console.set_title(conn.console.base_title)
+        chosen = {pane: pane.source() for pane in self.panes}
+        self.scan_ports()
+        for pane, old in chosen.items():
+            device = device_of(old) if old and old != HOST else ""
+            new = next((t for t in self._ports if device_of(t) == device), None) if device else None
+            if new and new != old:               # the same port, now listed with its new name
+                pane.fill_sources(self._ports, new, self._kinds)
+                remember_source(self.settings, self._side(pane), new)
 
     # What the rest of the window asks about "the" board: the active pane's, else the only one connected
     @property
