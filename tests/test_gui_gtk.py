@@ -1450,3 +1450,78 @@ def test_the_arrows_say_copy_and_the_host_starts_on_the_left(make_app):
     app = make_app()
     assert app.left.source() == "Host" and app.left.backend is app.local and app.right.backend is None
     assert app.left.connect_btn is not app.right.connect_btn
+
+
+def select_rows(pane, *names):
+    sel = pane.tree.get_selection()
+    sel.unselect_all()
+    for i, row in enumerate(pane.store):
+        if row[1] in names:
+            sel.select_path(Gtk.TreePath.new_from_string(str(i)))
+
+
+def drag_setup(app, tmp_path):
+    first, second, a, b = two_boards(app, tmp_path)
+    (a / "main.py").write_text("hello")
+    (a / "lib").mkdir()
+    (b / "sub").mkdir()
+    app.left.refresh()
+    app.right.refresh()
+    until(lambda: len(app.left.store) == 2 and len(app.right.store) == 1)
+    return a, b
+
+
+def test_dragging_onto_a_folder_in_the_same_pane_moves_it_in(make_app, tmp_path):
+    app = make_app()
+    a, b = drag_setup(app, tmp_path)
+    select_rows(app.left, "main.py")
+    app.dropped(app.left, app.left, str(a / "lib"))
+    until(lambda: app.status.get_text().startswith("Done"))
+    assert (a / "lib" / "main.py").read_text() == "hello" and not (a / "main.py").exists()
+
+
+def test_dragging_within_a_pane_onto_no_folder_changes_nothing(make_app, tmp_path, monkeypatch):
+    app = make_app()
+    a, b = drag_setup(app, tmp_path)
+    select_rows(app.left, "main.py")
+    monkeypatch.setattr(app, "_start_copy", lambda *x, **k: pytest.fail("moved"))
+    app.dropped(app.left, app.left, None)
+    assert "Drop on a folder" in app.status.get_text()
+
+
+def test_a_folder_dragged_onto_itself_stays_where_it_is(make_app, tmp_path, monkeypatch):
+    app = make_app()
+    a, b = drag_setup(app, tmp_path)
+    select_rows(app.left, "lib")
+    monkeypatch.setattr(app, "_start_copy", lambda *x, **k: pytest.fail("moved"))
+    app.dropped(app.left, app.left, str(a / "lib"))
+
+
+def test_dragging_to_the_other_pane_copies_into_the_folder_under_it(make_app, tmp_path):
+    app = make_app()
+    a, b = drag_setup(app, tmp_path)
+    select_rows(app.left, "main.py")
+    app.dropped(app.left, app.right, str(b / "sub"))
+    until(lambda: app.status.get_text().startswith("Done"))
+    assert (b / "sub" / "main.py").read_text() == "hello" and (a / "main.py").exists()
+
+
+def test_dragging_to_the_other_pane_with_no_folder_copies_to_its_current_folder(make_app, tmp_path):
+    app = make_app()
+    a, b = drag_setup(app, tmp_path)
+    select_rows(app.left, "main.py")
+    app.dropped(app.left, app.right, None)
+    until(lambda: app.status.get_text().startswith("Done"))
+    assert (b / "main.py").read_text() == "hello"
+
+
+def test_a_folder_at_a_drop_position_is_only_a_folder(make_app, tmp_path, monkeypatch):
+    app = make_app()
+    a, b = drag_setup(app, tmp_path)
+    rows = {row[1]: Gtk.TreePath.new_from_string(str(i)) for i, row in enumerate(app.left.store)}
+    monkeypatch.setattr(app.left.tree, "get_dest_row_at_pos", lambda x, y: (rows["lib"], 0))
+    assert app.left.folder_at(1, 1) == str(a / "lib")
+    monkeypatch.setattr(app.left.tree, "get_dest_row_at_pos", lambda x, y: (rows["main.py"], 0))
+    assert app.left.folder_at(1, 1) is None
+    monkeypatch.setattr(app.left.tree, "get_dest_row_at_pos", lambda x, y: None)
+    assert app.left.folder_at(1, 1) is None

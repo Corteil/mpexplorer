@@ -256,9 +256,16 @@ class Pane(Gtk.Frame):
             return True
         return False
 
-    def _dropped(self, _w, ctx, _x, _y, _sel, _info, time):
+    def folder_at(self, x, y):
+        """The full path of the folder under a drop, if there is one."""
+        hit = self.tree.get_dest_row_at_pos(x, y)
+        name = self.store[hit[0]][1] if hit else None
+        entry = self.entry(name) if name else None
+        return self.backend.join(self.cwd, name) if entry and entry.is_dir else None
+
+    def _dropped(self, _w, ctx, x, y, _sel, _info, time):
         src = self.app.drag_source
-        done = bool(src and src is not self)
-        Gtk.drag_finish(ctx, done, False, time)
-        if done:
-            GLib.idle_add(self.app.transfer, src, self)
+        folder = self.folder_at(x, y) if self.backend else None
+        Gtk.drag_finish(ctx, bool(src), False, time)
+        if src:
+            GLib.idle_add(self.app.dropped, src, self, folder)
