@@ -111,3 +111,30 @@ def test_unsafe_paths_and_hosts_are_refused(tmp_path):
 
 def test_mpy_version_is_the_low_byte():
     assert libraries.mpy_version(0x0A06) == 6 and libraries.mpy_version(None) is None
+
+
+def test_remove_deletes_only_that_library_and_empty_folders(tmp_path):
+    opener, _ = make_site()
+    cat = libraries.Catalog(str(tmp_path / "cache"), opener)
+    dest = str(tmp_path / "lib")
+    libraries.install(cat, LocalBackend(), cat.resolve(["zed"]), dest)
+    (tmp_path / "lib" / "mine.py").write_text("keep")
+    assert libraries.remove(cat, LocalBackend(), ["alpha"], dest=dest) == 2          # pkg/ files; zed's a.py stays
+    assert sorted(p.name for p in (tmp_path / "lib").iterdir()) == ["a.py", "mine.py"]       # empty pkg/ is gone
+    assert libraries.remove(cat, LocalBackend(), ["alpha"], dest=dest) == 0           # nothing left: no error
+
+
+class Fw:
+    def __init__(self, out):
+        self.out = out
+
+    def _run(self, code):
+        if isinstance(self.out, Exception):
+            raise self.out
+        return self.out
+
+
+def test_board_firmware_names_the_implementation():
+    assert libraries.board_firmware(Fw(b"circuitpython\n")) == "circuitpython"
+    assert libraries.board_firmware(Fw(b"micropython\n")) == "micropython"
+    assert libraries.board_firmware(Fw(OSError("gone"))) is None

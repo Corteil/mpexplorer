@@ -14,6 +14,7 @@ class LibrariesDialog(Gtk.Dialog):
         self.app, self.be, self.label = app, backend, label
         self.catalog = catalog or lib.Catalog()
         self.libs, self.have, self.mpy, self.closed, self.busy, self.job = [], set(), None, False, False, None
+        self.firmware = None
         self.set_default_size(620, 520)
         box = self.get_content_area()
         box.set_spacing(6)
@@ -36,9 +37,14 @@ class LibrariesDialog(Gtk.Dialog):
         box.pack_start(scrolled(view), True, True, 0)
         self.note = Gtk.Label(xalign=0, wrap=True, selectable=True, label="Loading the list ...")
         box.pack_start(self.note, False, False, 0)
+        self.force = Gtk.CheckButton(label="Install anyway", no_show_all=True)
+        self.force.connect("toggled", lambda _c: self._sensitive())
+        box.pack_start(self.force, False, False, 0)
         self.bar = Gtk.ProgressBar(no_show_all=True)
         box.pack_start(self.bar, False, False, 0)
         self.close_btn = self.add_button("Close", Gtk.ResponseType.CLOSE)
+        self.remove_btn = self.add_button("Remove", Gtk.ResponseType.REJECT)
+        self.remove_btn.set_sensitive(False)
         self.install_btn = self.add_button("Install", Gtk.ResponseType.OK)
         self.install_btn.set_sensitive(False)
         self.connect("response", self._response)
@@ -60,7 +66,7 @@ class LibrariesDialog(Gtk.Dialog):
         GLib.idle_add(self._loaded, *res)
 
     def _read_board(self, _prog):
-        return lib.board_mpy(self.be), set(lib.installed(self.be, lib.DEST))
+        return lib.board_mpy(self.be), set(lib.installed(self.be, lib.DEST)), lib.board_firmware(self.be)
 
     def _board_read(self, res, exc):
         self.job = None
@@ -69,8 +75,13 @@ class LibrariesDialog(Gtk.Dialog):
         if exc:
             self.note.set_text("Could not read the board: %s" % exc)
             return
-        self.mpy, self.have = res
+        self.mpy, self.have, self.firmware = res
         self._mark_installed()
+        if self.is_circuitpython():
+            self.force.show()
+            self.note.set_text("This board runs CircuitPython. These are MicroPython libraries: tick "
+                               "\"Install anyway\" only if you know they will work there.")
+        self._sensitive()
 
     def _loaded(self, res, exc):
         if self.closed:
@@ -105,14 +116,21 @@ class LibrariesDialog(Gtk.Dialog):
     def ticked(self):
         return [r[1] for r in self.store if r[0]]
 
+    def is_circuitpython(self):
+        return self.firmware == "circuitpython"
+
     def _sensitive(self):
-        self.install_btn.set_sensitive(bool(self.ticked()) and not self.busy)
+        ready = bool(self.ticked()) and not self.busy
+        self.install_btn.set_sensitive(ready and (not self.is_circuitpython() or self.force.get_active()))
+        self.remove_btn.set_sensitive(ready)
 
     # -- installing ------------------------------------------------------------------------------------------
     def _response(self, _d, res):
         if res == Gtk.ResponseType.OK and not self.busy:
             self.install(self.ticked())
-        elif res != Gtk.ResponseType.OK:
+        elif res == Gtk.ResponseType.REJECT and not self.busy:
+            self.remove(self.ticked())
+        elif res not in (Gtk.ResponseType.OK, Gtk.ResponseType.REJECT):
             if self.busy:
                 self._cancel()
             else:
@@ -131,9 +149,36 @@ class LibrariesDialog(Gtk.Dialog):
         self.close_btn.set_label("Cancel" if on else "Close")
         self._sensitive()
 
+    def remove(self, names):
+        if not names or not ask_yes_no(
+                self, "Remove libraries", "Delete the files of %s from /lib on %s?\n\n"
+                "Libraries they depend on are left alone." % (", ".join(names), self.label or "the board")):
+            return
+        self._lock(True)
+        be, catalog, mpy = self.be, self.catalog, self.mpy
+
+        def work(prog):
+            return lib.remove(catalog, be, names, mpy, lib.DEST, cancelled=lambda: prog.check() or False)
+        self.job = self.app.runner.submit(work, self._removed, "Removing libraries ...", inline=True, devices=(be,))
+
+    def _removed(self, res, exc):
+        self.job = None
+        if self.closed:
+            return
+        self._lock(False)
+        if exc:
+            self.note.set_text("Failed: %s" % exc)
+            error(self, "Remove libraries", str(exc))
+        else:
+            self.note.set_text("Removed %d file(s)." % res)
+            self.app.set_status("Libraries removed")
+            self.app._refresh_all()
+        self.job = self.app.runner.submit(self._read_board, self._board_read, "Reading the board ...", quiet=True,
+                                          inline=True, devices=(self.be,))
+
     def install(self, names):
         """Work out what the ticked libraries need (host, network), ask, then write them."""
-        if not names:
+        if not names or (self.is_circuitpython() and not self.force.get_active()):
             return
         self._lock(True)
         self.note.set_text("Working out what is needed ...")
