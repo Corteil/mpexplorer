@@ -225,6 +225,7 @@ def test_uf2_erase_refuses_a_changed_drive(tmp_path):
 
 def test_running_picos_are_listed_after_boards_in_a_bootloader(monkeypatch):
     monkeypatch.setattr(fw, "rp2_ports", lambda: {"/dev/p"})
+    monkeypatch.setattr(fw, "rp2_any_ports", lambda: {"/dev/p"})        # no CircuitPython board besides it
     monkeypatch.setattr(fw, "detect", lambda m: [])
     monkeypatch.setattr(fw, "detect_rom", lambda: [ROM])
     monkeypatch.setattr(fw, "badge_ports", lambda name: {"/dev/t"} if name == "TIDAL" else set())
