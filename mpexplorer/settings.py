@@ -70,6 +70,8 @@ def sort_order(v):
 # key -> (default, validator). Everything the program remembers is declared here.
 SPEC = {
     "general.last_port": ("", string),
+    "general.source.left": ("", string),            # what each pane's list last had chosen: Host or a port
+    "general.source.right": ("", string),
     "general.show_hidden": (False, boolean),
     "general.remember_window": (True, boolean),     # Preferences: restore window size/position at start
     "general.remember_folders": (True, boolean),    # ... the last host folder and the last folder per board
