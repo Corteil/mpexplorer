@@ -296,3 +296,84 @@ def test_the_count_says_how_many_are_shown_when_something_is_hidden(tmp_path, mo
     finally:
         dlg.destroy()
         app.destroy()
+
+
+# -- custom library sources (docs/CUSTOM_SOURCES_PLAN.md, phase 3) ------------------------------------------------
+def test_custom_library_sources_join_the_source_box_with_their_firmware(tmp_path, monkeypatch):
+    from mpexplorer import sources as S
+    from mpexplorer.gtkui import libraries as dialog_module
+    app = App(settings=Settings.load(str(tmp_path / "cfg.json")))
+    for preset in S.LIBRARY_PRESETS:
+        S.add_source(app.settings, "libraries", dict(preset))
+    monkeypatch.setattr(lib, "DEST", str(tmp_path / "board" / "lib"))
+    opener, _ = make_site()
+    dlg = dialog_module.LibrariesDialog(app, LocalBackend(), "board", lib.Catalog(str(tmp_path / "cache"), opener))
+    try:
+        wait_until(lambda: len(dlg.store) == 2 and dlg.job is None)
+        titles = {k: v for k, v in dlg.titles.items() if k.startswith("custom:")}
+        assert titles == {"custom:Pimoroni phew": ("Pimoroni phew (MicroPython)", "micropython"),
+                          "custom:SparkFun Qwiic": ("SparkFun Qwiic (CircuitPython)", "circuitpython")}
+        labels = [row[0] for row in dlg.source_box.get_model()]
+        assert labels[-2:] == ["Pimoroni phew (MicroPython)", "SparkFun Qwiic (CircuitPython)"]
+        dlg.firmware = "micropython"
+        dlg.source_box.set_active_id("custom:SparkFun Qwiic")
+        assert dlg.source == "custom:SparkFun Qwiic" and dlg.libs_for() == "circuitpython" and dlg.mismatch()
+    finally:
+        dlg.destroy()
+        app.destroy()
+
+
+def test_manage_sources_opens_the_library_manager_and_the_box_follows(tmp_path, monkeypatch):
+    from mpexplorer import sources as S
+    from mpexplorer.gtkui import libraries as dialog_module
+    app = App(settings=Settings.load(str(tmp_path / "cfg.json")))
+    S.add_source(app.settings, "libraries", dict(S.LIBRARY_PRESETS[0]))
+    opened = []
+    monkeypatch.setattr(dialog_module, "SourcesDialog",
+                        lambda parent, app_, on_close=None, **kw: opened.append((on_close, kw)))
+    opener, _ = make_site()
+    dlg = dialog_module.LibrariesDialog(app, LocalBackend(), "board", lib.Catalog(str(tmp_path / "cache"), opener))
+    try:
+        wait_until(lambda: len(dlg.store) == 2 and dlg.job is None)
+        dlg.source_box.set_active_id("custom:Pimoroni phew")
+        dlg._response(dlg, Gtk.ResponseType.HELP)
+        assert opened[0][1] == {"section": "libraries"}
+        S.remove_source(app.settings, "libraries", "Pimoroni phew")                  # removed in the manager
+        S.add_source(app.settings, "libraries", dict(S.LIBRARY_PRESETS[1]))
+        opened[0][0]()                                                                # the manager closed
+        assert dlg.source == "micropython"                       # the removed source made the box fall back
+        assert "custom:Pimoroni phew" not in dlg.titles
+        assert "custom:SparkFun Qwiic" in dlg.titles
+    finally:
+        dlg.destroy()
+        app.destroy()
+
+
+def test_the_confirmation_names_the_source_and_the_pypi_libraries_it_still_needs(tmp_path, monkeypatch):
+    from mpexplorer import cpbundle, custom_libraries as CL
+    from test_cpbundle import PREFIX, site as bundle_site
+    from mpexplorer import sources as S
+    monkeypatch.setattr(lib, "DEST", str(tmp_path / "board" / "lib"))
+    asked = []
+    monkeypatch.setattr(dialog, "ask_yes_no", lambda parent, title, text: asked.append(text) or False)
+    app = App(settings=Settings.load(str(tmp_path / "cfg.json")))
+    repo = "adafruit/Adafruit_CircuitPython_Bundle"
+    S.add_source(app.settings, "libraries", {"name": "Mine", "kind": "bundle", "repo": repo, "prefix": PREFIX,
+                                              "for": "circuitpython"})
+    bopener, _ = bundle_site()
+    monkeypatch.setattr(CL, "make_catalog", lambda src: cpbundle.Catalog(src, str(tmp_path / "b"), bopener))
+    opener, _ = make_site()
+    dlg = dialog.LibrariesDialog(app, LocalBackend(), "board", lib.Catalog(str(tmp_path / "cache"), opener))
+    try:
+        wait_until(lambda: len(dlg.store) == 2 and dlg.job is None)
+        dlg.firmware = "circuitpython"
+        dlg.source_box.set_active_id("custom:Mine")
+        wait_until(lambda: len(dlg.store) == 3)
+        dlg.catalog.meta["adafruit_thing"]["external_dependencies"] = ["sparkfun_qwiic_i2c"]
+        dlg.store[1][0] = True
+        dlg.install(dlg.ticked())
+        wait_until(lambda: asked)
+        assert "From Mine (CircuitPython)." in asked[0] and "PyPI): sparkfun_qwiic_i2c" in asked[0]
+    finally:
+        dlg.destroy()
+        app.destroy()

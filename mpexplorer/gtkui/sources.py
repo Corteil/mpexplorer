@@ -1,12 +1,35 @@
-"""The sources manager: the custom firmware (and later library) sources, with presets, Check, and trusted sites.
-One widget, used inside Preferences (Sources page) and in a dialog opened by the Manage sources... buttons.
-The logic is in ..sources and ..custom_firmware (docs/CUSTOM_SOURCES_PLAN.md)."""
+"""The sources manager: the custom firmware and library sources, with presets, Check, and trusted sites.
+One widget per section, used inside Preferences (Sources page, both) and in a dialog opened by the Manage sources...
+buttons (one section). The logic is in ..sources, ..custom_firmware and ..custom_libraries
+(docs/CUSTOM_SOURCES_PLAN.md)."""
 import threading
 
-from .. import custom_firmware, sources
+from .. import custom_firmware, custom_libraries, sources
 from .common import GLib, Gtk, ask_yes_no, info, scrolled
 
-SECTIONS = {"firmware": ("Firmware sources", sources.FIRMWARE_PRESETS)}
+
+def _firmware_newest(src):
+    catalog = custom_firmware.make_catalog(sources.validate_firmware_source(src))
+    if src["kind"] != "github":
+        return "one file"
+    builds, _saved = catalog.releases()
+    return "%s (%s)" % (builds[0].version, builds[0].date) if builds else "none"
+
+
+def _library_newest(src):
+    catalog = custom_libraries.make_catalog(custom_libraries.validate_library_source(src))
+    libs, _saved = catalog.libraries()
+    return "release %s" % catalog.tag if src["kind"] == "bundle" else (libs[0].version if libs else "none")
+
+
+SECTIONS = {
+    "firmware": {"title": "Firmware sources", "key": "sources.firmware", "presets": sources.FIRMWARE_PRESETS,
+                 "validate": sources.validate_firmware_source, "check": custom_firmware.check_source,
+                 "newest": _firmware_newest},
+    "libraries": {"title": "Library sources", "key": "sources.libraries", "presets": sources.LIBRARY_PRESETS,
+                  "validate": custom_libraries.validate_library_source, "check": custom_libraries.check_source,
+                  "newest": _library_newest},
+}
 
 
 def where(src):
@@ -16,18 +39,34 @@ def where(src):
 class AddSourceDialog(Gtk.Dialog):
     """Name, kind, address and (for a repo) the file name pattern; Add runs the Check before anything is saved."""
 
+    section = "firmware"
+    title = "Add a firmware source"
+    name_hint = "A name for the list, e.g. Pimoroni MicroPython"
+
     def __init__(self, parent, settings, check=None):
-        super().__init__(title="Add a firmware source", transient_for=parent, modal=True)
+        super().__init__(title=self.title, transient_for=parent, modal=True)
         self.settings, self.saved, self.checking = settings, None, False
-        self.check = check or custom_firmware.check_source
+        self.check = check or SECTIONS[self.section]["check"]
         self.set_default_size(520, -1)
         box = self.get_content_area()
         box.set_spacing(8)
         box.set_border_width(12)
         grid = Gtk.Grid(column_spacing=10, row_spacing=6)
-        self.name = Gtk.Entry(hexpand=True, placeholder_text="A name for the list, e.g. Pimoroni MicroPython")
+        self.name = Gtk.Entry(hexpand=True, placeholder_text=self.name_hint)
         grid.attach(Gtk.Label(label="Name", xalign=1), 0, 0, 1, 1)
         grid.attach(self.name, 1, 0, 1, 1)
+        self.build_form(grid)
+        box.pack_start(grid, False, False, 0)
+        self.result = Gtk.Label(xalign=0, wrap=True, selectable=True)
+        box.pack_start(self.result, False, False, 0)
+        self.cancel_btn = self.add_button("Cancel", Gtk.ResponseType.CANCEL)
+        self.add_btn = self.add_button("Check and add", Gtk.ResponseType.OK)
+        self.set_default_response(Gtk.ResponseType.OK)
+        self.connect("response", self._response)
+        self.show_all()
+        self._kind_changed()
+
+    def build_form(self, grid):
         self.is_repo = Gtk.RadioButton(label="A GitHub repository with release files")
         self.is_url = Gtk.RadioButton(label="One firmware file at a web address", group=self.is_repo)
         self.is_repo.connect("toggled", lambda _b: self._kind_changed())
@@ -49,15 +88,6 @@ class AddSourceDialog(Gtk.Dialog):
         self.firmware.set_active(0)
         grid.attach(Gtk.Label(label="Puts on the board", xalign=1), 0, 5, 1, 1)
         grid.attach(self.firmware, 1, 5, 1, 1)
-        box.pack_start(grid, False, False, 0)
-        self.result = Gtk.Label(xalign=0, wrap=True, selectable=True)
-        box.pack_start(self.result, False, False, 0)
-        self.cancel_btn = self.add_button("Cancel", Gtk.ResponseType.CANCEL)
-        self.add_btn = self.add_button("Check and add", Gtk.ResponseType.OK)
-        self.set_default_response(Gtk.ResponseType.OK)
-        self.connect("response", self._response)
-        self.show_all()
-        self._kind_changed()
 
     def _kind_changed(self):
         repo = self.is_repo.get_active()
@@ -106,24 +136,70 @@ class AddSourceDialog(Gtk.Dialog):
                                    "Trust %s?" % (got.message, host, host)):
             self.result.set_text("Not added: the site was not trusted.")
             return
-        src = sources.validate_firmware_source(self.source())
+        src = SECTIONS[self.section]["validate"](self.source())
         if got.trust_host:
             sources.trust_host(self.settings, got.trust_host)
-        sources.add_source(self.settings, "firmware", src)
+        sources.add_source(self.settings, self.section, src)
         self.saved = src
         self.destroy()
+
+
+class AddLibrarySourceDialog(AddSourceDialog):
+    """A library source: a bundle repo (release zips with a file prefix, like Adafruit's) or a `package.json` repo."""
+
+    section = "libraries"
+    title = "Add a library source"
+    name_hint = "A name for the list, e.g. SparkFun Qwiic"
+
+    def build_form(self, grid):
+        self.is_repo = Gtk.RadioButton(label="A bundle on GitHub (release zips, like the Adafruit bundles)")
+        self.is_url = Gtk.RadioButton(label="A package.json repository (the mip format)", group=self.is_repo)
+        self.is_repo.connect("toggled", lambda _b: self._kind_changed())
+        grid.attach(self.is_repo, 1, 1, 1, 1)
+        grid.attach(self.is_url, 1, 2, 1, 1)
+        self.address_label = Gtk.Label(xalign=1)
+        self.address = Gtk.Entry(hexpand=True)
+        grid.attach(self.address_label, 0, 3, 1, 1)
+        grid.attach(self.address, 1, 3, 1, 1)
+        self.pattern_label = Gtk.Label(label="File prefix", xalign=1)
+        self.pattern = Gtk.Entry(hexpand=True, placeholder_text="the start of the release file names, e.g. qwiic-py")
+        grid.attach(self.pattern_label, 0, 4, 1, 1)
+        grid.attach(self.pattern, 1, 4, 1, 1)
+        self.firmware = Gtk.ComboBoxText()
+        self.firmware.append("micropython", "MicroPython")
+        self.firmware.append("circuitpython", "CircuitPython")
+        self.firmware.set_active(1)
+        grid.attach(Gtk.Label(label="For", xalign=1), 0, 5, 1, 1)
+        grid.attach(self.firmware, 1, 5, 1, 1)
+
+    def _kind_changed(self):
+        bundle = self.is_repo.get_active()
+        self.address_label.set_text("Repository" if bundle else "Repository or address")
+        self.address.set_placeholder_text("owner/name, e.g. sparkfun/qwiic_py" if bundle else
+                                          "owner/name (add @branch), or https://.../package.json")
+        self.pattern.set_visible(bundle)
+        self.pattern_label.set_visible(bundle)
+        self.firmware.set_active_id("circuitpython" if bundle else "micropython")
+
+    def source(self):
+        text = self.address.get_text().strip()
+        if self.is_repo.get_active():
+            return {"name": self.name.get_text(), "kind": "bundle", "repo": text, "prefix": self.pattern.get_text(),
+                    "for": self.firmware.get_active_id()}
+        key = "url" if text.startswith("https://") else "repo"
+        return {"name": self.name.get_text(), "kind": "mip", key: text, "for": self.firmware.get_active_id()}
 
 
 class SourcesManager(Gtk.Box):
     """The list of custom sources with Add (presets and Custom), Remove, Check, Check all, and the trusted sites."""
 
-    def __init__(self, app, parent, check=None, sections=("firmware",)):
+    def __init__(self, app, parent, check=None, section="firmware"):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=6, margin=10)
         self.app, self.settings, self.parent = app, app.settings, parent
-        self.check = check or custom_firmware.check_source
-        self.section = "firmware"       # the only one so far: libraries follow (docs/CUSTOM_SOURCES_PLAN.md, phase 3)
-        title, self.presets = SECTIONS[self.section]
-        self.pack_start(Gtk.Label(label=title, xalign=0, use_markup=False), False, False, 0)
+        self.section, self.cfg = section, SECTIONS[section]
+        self.check = check or self.cfg["check"]
+        self.presets = self.cfg["presets"]
+        self.pack_start(Gtk.Label(label=self.cfg["title"], xalign=0), False, False, 0)
         self.store = Gtk.ListStore(str, str, str)                           # name, where, newest
         self.view = Gtk.TreeView(model=self.store)
         for i, head in enumerate(("Name", "Repository or address", "Newest")):
@@ -176,14 +252,14 @@ class SourcesManager(Gtk.Box):
     def refresh(self):
         selected = self.selected()
         self.store.clear()
-        for src in self.settings.get("sources.firmware"):
+        for src in self.settings.get(self.cfg["key"]):
             self.store.append([src["name"], where(src), ""])
         self.hosts.clear()
         for host in sorted(sources.trusted_hosts(self.settings)):
             self.hosts.append([host])
         for item in self.add_menu.get_children():
             self.add_menu.remove(item)
-        have = {s["name"] for s in self.settings.get("sources.firmware")}
+        have = {s["name"] for s in self.settings.get(self.cfg["key"])}
         for preset in self.presets:
             item = Gtk.MenuItem(label="%s (%s)" % (preset["name"], where(preset)))
             item.set_sensitive(preset["name"] not in have)
@@ -229,12 +305,13 @@ class SourcesManager(Gtk.Box):
             if exc or not got.ok:
                 self.status.set_text("Not added: %s" % (exc or got.message))
                 return
-            sources.add_source(self.settings, "firmware", sources.validate_firmware_source(preset))
+            sources.add_source(self.settings, self.section, self.cfg["validate"](preset))
             self.status.set_text("Added. %s" % got.message)
         self._background(lambda: self.check(preset, self.settings), done)
 
     def add_custom(self):
-        dlg = AddSourceDialog(self.parent, self.settings, self.check)
+        dlg = (AddSourceDialog if self.section == "firmware" else AddLibrarySourceDialog)(self.parent, self.settings,
+                                                                                         self.check)
         dlg.connect("destroy", lambda _d: self.status.set_text("Added %s." % dlg.saved["name"] if dlg.saved else ""))
         return dlg
 
@@ -242,7 +319,7 @@ class SourcesManager(Gtk.Box):
         name = self.selected()
         if name and ask_yes_no(self.parent, "Remove source",
                                'Remove "%s"? Boards already installed from it are not touched.' % name):
-            sources.remove_source(self.settings, "firmware", name)
+            sources.remove_source(self.settings, self.section, name)
             self.status.set_text('Removed "%s".' % name)
 
     def untrust_selected(self):
@@ -250,7 +327,8 @@ class SourcesManager(Gtk.Box):
         if it is None:
             return
         host = model[it][0]
-        users = [s["name"] for s in self.settings.get("sources.firmware") if sources.host_of(s.get("url", "")) == host]
+        users = [s["name"] for key in ("sources.firmware", "sources.libraries") for s in self.settings.get(key)
+                 if sources.host_of(s.get("url", "")) == host]
         if users:
             info(self.parent, "Still in use", "%s is used by %s. Remove that source first." % (host, ", ".join(users)))
             return
@@ -258,7 +336,7 @@ class SourcesManager(Gtk.Box):
 
     def check_selected(self):
         name = self.selected()
-        src = next((s for s in self.settings.get("sources.firmware") if s["name"] == name), None)
+        src = next((s for s in self.settings.get(self.cfg["key"]) if s["name"] == name), None)
         if not src:
             return
         self.status.set_text("Checking %s ..." % name)
@@ -269,18 +347,13 @@ class SourcesManager(Gtk.Box):
     def check_all(self):
         """The newest version each source offers, with no board involved (one request per source)."""
         self.status.set_text("Reading every source ...")
-        found = list(self.settings.get("sources.firmware"))
+        found, newest = list(self.settings.get(self.cfg["key"])), self.cfg["newest"]
 
         def work():
             out = {}
             for src in found:
                 try:
-                    catalog = custom_firmware.make_catalog(sources.validate_firmware_source(src))
-                    if src["kind"] == "github":
-                        builds, _saved = catalog.releases()
-                        out[src["name"]] = "%s (%s)" % (builds[0].version, builds[0].date) if builds else "none"
-                    else:
-                        out[src["name"]] = "one file"
+                    out[src["name"]] = newest(src)
                 except Exception as e:
                     out[src["name"]] = "error: %s" % e
             return out
@@ -298,13 +371,23 @@ class SourcesManager(Gtk.Box):
 class SourcesDialog(Gtk.Dialog):
     """The manager in its own window, opened by the Manage sources... buttons; on_close runs when it closes."""
 
-    def __init__(self, parent, app, on_close=None, check=None):
+    def __init__(self, parent, app, on_close=None, check=None, section="firmware"):
         super().__init__(title="Manage sources", transient_for=parent, modal=True)
         self.set_default_size(620, 520)
-        self.manager = SourcesManager(app, self, check)
+        self.manager = SourcesManager(app, self, check, section)
         self.get_content_area().pack_start(self.manager, True, True, 0)
         self.add_button("Close", Gtk.ResponseType.CLOSE)
         self.connect("response", lambda *_: self.destroy())
         if on_close:
             self.connect("destroy", lambda _d: on_close())
         self.show_all()
+
+
+class SourcesPage(Gtk.Box):
+    """Preferences > Sources: the firmware and library managers one above the other."""
+
+    def __init__(self, app, parent):
+        super().__init__(orientation=Gtk.Orientation.VERTICAL)
+        self.managers = {name: SourcesManager(app, parent, section=name) for name in SECTIONS}
+        for name, mgr in self.managers.items():
+            self.pack_start(mgr, True, True, 0)

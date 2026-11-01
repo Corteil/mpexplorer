@@ -9,6 +9,7 @@ match the board's CircuitPython major version; the py zip is source, for any ver
 import io
 import json
 import os
+import re
 import urllib.error
 import urllib.request
 import zipfile
@@ -16,7 +17,6 @@ import zipfile
 from .errors import Cancelled
 from .libraries import Library, LibraryError, default_cache_dir
 
-ALLOWED = ("https://github.com/", "https://objects.githubusercontent.com/", "https://release-assets.githubusercontent.com/")
 TIMEOUT = 30
 MAX_JSON = 4 << 20
 MAX_ZIP = 64 << 20
@@ -33,20 +33,29 @@ def _open_url(url):
 
 class Catalog:
     def __init__(self, source="adafruit", cache_dir=None, opener=_open_url):
-        self.source = source
-        self.title, self.repo, self.prefix = SOURCES[source]
-        self.dir = os.path.join(cache_dir or default_cache_dir(), "bundle-" + source)
+        """source: a built-in key ('adafruit', 'community') or a custom source {name, repo, prefix, ...}."""
+        if isinstance(source, dict):
+            self.title, self.repo, self.prefix = source["name"], source["repo"], source["prefix"]
+            self.source = "custom-" + re.sub(r"[^A-Za-z0-9]+", "_", self.repo)
+        else:
+            self.source = source
+            self.title, self.repo, self.prefix = SOURCES[source]
+        self.dir = os.path.join(cache_dir or default_cache_dir(), "bundle-" + self.source)
         self.opener, self.tag, self.meta = opener, None, None
+        self.external = []              # PyPI libraries the chosen ones need that this bundle lacks (set by resolve)
+        # only its own repo's releases, and the hosts GitHub serves its release files from
+        self.allowed = ("https://github.com/%s/" % self.repo, "https://objects.githubusercontent.com/",
+                        "https://release-assets.githubusercontent.com/")
         self.on_progress = None         # optional callable(done, total) for the big downloads
         self._zip = (None, None)        # (key, ZipFile) of the last one opened
 
     # -- reading ----------------------------------------------------------------------------------------------
     def _read(self, url, limit, cancelled=None):
-        if not url.startswith(ALLOWED):
+        if not url.startswith(self.allowed):
             raise LibraryError("Refusing to download from %s" % url)
         try:
             with self.opener(url) as reply:
-                if not reply.geturl().startswith(ALLOWED):
+                if not reply.geturl().startswith(self.allowed):
                     raise LibraryError("The download was redirected to %s" % reply.geturl())
                 length = reply.headers.get("Content-Length") if hasattr(reply, "headers") else None
                 total, data = int(length) if length and length.isdigit() else 0, bytearray()
@@ -71,7 +80,7 @@ class Catalog:
             with self.opener("https://github.com/%s/releases/latest" % self.repo) as reply:
                 url = reply.geturl()
             tag = url.rstrip("/").rsplit("/", 1)[-1]
-            if not url.startswith(ALLOWED) or "/tag/" not in url or not tag.isalnum():
+            if not url.startswith(self.allowed) or "/tag/" not in url or not tag.isalnum():
                 raise LibraryError("Unexpected release address: %s" % url)
         except (OSError, LibraryError) as e:
             try:
@@ -155,7 +164,7 @@ class Catalog:
         kind = "py" if zname.startswith(self.prefix + "-py-") else str(mpy)
         root = zname[:-4] + "/"
         members = set(z.namelist())
-        out, seen = [], set()
+        out, seen, self.external = [], set(), []
 
         def files_of(meta):
             base = root + meta["path"]
@@ -181,10 +190,12 @@ class Catalog:
             files = files_of(meta)
             if not files:
                 raise LibraryError("%s has no files in %s." % (name, zname))
+            self.external += [e for e in meta.get("external_dependencies", []) if e not in self.external]
             out.append((name, str(meta.get("version", "")), kind, files))
 
         for n in names:
             visit(n)
+        self.external = sorted(e for e in self.external if e not in self.meta)      # the bundle's own were installed
         return out
 
     def fetch(self, key):
