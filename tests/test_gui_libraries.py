@@ -116,6 +116,7 @@ def test_circuitpython_needs_install_anyway_but_micropython_does_not(tmp_path, m
         pump(100)
         assert not asked and not dlg.busy
         dlg.force.set_active(True)
+        dlg.mpy = None                                          # what the dialog sets for CircuitPython: source files
         assert dlg.install_btn.get_sensitive()
         dlg.install(["zed"])
         wait_until(lambda: "Done" in dlg.note.get_text())
