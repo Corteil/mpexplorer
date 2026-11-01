@@ -63,7 +63,7 @@ Settled: letters **CP** and **MP**, as inverted (filled) badges. Plan defaults f
   once shows its nickname in the port list next time, **before** connecting.
 - **Shared serials** (`000000000000`, `123456`): the USB key is not unique, so the nickname only shows after connecting, from the chip id; the port list
   shows no nickname for those rows (a nickname on the wrong board would be worse than none). The Name dialog says so when it applies.
-- Where it shows: the port list (`<marker> /dev/ttyACM4  "Bench CP"  Pico 2 (rp2350a)  #8a64`: the nickname right after the port, in quotes, so the existing
+- Where it shows: the port list (`/dev/ttyACM4  "Bench CP"  Pico 2 (rp2350a)  #8a64` with its badge in front: the nickname right after the port, in quotes, so the existing
   `device_of` split still finds the port), the pane label, the console title, the Window menu, status messages (`Connected to "Bench CP"`), and the firmware tools'
   running-board rows (by USB key only).
 - Editing: `Device > Name this board...` (needs a connected board in the active pane: its chip id is known) using the existing `prompt()` dialog, showing the
