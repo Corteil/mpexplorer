@@ -35,6 +35,7 @@ BOARD_IDS = {"RPI-RP2": "rp2040", "RP2350": "rp2350"}
 CHIP_NAMES = {"rp2040": "RP2040", "rp2350": "RP2350", "esp32s3": "ESP32-S3"}
 MACHINE_NAMES = {"esp32s3": "ESP32S3"}               # how os.uname().machine spells it, if not as CHIP_NAMES does
 RP2_MICROPYTHON_USB = (0x2E8A, 0x0005)
+RP2_BOOTLOADER_PIDS = (0x0003, 0x000F)                # RP2040 and RP2350 bootloaders (BOOTSEL)
 ESP32S3_ROM_USB = (0x303A, 0x1001)                   # "USB JTAG/serial debug unit", seen on a real Tildagon
 ESP_IMAGE_MAGIC, ESP32S3_CHIP_ID = 0xE9, 9
 ESP_PARTITION_TABLE, ESP_APP_OFFSET, ESP_FLASH_BYTES = 0x8000, 0x10000, 8 * 1024 * 1024
@@ -784,11 +785,20 @@ def rp2_ports():
     return _ports_with(RP2_MICROPYTHON_USB)
 
 
+def rp2_any_ports():
+    """Serial ports of any RP2 board not in its bootloader (CircuitPython has a USB id per board)."""
+    try:
+        from serial.tools import list_ports as lp
+    except ImportError:
+        return set()
+    return {p.device for p in lp.comports() if p.vid == 0x2E8A and p.pid not in RP2_BOOTLOADER_PIDS}
+
+
 def badge_ports(badge):
     return _ports_with(BADGES[badge].usb)
 
 
-def wait_for_new_port(before, timeout=15.0, poll=0.2, ports=rp2_ports):
+def wait_for_new_port(before, timeout=15.0, poll=0.2, ports=rp2_ports, firmware="MicroPython"):
     """The port that appears after an install; `before` is the set taken before it, so other Picos do not count."""
     end = time.monotonic() + timeout
     while True:
@@ -796,11 +806,11 @@ def wait_for_new_port(before, timeout=15.0, poll=0.2, ports=rp2_ports):
         if new:
             return new[0]
         if time.monotonic() >= end:
-            raise FirmwareError("The board restarted but no MicroPython serial port appeared.")
+            raise FirmwareError("The board restarted but no %s serial port appeared." % firmware)
         time.sleep(poll)
 
 
-def identify(port, chip, timeout=10.0, poll=0.5, open_board=RawREPL.open_board, reset=True):
+def identify(port, chip, timeout=10.0, poll=0.5, open_board=RawREPL.open_board, reset=True, firmware="MicroPython"):
     """Prove the install: talk to the new firmware and check it runs on the expected chip."""
     end = time.monotonic() + timeout
     while True:
@@ -809,19 +819,19 @@ def identify(port, chip, timeout=10.0, poll=0.5, open_board=RawREPL.open_board, 
             break
         except (TransportError, OSError) as e:
             if time.monotonic() >= end:
-                raise FirmwareError("MicroPython did not answer on %s: %s" % (port, e))
+                raise FirmwareError("%s did not answer on %s: %s" % (firmware, port, e))
             time.sleep(poll)
     try:
         text = repl.exec("import os;u=os.uname();print(u.release);print(u.machine)").decode()
     except TransportError as e:
-        raise FirmwareError("MicroPython did not answer on %s: %s" % (port, e))
+        raise FirmwareError("%s did not answer on %s: %s" % (firmware, port, e))
     finally:
         repl.close(reset=reset)
     lines = text.strip().splitlines()
     if len(lines) != 2:
         raise FirmwareError("Unexpected reply from %s: %r" % (port, text))
     release, machine = lines
-    if MACHINE_NAMES.get(chip, CHIP_NAMES[chip]) not in machine:
+    if MACHINE_NAMES.get(chip, CHIP_NAMES[chip]).lower() not in machine.lower():      # CircuitPython says rp2350a
         raise FirmwareError("%s is running on '%s', not the expected %s." % (port, machine, CHIP_NAMES[chip]))
     return Installed(port, release, machine)
 
@@ -835,7 +845,7 @@ def sha256_of(path):
 
 
 def install_and_verify(image, drive, on_progress=None, on_stage=None, cancelled=None, expect_badge=None,
-                       erase=False):
+                       erase=False, firmware="MicroPython"):
     """The whole install: write, wait for the restart, then talk to the new firmware. Returns an Installed, with no
     port if the board cannot be followed. expect_badge: None decides by the chip; "" when another board's firmware
     was chosen for a chip that reads like a badge's."""
@@ -858,10 +868,19 @@ def install_and_verify(image, drive, on_progress=None, on_stage=None, cancelled=
                                 "it now has badge firmware: put it in its bootloader and install firmware for it.")
         stage("Checking the board on %s" % port)
         return identify(port, drive.chip, timeout=30.0, reset=BADGES[badge].soft_reset)
-    before = rp2_ports()
+    if firmware == "MicroPython":
+        before = rp2_ports()
+        stage("Copying the firmware")
+        install(image, drive, on_progress, cancelled)
+        stage("Waiting for MicroPython to start")
+        port = wait_for_new_port(before)
+        stage("Checking the board on %s" % port)
+        return identify(port, drive.chip)
+    before = rp2_any_ports()            # a CircuitPython board has its own USB id, so any new RP2 port counts
     stage("Copying the firmware")
     install(image, drive, on_progress, cancelled)
-    stage("Waiting for MicroPython to start")
-    port = wait_for_new_port(before)
+    stage("Waiting for %s to start" % firmware)
+    # a CircuitPython first boot formats its drive, which takes a while
+    port = wait_for_new_port(before, timeout=60.0, ports=rp2_any_ports, firmware=firmware)
     stage("Checking the board on %s" % port)
-    return identify(port, drive.chip)
+    return identify(port, drive.chip, firmware=firmware)

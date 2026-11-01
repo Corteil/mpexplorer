@@ -19,7 +19,8 @@ NUKE_FILE = "flash_nuke.uf2"
 # Raspberry Pi's address for the erase tool redirects to its GitHub release files.
 ALLOWED = (BASE + "/", "https://emfcamp.github.io/", "https://datasheets.raspberrypi.com/",
            "https://github.com/raspberrypi/", "https://release-assets.githubusercontent.com/",
-           "https://objects.githubusercontent.com/")
+           "https://objects.githubusercontent.com/", "https://downloads.circuitpython.org/",
+           "https://raw.githubusercontent.com/adafruit/", "https://api.github.com/repos/adafruit/")
 FIRMWARE_PATH = "/resources/firmware/"
 TIMEOUT = 20
 VARIANT_NAMES = {"RISCV": "RISC-V"}
