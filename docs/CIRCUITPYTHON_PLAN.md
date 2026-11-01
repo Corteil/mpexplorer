@@ -1,6 +1,9 @@
 # CircuitPython mode and libraries plan
 
-Status (2026-11-01): plan only, nothing built. Asked for by the owner. Facts marked "checked" were fetched on 2026-11-01; anything marked
+Status (2026-11-01): phases 1 and 2 built on branch `circuitpython-mode` (`mpexplorer/circuitpython.py`): connecting to a CircuitPython board
+detects it, finds its `CIRCUITPY` drive by USB serial = `boot_out.txt` UID, and shows the drive as the device pane, with Run, console and
+terminal over serial. Checked on the real Pico 2 by script (not through the window). Not built: phase 3 (serial-only), clock, Open with in place,
+CircuitPython firmware in the installer, CircuitPython libraries (Adafruit bundle). Earlier: plan only. Asked for by the owner. Facts marked "checked" were fetched on 2026-11-01; anything marked
 "unverified" must be tried on a real CircuitPython board before it is relied on (none is on the bench yet).
 
 ## Goals

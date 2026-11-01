@@ -15,6 +15,7 @@ class LibrariesDialog(Gtk.Dialog):
         self.catalog = catalog or lib.Catalog()
         self.libs, self.have, self.mpy, self.closed, self.busy, self.job = [], set(), None, False, False, None
         self.firmware = None
+        self.dest = backend.join(backend.mount, "lib") if hasattr(backend, "mount") else lib.DEST
         self.set_default_size(620, 520)
         box = self.get_content_area()
         box.set_spacing(6)
@@ -66,7 +67,7 @@ class LibrariesDialog(Gtk.Dialog):
         GLib.idle_add(self._loaded, *res)
 
     def _read_board(self, _prog):
-        return lib.board_mpy(self.be), set(lib.installed(self.be, lib.DEST)), lib.board_firmware(self.be)
+        return lib.board_mpy(self.be), set(lib.installed(self.be, self.dest)), lib.board_firmware(self.be)
 
     def _board_read(self, res, exc):
         self.job = None
@@ -159,7 +160,7 @@ class LibrariesDialog(Gtk.Dialog):
         be, catalog, mpy = self.be, self.catalog, self.mpy
 
         def work(prog):
-            return lib.remove(catalog, be, names, mpy, lib.DEST, cancelled=lambda: prog.check() or False)
+            return lib.remove(catalog, be, names, mpy, self.dest, cancelled=lambda: prog.check() or False)
         self.job = self.app.runner.submit(work, self._removed, "Removing libraries ...", inline=True, devices=(be,))
 
     def _removed(self, res, exc):
@@ -210,7 +211,7 @@ class LibrariesDialog(Gtk.Dialog):
 
         def write(prog):
             prog.items_total, prog.items_word = files, "written"
-            return lib.install(catalog, be, plan, lib.DEST, on_progress=lambda i, n: setattr(prog, "items", i),
+            return lib.install(catalog, be, plan, self.dest, on_progress=lambda i, n: setattr(prog, "items", i),
                                cancelled=lambda: prog.check() or False)
         self.job = self.app.runner.submit(write, self._written, "Installing libraries ...", inline=True,
                                           devices=(be,))

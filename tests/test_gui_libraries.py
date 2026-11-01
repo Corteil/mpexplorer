@@ -2,6 +2,7 @@
 import os
 import sys
 import time
+import types
 
 from guiskip import unavailable
 
@@ -136,4 +137,22 @@ def test_remove_asks_then_deletes(tmp_path, monkeypatch):
         assert (tmp_path / "board" / "lib" / "a.py").exists()
     finally:
         dlg.destroy()
+        app.destroy()
+
+
+def test_a_circuitpython_board_shows_its_drive_and_is_labelled(tmp_path, monkeypatch):
+    from mpexplorer.circuitpython import DriveBackend
+    app = App(settings=Settings.load(str(tmp_path / "cfg.json")))
+    mount = tmp_path / "CIRCUITPY"
+    (mount / "lib").mkdir(parents=True)
+    (mount / "code.py").write_text("print(1)\n")
+    try:
+        app.connected(DriveBackend(str(mount), types.SimpleNamespace(exec=lambda *a, **k: b"", close=lambda *a: None)),
+                      str(mount), "/dev/ttyACM9", "usb:xyz", "Raspberry Pi Pico 2 with rp2350a", pane=app.right,
+                      firmware=("circuitpython", "10.3.1"))
+        wait_until(lambda: {e.name for e in app.right._entries} >= {"code.py", "lib"})
+        assert "CircuitPython 10.3.1" in app.right.detail and "Pico 2" in app.right.detail
+        assert app.conn.badge is None
+    finally:
+        app.conns.clear()
         app.destroy()
