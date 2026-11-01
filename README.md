@@ -2,21 +2,23 @@
 
 A dual-pane file explorer with a GUI for MicroPython boards (Raspberry Pi Pico / Pico 2, EMF Camp badges from 2022 (TiLDA Mk6), 2024
 (Tildagon) and 2026, anything that runs MicroPython). It runs on a **Raspberry Pi 5** (or any computer with Python 3 and GTK 3) and talks to the
-board over USB serial. **Nothing is installed on the board**: it works through the stock raw REPL, like `mpremote`.
+board over USB serial. **Nothing is installed on the board** in normal use: it works through the stock raw REPL, like `mpremote`.
 
 ![Main window: host and device panes](docs/images/main.png)
 
 ![REPL console](docs/images/console.png)
 
 ## Features
-- Host and Device panes: browse, sort, filter, show hidden files
-- Upload / download files and folders (buttons, drag between panes, or copy and paste). Dragging onto a folder in the same
-  pane moves into it
+- Two panes, each showing the host or a board, so two boards can be open side by side: browse, sort, filter, show hidden files
+- Copy files and folders between the panes (buttons, drag, or copy and paste). Dragging onto a folder copies into it, or moves
+  into it within one pane
 - Copy, cut, paste, rename, delete, new file / folder, properties, free space
-- Copy from one board and paste on another: copied files are downloaded when you disconnect, so a large copy takes
+- Copy from a board, disconnect it, and paste on another: the files are downloaded as you disconnect, so a large copy takes
   time then. A cut becomes a copy, because the first board has gone
+- **Install firmware, back up or restore the flash, and erase it** (Tools menu), for boards in their bootloader. Firmware comes from
+  micropython.org or the EMF flashers, or a file. A running Pico or Tildagon can be sent to its bootloader with a button
 - Conflict handling (overwrite / skip / keep both / apply to all), progress, speed and cancel
-- **REPL console** (Device > REPL console), emulated mode: run Python on the board, output streams as it arrives.
+- **REPL console** (Device > REPL console, one per board), emulated mode: run Python on the board, output streams as it arrives.
   `_` holds the last result, Ctrl+D soft-resets, Esc interrupts, Up/Down is history, Shift+Enter adds a line.
   `input()` works: while a program runs, Enter sends your line to it. **Show activity** displays every snippet
   sent to the board and every reply (file operations included), which is handy for debugging. While a command
@@ -39,7 +41,7 @@ sudo usermod -aG dialout $USER      # serial access; log out and in again
 pipx install --system-site-packages git+https://github.com/Corteil/mpexplorer
 mpexplorer
 ```
-Plug the board in, press **Scan**, pick the port, **Connect**.
+Plug the board in, press **Scan**, choose it in a pane's list, and press that pane's **Connect**.
 
 The Tools menu can install firmware, back up or restore the flash, and erase it. A badge or other ESP32-S3 needs
 `pipx install esptool`; a Pico or Pico 2 needs nothing extra.

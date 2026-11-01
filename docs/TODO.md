@@ -98,7 +98,8 @@ label if one is missing on another theme.
 - [x] Each pane remembers what its list had chosen; nothing connects by itself.
 - [x] Phase 4: badge screens per job, firmware tools close only their board, Sync between boards (fake boards).
 - [x] Badge status line fits the round screen (text widths measured on a real Tildagon).
-- [ ] Phase 5: docs.
+- [x] Phase 5: docs.
+- [ ] By hand: badge screen shows Copying and Done with two boards and no longer clips; firmware tools close only their board; Sync dialog between boards.
 
 ## 2c. Agent mode (plan: `docs/AGENT_PLAN.md`)
 - [x] `tools/bench.py` written and tested (fake board + real MicroPython).
@@ -117,7 +118,7 @@ label if one is missing on another theme.
 ## 3. Release and housekeeping
 - [ ] Tag `v0.1.0` to exercise `release.yml`, then merge Dependabot PR #2 (`softprops/action-gh-release` v3).
 - [x] Screenshots in the README (main window, console; 2026-10-31, rendered against the fake board, path boxes set by hand for the picture).
-- [ ] Terminal mode screenshot in the README.
+- [ ] Terminal mode screenshot in the README. (Main window screenshot redone for side-by-side, 2026-11-01.)
 - [ ] Owner to decide: delete the leftover GitHub branches (`claude/micropython-file-explorer-gui-7tsgfy`, `handoff-pi`, `wire-settings` have nothing unmerged; `todo-refresh` has one older TODO commit).
 - [ ] Optional: add `mpexplorer.desktop` and the icon to the repo with an install note, instead of README text only.
 
