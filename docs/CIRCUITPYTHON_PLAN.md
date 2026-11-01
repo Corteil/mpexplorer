@@ -85,8 +85,21 @@ Two catalogs, one dialog (Tools > Install libraries...), a target folder that is
 Suggested start: **MicroPython libraries first**, since all the hardware is on the bench and the pattern (catalog, cache, dialog)
 already exists in the firmware tools; then CircuitPython once a board is available.
 
-## Questions for the owner
-- Which CircuitPython board will be used? (Checks: does it have the `CIRCUITPY` drive, and a serial port next to it?)
-- Is the drive-first idea right, or should it work over the serial REPL only, like the MicroPython boards?
-- Is installing from the Adafruit bundle enough, or also the Community bundle and single files from GitHub?
-- Should the MicroPython side install on the Pi and upload (proposed), or run `mip` on the board?
+## Decisions (owner, 2026-11-01)
+- **Test boards:** the Picos (Pico RP2040 and Pico 2 RP2350) can run CircuitPython. Switching a Pico between MicroPython and
+  CircuitPython may need the flash **nuked** first (`flash_nuke.uf2`, which the Tools > Erase flash code already handles). The two
+  firmwares use the flash differently (CircuitPython shows a `CIRCUITPY` FAT drive; MicroPython uses littlefs), so leftover files
+  from the other one can break boot. Plan for tests: nuke, install, test, in that order, every time we switch. Each switch needs the
+  owner to put the Pico in BOOTSEL; tell the owner before writing to a board and say which one. The CircuitPython UF2 comes from
+  circuitpython.org/downloads (403 to plain scripts: find the file via the GitHub/S3 listing or ask the owner to download it).
+  This also means the firmware installer should offer CircuitPython builds for RP2 boards (not in the firmware plan yet).
+- **Files:** drive first (as proposed). **Everything else** (Run, Console, Terminal, board identity, version checks) goes over the serial REPL.
+- **Libraries (CircuitPython):** Adafruit bundle first, Community bundle second.
+- **Libraries (MicroPython):** install from the Pi (fetch on the host, upload through the transport). `mip` on the board only where
+  it is the better source: that is where a package needs `mip`'s own resolution (GitHub `github:` or other URL packages with a
+  `package.json`), and only on a Wi-Fi board. Even then the host can read the same `package.json` and fetch the files itself, so the
+  default is the host for everything; revisit if a package cannot be resolved that way.
+
+## Still open
+- Which CircuitPython UF2 versions to test with (10.x is the newest line in the bundle that matches a stable release; 11.x bundle exists too).
+- Pairing a `CIRCUITPY` drive with its serial port when two Picos are both running CircuitPython (use the UID in `boot_out.txt`).

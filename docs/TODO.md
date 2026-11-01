@@ -117,7 +117,7 @@ label if one is missing on another theme.
 
 ## 2g. CircuitPython and libraries (asked for by the owner, 2026-11-01; plan in docs/CIRCUITPYTHON_PLAN.md)
 - [ ] A CircuitPython mode.
-- [ ] Download and install libraries on the boards, for both CircuitPython and MicroPython. (Plan written 2026-11-01; owner questions open at its end.)
+- [ ] Download and install libraries on the boards, for both CircuitPython and MicroPython. (Plan written 2026-11-01; owner decisions recorded in it.)
 
 ## 3. Release and housekeeping
 - [ ] Tag `v0.1.0` to exercise `release.yml`, then merge Dependabot PR #2 (`softprops/action-gh-release` v3).
