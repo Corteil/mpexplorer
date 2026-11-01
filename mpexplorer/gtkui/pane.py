@@ -3,7 +3,7 @@ from ..backends import human
 from .common import Gdk, GLib, Gtk, error, fmt_time, icon_button, scrolled
 
 HOST = "Host"
-DRAG_ICON_RIGHT, DRAG_ICON_DOWN = 8, 20
+DRAG_ICON_RIGHT, DRAG_ICON_DOWN = 2, 6
 DND_TARGET = [Gtk.TargetEntry.new("application/x-mpexplorer-items", Gtk.TargetFlags.SAME_APP, 0)]
 
 
