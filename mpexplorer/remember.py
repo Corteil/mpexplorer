@@ -2,6 +2,7 @@
 import os
 import re
 
+from .boardinfo import SHARED_USB_SERIALS, unique_usb_serial  # noqa: F401  (the first is imported from here elsewhere)
 from .errors import BackendError
 from .ports import device_of
 from .settings import segment
@@ -16,9 +17,8 @@ def host_start(settings, fallback):
     return fallback
 
 
-# USB serials that more than one board reports: 2022 badges all say 123456. A folder remembered under one says nothing
-# about which board it was, so it is never moved to a chip id.
-SHARED_USB_SERIALS = {"123456"}
+# USB serials that more than one board reports (2022 badges all say 123456; see boardinfo): a folder remembered
+# under one says nothing about which board it was, so it is never moved to a chip id.
 _CHIP_ID = "import machine,binascii\nprint(binascii.hexlify(machine.unique_id()).decode())"
 
 
@@ -32,7 +32,7 @@ def chip_key(repl):
 
 
 def _usb_entry_is_this_boards(usb):
-    return bool(usb) and usb.rsplit(":", 1)[-1] not in SHARED_USB_SERIALS
+    return bool(usb) and unique_usb_serial(usb.rsplit(":", 1)[-1])
 
 
 def move_folder_to_chip(settings, usb, key):

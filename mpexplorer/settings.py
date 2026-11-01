@@ -91,6 +91,9 @@ SPEC = {
     "folders.boards": ({}, str_dict),               # board id -> last device folder
     "boards.rts": ({}, bool_dict),                  # board id -> assert RTS as well as DTR (the 2022 badge needs it)
     "boards.names": ({}, str_dict),                 # board id -> what os.uname().machine said at the last connect
+    "boards.firmware": ({}, str_dict),              # board id -> "micropython" | "circuitpython" (learned at connect)
+    "boards.nicknames": ({}, str_dict),             # chip id (else USB id) -> the owner's name for that board
+    "boards.ids": ({}, str_dict),                   # USB id -> chip id (learned at connect)
     "open_with.auto_upload": (True, boolean),       # upload saves made in an external program (docs/OPEN_WITH_PLAN.md)
     "open_with.by_extension": ({}, str_dict),       # ".py" -> "editor" | "app:<desktop id>" | "custom:<name>"
     "open_with.custom": ({}, str_dict),             # name -> command with {file}
