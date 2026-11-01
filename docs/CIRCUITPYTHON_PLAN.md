@@ -93,6 +93,10 @@ already exists in the firmware tools; then CircuitPython once a board is availab
   owner to put the Pico in BOOTSEL; tell the owner before writing to a board and say which one. The CircuitPython UF2 comes from
   circuitpython.org/downloads (403 to plain scripts: find the file via the GitHub/S3 listing or ask the owner to download it).
   This also means the firmware installer should offer CircuitPython builds for RP2 boards (not in the firmware plan yet).
+- **Bench (owner, 2026-11-01):** a second Pico 2 will be added, so one Pico 2 stays MicroPython and the other stays CircuitPython. That
+  removes most of the nuking (only when a board is repurposed), and gives a real MP + CP pair for side-by-side, drag between
+  them, sync, and the drive-to-serial pairing. Both Pico 2s share a USB product id; tell them apart by serial number (and by the
+  chip id in `boot_out.txt` / `machine.unique_id()`), not by port number. The RP2040 Pico stays free for nuke-and-switch tests.
 - **Files:** drive first (as proposed). **Everything else** (Run, Console, Terminal, board identity, version checks) goes over the serial REPL.
 - **Libraries (CircuitPython):** Adafruit bundle first, Community bundle second.
 - **Libraries (MicroPython):** install from the Pi (fetch on the host, upload through the transport). `mip` on the board only where
