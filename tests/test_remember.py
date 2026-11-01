@@ -1,14 +1,15 @@
 import os
+import types
 
 import pytest
 
 from fakedevice import FakeSerial
 from mpexplorer import ports
 from mpexplorer.backends import DeviceBackend
-from mpexplorer.remember import (device_start, host_start, port_choice, remember_board_rts, remember_folder,
-                                 remember_port)
-from mpexplorer.settings import Settings
-from mpexplorer.transport import RawREPL, TransportError
+from mpexplorer.remember import (chip_key, device_start, host_start, move_folder_to_chip, port_choice,
+                                 remember_board_rts, remember_folder, remember_port)
+from mpexplorer.settings import Settings, segment
+from mpexplorer.transport import DeviceError, RawREPL, TransportError
 
 
 @pytest.fixture
@@ -172,3 +173,77 @@ def test_remember_board_rts(s):
     assert s.get("boards.rts") == {}
     remember_board_rts(s, "", True)
     assert s.get("boards.rts") == {}
+
+
+class ChipRepl:
+    def __init__(self, reply=b"f412fa4e4da0\r\n", error=None):
+        self.reply, self.error = reply, error
+
+    def exec(self, code, timeout=0):
+        assert "unique_id" in code
+        if self.error:
+            raise self.error
+        return self.reply
+
+
+def test_chip_key_reads_the_boards_own_id():
+    assert chip_key(ChipRepl()) == "chip:f412fa4e4da0"
+
+
+@pytest.mark.parametrize("repl", [ChipRepl(error=DeviceError("ImportError: no module named 'machine'")),
+                                  ChipRepl(error=TransportError("silent")), ChipRepl(error=OSError("gone")),
+                                  ChipRepl(reply=b"odd reply\r\n"), ChipRepl(reply=b"")])
+def test_a_board_that_cannot_give_a_chip_id_falls_back(repl):
+    assert chip_key(repl) is None
+
+
+def chip_settings(tmp_path, folders):
+    s = Settings.load(str(tmp_path / "settings.json"))
+    s.set("folders.boards", folders)
+    return s
+
+
+PICO = "2e8a:0005:e6614c311b5d8e23"
+BADGE = "16d0:1114:123456"
+
+
+class StartDev:
+    root = "/"
+
+    def stat(self, path):
+        return types.SimpleNamespace(is_dir=True)
+
+
+def test_a_folder_saved_under_a_usb_id_is_found_then_moved_to_the_chip(tmp_path):
+    s = chip_settings(tmp_path, {segment(PICO): "/lib"})
+    assert device_start(s, StartDev(), "chip:aa", PICO) == "/lib"
+    move_folder_to_chip(s, PICO, "chip:aa")
+    assert s.get("folders.boards") == {segment("chip:aa"): "/lib"}
+
+
+def test_a_shared_usb_serial_is_never_given_to_either_badge(tmp_path):
+    s = chip_settings(tmp_path, {segment(BADGE): "/apps"})
+    assert device_start(s, StartDev(), "chip:aa", BADGE) == "/"
+    move_folder_to_chip(s, BADGE, "chip:aa")
+    assert s.get("folders.boards") == {segment(BADGE): "/apps"}
+
+
+def test_two_badges_with_one_usb_serial_remember_their_own_folders(tmp_path):
+    s = chip_settings(tmp_path, {})
+    remember_folder(s, True, "/one", "chip:a")
+    remember_folder(s, True, "/two", "chip:b")
+    assert device_start(s, StartDev(), "chip:a", BADGE) == "/one"
+    assert device_start(s, StartDev(), "chip:b", BADGE) == "/two"
+
+
+def test_a_chip_entry_wins_over_an_old_usb_one(tmp_path):
+    s = chip_settings(tmp_path, {segment(PICO): "/old", segment("chip:aa"): "/new"})
+    assert device_start(s, StartDev(), "chip:aa", PICO) == "/new"
+    move_folder_to_chip(s, PICO, "chip:aa")
+    assert s.get("folders.boards") == {segment("chip:aa"): "/new"}
+
+
+def test_with_no_chip_id_the_usb_id_goes_on_being_used(tmp_path):
+    s = chip_settings(tmp_path, {segment(PICO): "/lib"})
+    move_folder_to_chip(s, PICO, PICO)
+    assert s.get("folders.boards") == {segment(PICO): "/lib"}

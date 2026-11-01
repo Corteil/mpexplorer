@@ -86,6 +86,11 @@ label if one is missing on another theme.
 - [ ] Click Start bootloader, Back up and Erase on a real board.
 - [ ] Recording installs in the settings.
 
+## 2f. Side-by-side boards (plan: `docs/SIDE_BY_SIDE_PLAN.md`)
+- [x] Phase 1: boards are told apart by chip id for remembered folders (fake board; `unique_id` itself read on a Tildagon, Pico 2, Pico W and 2022 badge).
+- [ ] Hand test: the two 2022 badges remember separate folders.
+- [ ] Phases 2-5.
+
 ## 2c. Agent mode (plan: `docs/AGENT_PLAN.md`)
 - [x] `tools/bench.py` written and tested (fake board + real MicroPython).
 - [x] Ran `tools/bench.py` on the Tildagon (2026-10-29): SLOW, tables in `docs/HARDWARE.md`. Causes measured; see "Phase 0 results"

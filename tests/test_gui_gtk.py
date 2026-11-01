@@ -27,7 +27,7 @@ except (ImportError, ValueError) as e:                       # GTK 3 typelib mis
 import fakedisplay
 from fakedevice import FakeSerial
 from mpexplorer.backends import DeviceBackend
-from mpexplorer.settings import Settings
+from mpexplorer.settings import Settings, segment
 from mpexplorer.transport import RawREPL
 
 Gtk = common.Gtk
@@ -1148,3 +1148,15 @@ def test_system_default_asks_first_for_executable_looking_files(make_app, tmp_pa
     answer[0] = True
     app.open_with(app.left, str(tmp_path / "run.sh"), 8, "system")
     assert launched == [["xdg-open", str(tmp_path / "run.sh")]]
+
+
+def test_a_board_keeps_folders_by_chip_but_rts_and_model_by_usb(make_app, tmp_path, cfg):
+    app = make_app()
+    dev = DeviceBackend(RawREPL(FakeSerial()))
+    app.connected(dev, str(tmp_path), "/dev/ttyACM2", "chip:f412fa4e4da0", "TiDAL with ESP32S3", rts=True,
+                  usb="16d0:1114:123456")
+    pump()
+    assert app.board == "chip:f412fa4e4da0"
+    usb = segment("16d0:1114:123456")
+    assert app.settings.get("boards.rts") == {usb: True}
+    assert app.settings.get("boards.names") == {usb: "TiDAL with ESP32S3"}
