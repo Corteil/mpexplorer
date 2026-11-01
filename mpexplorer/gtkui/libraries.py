@@ -78,9 +78,10 @@ class LibrariesDialog(Gtk.Dialog):
         self.mpy, self.have, self.firmware = res
         self._mark_installed()
         if self.is_circuitpython():
+            self.mpy = None             # CircuitPython refuses MicroPython .mpy files (seen on a real board)
             self.force.show()
             self.note.set_text("This board runs CircuitPython. These are MicroPython libraries: tick "
-                               "\"Install anyway\" only if you know they will work there.")
+                               "\"Install anyway\" only if you know they will work there (source files are used).")
         self._sensitive()
 
     def _loaded(self, res, exc):
