@@ -110,15 +110,16 @@ def _open_url(url):
 class Catalog:
     """Each list is saved when it is read, so a board can still be installed with no network (`saved` says when)."""
 
-    def __init__(self, cache_dir=None, opener=_open_url):
+    def __init__(self, cache_dir=None, opener=_open_url, allowed=None):
         self.dir, self.opener = cache_dir or default_cache_dir(), opener
+        self.allowed = tuple(allowed) if allowed else ALLOWED       # URL prefixes it may read
 
     def _read(self, url, limit, on_progress=None, cancelled=None):
-        if not url.startswith(ALLOWED):
+        if not url.startswith(self.allowed):
             raise FirmwareError("Refusing to download from %s" % url)
         try:
             with self.opener(url) as reply:
-                if not reply.geturl().startswith(ALLOWED):
+                if not reply.geturl().startswith(self.allowed):
                     raise FirmwareError("The download was redirected to %s" % reply.geturl())
                 length = reply.headers.get("Content-Length")
                 total, data = int(length) if length and length.isdigit() else 0, bytearray()
