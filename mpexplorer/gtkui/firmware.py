@@ -749,6 +749,10 @@ def firmware_filter(chooser):
     for pattern in ("*.uf2", "*.UF2", "*.bin"):
         files.add_pattern(pattern)
     chooser.add_filter(files)
+    everything = Gtk.FileFilter()                       # a backup saved as unicorn.md must stay choosable
+    everything.set_name("All files")
+    everything.add_pattern("*")
+    chooser.add_filter(everything)
 
 
 class BackupDialog(DeviceDialog):
