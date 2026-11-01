@@ -249,9 +249,15 @@ def remove(catalog, backend, names, mpy=None, dest=DEST, cancelled=None):
     return removed
 
 
-def summary(plan):
-    """Lines for the confirmation: what will be written."""
+def summary(plan, max_lines=30):
+    """Lines for the confirmation (what will be written) and the number of files: each library with its version and
+    form, then its files indented. A long list is cut with a count of what is left out."""
     files = sum(len(p[3]) for p in plan)
-    lines = ["%s %s (%s)" % (name, version, "source" if kind == "py" else ".mpy %s" % kind)
-             for name, version, kind, _h in plan]
+    lines = []
+    for name, version, kind, hashes in plan:
+        lines.append("%s %s (%s)" % (name, version, "source" if kind == "py" else ".mpy %s" % kind))
+        lines.extend("    " + path for path, _h in hashes)
+    if len(lines) > max_lines:
+        left = len(lines) - max_lines
+        lines = lines[:max_lines] + ["    ... and %d more line(s)" % left]
     return lines, files
