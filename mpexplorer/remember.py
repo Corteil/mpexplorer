@@ -89,6 +89,20 @@ def remember_port(settings, device):
         settings.set("general.last_port", device)
 
 
+def remember_source(settings, side, source):
+    """What a pane's list has chosen: its port, or Host. Side is left or right."""
+    if settings.get("general.remember_port") and source:
+        settings.set("general.source." + side, device_of(source))
+
+
+def source_choice(settings, side, entries):
+    """The saved choice for a pane if it can still be made: an entry of the list, or Host. Else None."""
+    if not settings.get("general.remember_port"):
+        return None
+    saved = settings.get("general.source." + side)
+    return next((e for e in entries if saved and device_of(e) == saved), None)
+
+
 def remember_board_name(settings, board, machine):
     """Keep the model a board reported (os.uname().machine) so the port list can name it next time."""
     machine = (machine or "").strip()

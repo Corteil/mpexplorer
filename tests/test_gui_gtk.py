@@ -1582,3 +1582,52 @@ def test_dragging_shows_an_icon_not_the_whole_row(make_app, tmp_path, monkeypatc
     app.left._drag_icon(None)
     assert shown[2] == "edit-copy" and shown[0] != shown[1] and all(shown)
     assert set(spots) == {(pane_module.DRAG_ICON_X, pane_module.DRAG_ICON_Y)}
+
+
+PORTS = ["/dev/ttyACM1  Pico 2", "/dev/ttyACM3  Pico W"]
+
+
+@pytest.fixture
+def two_ports(monkeypatch):
+    monkeypatch.setattr("mpexplorer.gtkui.app.list_ports", lambda names=None: list(PORTS))
+
+
+def test_each_pane_comes_back_with_what_it_had_chosen(make_app, two_ports, tmp_path):
+    app = make_app(general__source__left="/dev/ttyACM3", general__source__right="/dev/ttyACM1")
+    assert app.left.source() == PORTS[1] and app.right.source() == PORTS[0]
+    assert app.left.backend is app.local and not app.conns          # chosen, but not connected until asked
+
+
+def test_choosing_in_a_pane_is_remembered(make_app, two_ports):
+    app = make_app()
+    app.left.source_box.get_child().set_text(PORTS[1])
+    assert app.settings.get("general.source.left") == "/dev/ttyACM3"
+    app.left.source_box.get_child().set_text("/dev/tty")                # half typed: not a choice
+    assert app.settings.get("general.source.left") == "/dev/ttyACM3"
+    app.right.source_box.get_child().set_text("Host")
+    pump()
+    assert app.settings.get("general.source.right") == "Host"
+
+
+def test_connecting_a_pane_remembers_its_port(make_app, two_ports, tmp_path):
+    app = make_app()
+    app.connected(DeviceBackend(RawREPL(FakeSerial())), str(tmp_path), "/dev/ttyACM3", "chip:aa", pane=app.left)
+    pump()
+    assert app.settings.get("general.source.left") == "/dev/ttyACM3"
+
+
+def test_a_right_pane_left_on_host_opens_on_host(make_app, two_ports):
+    app = make_app(general__source__right="Host")
+    assert app.right.source() == "Host" and app.right.backend is app.local
+
+
+def test_a_board_no_longer_plugged_in_falls_back(make_app, two_ports):
+    app = make_app(general__source__left="/dev/ttyACM9", general__source__right="/dev/ttyACM9")
+    assert app.left.source() == "Host" and app.right.source() == PORTS[0]
+
+
+def test_remembering_can_be_turned_off(make_app, two_ports):
+    app = make_app(general__remember_port=False, general__source__left="/dev/ttyACM3")
+    assert app.left.source() == "Host"
+    app.left.source_box.get_child().set_text(PORTS[0])
+    assert app.settings.get("general.source.left") == "/dev/ttyACM3"
