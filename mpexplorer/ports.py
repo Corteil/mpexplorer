@@ -1,6 +1,8 @@
 """Serial port discovery shared by the GUIs."""
 import re
+from collections import namedtuple
 
+from .boardinfo import firmware_kind, nickname_before_connect, quoted
 from .settings import segment
 
 
@@ -22,15 +24,16 @@ def short_model(machine):
     return "%s (%s)" % (board, chip) if chip else board
 
 
-def port_label(p, names=None):
-    """'/dev/ttyACM2  Pico 2 (RP2350)  #9842': what it is, then the end of the board's serial number, which tells
-    two boards of one kind apart (ttyACM1/2 follow the order they were plugged in)."""
+def port_label(p, names=None, nickname=""):
+    """'/dev/ttyACM2  "Bench"  Pico 2 (RP2350)  #9842': the port, the owner's name for the board if it has one, what it
+    is, then the end of the board's serial number, which tells two boards of one kind apart (ttyACM1/2 follow the order
+    they were plugged in)."""
     # a model learned by connecting beats the USB-id guess: a Pico and a Pico 2 look the same on USB
     learned = (names or {}).get(segment(_key(p))) if p.vid is not None else None
     name = short_model(learned) if learned else KNOWN_BOARDS.get((p.vid, p.pid)) or p.product or p.description or "port"
     if p.serial_number:
         name += "  #%s" % p.serial_number[-4:].lower()
-    return "%s  %s" % (p.device, name)
+    return "%s  %s" % (p.device, "%s  %s" % (quoted(nickname), name) if nickname else name)
 
 
 def list_ports(names=None):
@@ -60,3 +63,25 @@ def board_id(device):
 def device_of(entry):
     """'/dev/ttyACM0  TiLDAGON - Board CDC' -> '/dev/ttyACM0'."""
     return entry.split("  ")[0].strip()
+
+
+Entry = namedtuple("Entry", "device text kind nickname")      # kind: boardinfo.MICROPYTHON / CIRCUITPYTHON / None
+
+
+def list_boards(settings):
+    """What the source box shows, with what each port runs and its nickname: [Entry(device, text, kind, nickname)].
+    `text` is what `list_ports` gives plus the nickname, so `device_of(text)` still finds the port."""
+    try:
+        from serial.tools import list_ports as lp
+    except ImportError:
+        return []
+    names = settings.get("boards.names")
+    ports = [p for p in lp.comports() if p.vid is not None]
+    ports.sort(key=lambda p: (p.vid != 0x2E8A, p.device))
+    out = []
+    for p in ports:
+        key = _key(p)
+        nickname = nickname_before_connect(settings, key)
+        kind = firmware_kind(settings, key, p.vid, p.pid, p.manufacturer)
+        out.append(Entry(p.device, port_label(p, names, nickname), kind, nickname))
+    return out
