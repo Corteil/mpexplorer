@@ -129,3 +129,44 @@ def test_install_and_verify_for_circuitpython_waits_for_any_new_rp2_port(tmp_pat
     drive = fw.BootDrive("/x", "m", "RPI-RP2", "rp2350")
     assert fw.install_and_verify("img", drive, firmware="CircuitPython").port == "/dev/b"
     assert order == ["ports", "install", ({"/dev/a"}, True, "CircuitPython", 60.0)]
+
+
+def test_a_running_circuitpython_board_is_listed_as_circuitpython_not_micropython(monkeypatch):
+    monkeypatch.setattr(fw, "rp2_any_ports", lambda: {"/dev/ttyACM3", "/dev/ttyACM4"})
+    monkeypatch.setattr(fw, "rp2_ports", lambda: {"/dev/ttyACM4"})              # that one is MicroPython
+    found = fw.detect_running_circuitpython()
+    assert [(d.path, d.model, d.method) for d in found] == [("/dev/ttyACM3", "CircuitPython", "repl")]
+    micro = fw.BootDrive("/dev/x", "MicroPython", "MicroPython", None, "repl")
+    assert fw.is_circuitpython(found[0]) and not fw.is_circuitpython(micro)
+    assert fw.device_label(found[0]) == "CircuitPython board at /dev/ttyACM3"
+    assert ("State", "running CircuitPython") in fw.device_details(found[0])
+
+
+def test_circuitpython_is_read_without_uctypes_and_sent_to_its_bootloader_its_own_way():
+    sent = []
+
+    class Repl:
+        def exec(self, code, timeout=10):
+            sent.append(code)
+            return b"0\nRaspberry Pi Pico W with rp2040\n10.3.1\n"
+
+        def close(self, reset=False):
+            pass
+    info = fw.read_running("/dev/ttyACM3", open_board=lambda port: (Repl(), False), circuitpython=True)
+    assert (info.machine, info.release, info.flash_mb) == ("Raspberry Pi Pico W with rp2040", "10.3.1", None)
+    assert "uctypes" not in sent[0]
+    sent.clear()
+    fw._bootloader_in_raw_repl("/dev/ttyACM3", lambda port: (Repl(), False), fw.BOOTLOADER_CODE_CIRCUITPYTHON)
+    assert "RunMode.UF2" in sent[0] and "machine" not in sent[0]
+
+
+def test_circuitpython_ports_include_adafruits_vendor_id_but_not_bootloaders_or_other_makers(monkeypatch):
+    from types import SimpleNamespace as P
+    ports = [P(device="/dev/pico2", vid=0x2E8A, pid=0x000B), P(device="/dev/picow", vid=0x239A, pid=0x8120),
+             P(device="/dev/boot", vid=0x2E8A, pid=0x0003), P(device="/dev/badge", vid=0x16D0, pid=0x120E),
+             P(device="/dev/uart", vid=None, pid=None)]
+    import serial.tools.list_ports as lp
+    monkeypatch.setattr(lp, "comports", lambda: ports)
+    assert fw.rp2_any_ports() == {"/dev/pico2", "/dev/picow"}
+    monkeypatch.setattr(fw, "rp2_ports", lambda: set())              # none of them is MicroPython
+    assert [d.path for d in fw.detect_running_circuitpython()] == ["/dev/pico2", "/dev/picow"]

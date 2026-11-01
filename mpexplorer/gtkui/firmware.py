@@ -198,7 +198,8 @@ class DeviceDialog(Gtk.Dialog):
 
         def run():
             try:
-                res = fw.read_running(drive.path)
+                res = fw.read_running(drive.path, circuitpython=True) if fw.is_circuitpython(drive) \
+                    else fw.read_running(drive.path)
             except fw.FirmwareError as e:
                 res = str(e)
             GLib.idle_add(finish, res)
@@ -269,8 +270,9 @@ class DeviceDialog(Gtk.Dialog):
         def done(found):
             self.prefer = found.path
             return "Now in its bootloader, at %s." % found.path
-        self._start(lambda: fw.enter_bootloader(drive.path, find=fw.detect_rom if badge else None, normal_repl=badge),
-                    done)
+        extra = {"circuitpython": True} if fw.is_circuitpython(drive) else {}
+        self._start(lambda: fw.enter_bootloader(drive.path, find=fw.detect_rom if badge else None, normal_repl=badge,
+                                                **extra), done)
 
     # -- running a job -----------------------------------------------------
     def _start(self, work, done):
@@ -689,7 +691,8 @@ class BackupDialog(DeviceDialog):
     def update_state(self, drive):
         problem = self._chip_problem(drive)
         usable = bool(drive) and not problem and drive.method != "badge"
-        self.backup_btn.set_sensitive(usable and drive.method != "uf2")
+        cp = bool(drive) and fw.is_circuitpython(drive)         # backup needs uctypes, which CircuitPython lacks
+        self.backup_btn.set_sensitive(usable and drive.method != "uf2" and not cp)
         self.restore_btn.set_sensitive(usable and drive.method != "repl" and bool(drive.chip))
         self.backup_btn.set_tooltip_text("A board in BOOTSEL cannot be read: start it normally to back it up"
                                          if drive and drive.method == "uf2" else None)
@@ -701,6 +704,9 @@ class BackupDialog(DeviceDialog):
             self.note.set_text(fw.bootloader_hint(drive))
         elif problem:
             self.note.set_text(problem)
+        elif cp:
+            self.note.set_text("A running CircuitPython board cannot be backed up here: copy its CIRCUITPY "
+                               "drive instead. To restore or erase: %s" % fw.bootloader_hint(drive))
         elif drive.method == "repl":
             self.note.set_text("This board can be backed up as it is. To restore: %s" % fw.bootloader_hint(drive))
         elif drive.method == "uf2":

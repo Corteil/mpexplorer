@@ -35,6 +35,7 @@ BOARD_IDS = {"RPI-RP2": "rp2040", "RP2350": "rp2350"}
 CHIP_NAMES = {"rp2040": "RP2040", "rp2350": "RP2350", "esp32s3": "ESP32-S3"}
 MACHINE_NAMES = {"esp32s3": "ESP32S3"}               # how os.uname().machine spells it, if not as CHIP_NAMES does
 RP2_MICROPYTHON_USB = (0x2E8A, 0x0005)
+CIRCUITPYTHON_VIDS = (0x2E8A, 0x239A)                 # Raspberry Pi, Adafruit
 RP2_BOOTLOADER_PIDS = (0x0003, 0x000F)                # RP2040 and RP2350 bootloaders (BOOTSEL)
 ESP32S3_ROM_USB = (0x303A, 0x1001)                   # "USB JTAG/serial debug unit", seen on a real Tildagon
 ESP_IMAGE_MAGIC, ESP32S3_CHIP_ID = 0xE9, 9
@@ -198,6 +199,16 @@ def detect_running():
     return [BootDrive(port, "MicroPython", "MicroPython", None, "repl") for port in sorted(rp2_ports())]
 
 
+def detect_running_circuitpython():
+    """RP2 boards running CircuitPython (their USB id is the board's own, not MicroPython's)."""
+    return [BootDrive(port, "CircuitPython", "CircuitPython", None, "repl")
+            for port in sorted(rp2_any_ports() - rp2_ports())]
+
+
+def is_circuitpython(drive):
+    return drive.method == "repl" and drive.model == "CircuitPython"
+
+
 def detect_running_badges():
     """Badges in normal use, named by their USB id: nothing is sent to them, so their app keeps running."""
     return [BootDrive(port, BADGES[name].label, name, None, "badge")
@@ -205,7 +216,8 @@ def detect_running_badges():
 
 
 def detect_all(mounts_file="/proc/self/mounts"):
-    return detect(mounts_file) + detect_rom() + detect_running() + detect_running_badges()
+    return (detect(mounts_file) + detect_rom() + detect_running() + detect_running_circuitpython()
+            + detect_running_badges())
 
 
 def check_uf2(path, chip):
@@ -492,6 +504,12 @@ print(n)
 print(os.uname().machine)
 print(os.uname().release)
 """
+_REPL_SIZE_CP = """
+import os
+print(0)
+print(os.uname().machine)
+print(os.uname().release)
+"""
 _REPL_READ = """
 import uctypes,binascii,hashlib
 c=bytes(uctypes.bytearray_at(0x10000000+%d,%d))
@@ -500,14 +518,15 @@ print(binascii.hexlify(hashlib.sha256(c).digest()).decode())
 """
 
 
-def read_running(port, open_board=RawREPL.open_board):
-    """What a running RP2 board is. This stops its program and soft-resets it, which restarts its main.py."""
+def read_running(port, open_board=RawREPL.open_board, circuitpython=False):
+    """What a running RP2 board is. This stops its program and soft-resets it, which restarts its main.py.
+    CircuitPython has no uctypes, so its flash size is not read."""
     try:
         repl, _ = open_board(port)
     except (TransportError, OSError) as e:
         raise FirmwareError("Cannot read %s: is it connected in the app? (%s)" % (port, e))
     try:
-        lines = repl.exec(_REPL_SIZE, timeout=10).decode().strip().splitlines()
+        lines = repl.exec(_REPL_SIZE_CP if circuitpython else _REPL_SIZE, timeout=10).decode().strip().splitlines()
         return RunningInfo(lines[1], lines[2], int(lines[0]) or None)
     except (TransportError, ValueError, IndexError) as e:
         raise FirmwareError("Cannot read %s: %s" % (port, e))
@@ -515,13 +534,18 @@ def read_running(port, open_board=RawREPL.open_board):
         repl.close(reset=True)
 
 
-def _bootloader_in_raw_repl(port, open_board):
+BOOTLOADER_CODE = "import machine\nmachine.bootloader()"
+BOOTLOADER_CODE_CIRCUITPYTHON = ("import microcontroller\nmicrocontroller.on_next_reset(microcontroller.RunMode.UF2)\n"
+                                 "microcontroller.reset()")
+
+
+def _bootloader_in_raw_repl(port, open_board, code=BOOTLOADER_CODE):
     try:
         repl, _ = open_board(port)
     except (TransportError, OSError) as e:
         raise FirmwareError("Cannot reach %s: is it connected in the app? (%s)" % (port, e))
     try:
-        repl.exec("import machine\nmachine.bootloader()", timeout=2.0)
+        repl.exec(code, timeout=2.0)
     except DeviceError as e:                # the board answered, and said no
         raise FirmwareError("The board refused: %s" % e)
     except (TransportError, OSError):
@@ -561,7 +585,7 @@ def _bootloader_in_normal_repl(port, open_port):
 
 
 def enter_bootloader(port, timeout=20.0, poll=0.2, open_board=RawREPL.open_board, find=None, normal_repl=False,
-                     open_port=RawREPL.open):
+                     open_port=RawREPL.open, circuitpython=False):
     """Ask a running board to restart into its bootloader, with no button; returns the device when it appears. It drops
     off USB as soon as it obeys, so a lost connection here is the expected result, and the device appearing decides.
     find lists what to watch for: UF2 drives unless told otherwise."""
@@ -570,7 +594,7 @@ def enter_bootloader(port, timeout=20.0, poll=0.2, open_board=RawREPL.open_board
     if normal_repl:
         _bootloader_in_normal_repl(port, open_port)
     else:
-        _bootloader_in_raw_repl(port, open_board)
+        _bootloader_in_raw_repl(port, open_board, BOOTLOADER_CODE_CIRCUITPYTHON if circuitpython else BOOTLOADER_CODE)
     end = time.monotonic() + timeout
     while True:
         new = [d for d in find() if d.path not in before]
@@ -584,7 +608,8 @@ def enter_bootloader(port, timeout=20.0, poll=0.2, open_board=RawREPL.open_board
 def device_label(drive, running=None):
     """The device list's text: what the board is, then where."""
     if drive.method == "repl":
-        name = short_model(running.machine) if isinstance(running, RunningInfo) else "MicroPython board"
+        kind = "CircuitPython" if is_circuitpython(drive) else "MicroPython"
+        name = short_model(running.machine) if isinstance(running, RunningInfo) else "%s board" % kind
     elif drive.method == "badge":
         name = BADGES[drive.board_id].label
     elif drive.method == "esptool":
@@ -617,9 +642,10 @@ def device_details(drive, running=None):
         return [("State", "running normally"), ("Port", drive.path),
                 ("Details", "more can be read once it is in its bootloader")]
     if drive.method == "repl":
-        lines = [("State", "running MicroPython"), ("Port", drive.path)]
+        kind = "CircuitPython" if is_circuitpython(drive) else "MicroPython"
+        lines = [("State", "running %s" % kind), ("Port", drive.path)]
         if isinstance(running, RunningInfo):
-            lines += [("Board", running.machine), ("MicroPython", running.release)]
+            lines += [("Board", running.machine), (kind, running.release)]
             if running.flash_mb:
                 lines.append(("Flash", "%d MB" % running.flash_mb))
         elif running:
@@ -786,12 +812,13 @@ def rp2_ports():
 
 
 def rp2_any_ports():
-    """Serial ports of any RP2 board not in its bootloader (CircuitPython has a USB id per board)."""
+    """Serial ports of any RP2 board not in its bootloader. CircuitPython gives each board its own USB id, and some
+    carry Adafruit's vendor id (a Pico W is 239a:8120, seen on a real one) rather than Raspberry Pi's."""
     try:
         from serial.tools import list_ports as lp
     except ImportError:
         return set()
-    return {p.device for p in lp.comports() if p.vid == 0x2E8A and p.pid not in RP2_BOOTLOADER_PIDS}
+    return {p.device for p in lp.comports() if p.vid in CIRCUITPYTHON_VIDS and p.pid not in RP2_BOOTLOADER_PIDS}
 
 
 def badge_ports(badge):
