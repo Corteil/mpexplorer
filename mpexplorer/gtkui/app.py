@@ -17,8 +17,8 @@ from ..openwith import (SYSTEM_OPEN, EditManager, app_template, handler_for, loo
                         remember_handler)
 from ..ops import ConflictPolicy, copy_tree, delete_items, is_within, move_item, total_size, unique_name
 from ..ports import board_id, device_of, list_ports, short_model
-from ..remember import (device_start, host_start, port_choice, remember_board_name, remember_board_rts, remember_folder,
-                        remember_port)
+from ..remember import (chip_key, device_start, host_start, move_folder_to_chip, port_choice, remember_board_name,
+                        remember_board_rts, remember_folder, remember_port)
 from ..settings import Settings, segment
 from ..transport import RawREPL
 from ..watchdog import Watchdog
@@ -436,7 +436,8 @@ class App(Gtk.Window):
                     machine = repl.exec("import os;print(os.uname().machine)").decode().strip()
                 except Exception:
                     machine = ""            # a build without os.uname: the port list keeps its generic name
-                return dev, device_start(self.settings, dev, board), machine, rts
+                key = chip_key(repl) or board       # the USB id if its firmware cannot give a chip id
+                return dev, device_start(self.settings, dev, key, board), machine, rts, key
             except BaseException:
                 repl.close()
                 raise
@@ -448,14 +449,15 @@ class App(Gtk.Window):
                 self.set_status("Connection failed")
                 error(self, "Connection failed", str(exc))
                 return
-            self.connected(res[0], res[1], port, board, res[2], rts=res[3])
+            move_folder_to_chip(self.settings, board, res[4])
+            self.connected(res[0], res[1], port, res[4], res[2], rts=res[3], usb=board)
         self.runner.submit(work, done, "Connecting", quiet=True)
 
-    def connected(self, dev, start, port, board, machine="", rts=False):
+    def connected(self, dev, start, port, board, machine="", rts=False, usb=None):
         """The connection is up: show the board, and remember the port, its model (and later its folders)."""
         self.device = dev
-        remember_board_name(self.settings, board, machine)
-        remember_board_rts(self.settings, board, rts)
+        remember_board_name(self.settings, usb or board, machine)    # these are needed before a board can be read,
+        remember_board_rts(self.settings, usb or board, rts)         # so they stay under its USB id
         self.right.detail = "  ".join(x for x in (port, short_model(machine) if machine else "") if x)
         self.board = board
         self.session = ConsoleSession(dev.repl)

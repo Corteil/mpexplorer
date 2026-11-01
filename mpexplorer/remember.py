@@ -1,6 +1,8 @@
 """What the GUIs restore at start and record as the user works (GUI-free)."""
 import os
+import re
 
+from .errors import BackendError
 from .ports import device_of
 from .settings import segment
 
@@ -14,11 +16,43 @@ def host_start(settings, fallback):
     return fallback
 
 
-def device_start(settings, dev, board):
-    """The last folder on this board if it still exists, else the board's root.
-    Talks to the board, so call it from the job thread."""
+# USB serials that more than one board reports: 2022 badges all say 123456. A folder remembered under one says nothing
+# about which board it was, so it is never moved to a chip id.
+SHARED_USB_SERIALS = {"123456"}
+_CHIP_ID = "import machine,binascii\nprint(binascii.hexlify(machine.unique_id()).decode())"
+
+
+def chip_key(repl):
+    """The settings key for this board's own chip, or None if its firmware cannot say. Talks to the board."""
+    try:
+        text = repl.exec(_CHIP_ID, timeout=5).decode().strip()
+    except (BackendError, OSError):
+        return None
+    return "chip:" + text if re.fullmatch(r"[0-9a-f]+", text) else None
+
+
+def _usb_entry_is_this_boards(usb):
+    return bool(usb) and usb.rsplit(":", 1)[-1] not in SHARED_USB_SERIALS
+
+
+def move_folder_to_chip(settings, usb, key):
+    """A folder remembered before boards had chip ids follows the board, once. Call on the GUI thread."""
+    boards = settings.get("folders.boards")
+    if key == usb or segment(usb) not in boards or not _usb_entry_is_this_boards(usb):
+        return
+    path = boards.pop(segment(usb))
+    boards.setdefault(segment(key), path)
+    settings.set("folders.boards", boards)
+
+
+def device_start(settings, dev, board, usb=None):
+    """The last folder on this board if it still exists, else the board's root. usb is its USB id, for a folder
+    remembered before it had a chip id. Talks to the board, so call it from the job thread."""
     if settings.get("general.remember_folders"):
-        path = settings.get("folders.boards").get(segment(board))
+        folders = settings.get("folders.boards")
+        path = folders.get(segment(board))
+        if not path and _usb_entry_is_this_boards(usb):
+            path = folders.get(segment(usb))
         if path:
             try:
                 st = dev.stat(path)
