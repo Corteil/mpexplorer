@@ -115,9 +115,9 @@ label if one is missing on another theme.
 - Not doing (owner, 2026-10-31): a firmware change to lift the cap (`MICROPY_HW_ENABLE_UART_REPL` 0, confirmed 1 kHz tick).
   Badge files are tiny on average, so the speed does not matter in practice.
 
-## 2g. CircuitPython and libraries (asked for by the owner, 2026-11-01; not planned yet)
+## 2g. CircuitPython and libraries (asked for by the owner, 2026-11-01; plan in docs/CIRCUITPYTHON_PLAN.md)
 - [ ] A CircuitPython mode.
-- [ ] Download and install libraries on the boards, for both CircuitPython and MicroPython. Write a plan first.
+- [ ] Download and install libraries on the boards, for both CircuitPython and MicroPython. (Plan written 2026-11-01; owner questions open at its end.)
 
 ## 3. Release and housekeeping
 - [ ] Tag `v0.1.0` to exercise `release.yml`, then merge Dependabot PR #2 (`softprops/action-gh-release` v3).
