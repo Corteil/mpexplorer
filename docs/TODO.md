@@ -97,6 +97,7 @@ label if one is missing on another theme.
 - [x] One console per board, titled with the board (owner confirmed on real boards, 2026-11-01).
 - [x] Each pane remembers what its list had chosen; nothing connects by itself.
 - [x] Phase 4: badge screens per job, firmware tools close only their board, Sync between boards (fake boards).
+- [x] Badge status line fits the round screen (text widths measured on a real Tildagon).
 - [ ] Phase 5: docs.
 
 ## 2c. Agent mode (plan: `docs/AGENT_PLAN.md`)

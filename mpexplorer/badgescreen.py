@@ -47,8 +47,9 @@ def screen_code(kind, host, folder, status, since):
         " if %(details)r:\n"
         "  t(28,17,%(grey)r,%(folder_text)r)\n"
         "  t(50,17,%(grey)r,free)\n"
-        " t(80,18,%(status_col)r,%(status)r)\n"
-        " t(102,14,%(grey)r,%(since)r)\n"
+        # the screen is round: measured on a Tildagon, 20 characters at size 18 did not fit this low down
+        " t(76,15,%(status_col)r,%(status)r)\n"
+        " t(100,13,%(grey)r,%(since)r)\n"
         " display.end_frame(ctx)\n print('ok')\n"
     ) % {"details": details, "folder": folder, "dot": dot, "head": head, "head_col": head_col, "grey": GREY,
          "host": host, "folder_text": fit(folder, LINE, tail=True), "status_col": status_col,
