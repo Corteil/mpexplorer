@@ -35,6 +35,8 @@ BOARD_IDS = {"RPI-RP2": "rp2040", "RP2350": "rp2350"}
 CHIP_NAMES = {"rp2040": "RP2040", "rp2350": "RP2350", "esp32s3": "ESP32-S3"}
 MACHINE_NAMES = {"esp32s3": "ESP32S3"}               # how os.uname().machine spells it, if not as CHIP_NAMES does
 RP2_MICROPYTHON_USB = (0x2E8A, 0x0005)
+PIMORONI_MICROPYTHON_USB = (0x16D0, 0x08C7)           # Pimoroni's MicroPython builds, seen on a real board
+RP2_MICROPYTHON_USBS = (RP2_MICROPYTHON_USB, PIMORONI_MICROPYTHON_USB)
 CIRCUITPYTHON_VIDS = (0x2E8A, 0x239A)                 # Raspberry Pi, Adafruit
 RP2_BOOTLOADER_PIDS = (0x0003, 0x000F)                # RP2040 and RP2350 bootloaders (BOOTSEL)
 ESP32S3_ROM_USB = (0x303A, 0x1001)                   # "USB JTAG/serial debug unit", seen on a real Tildagon
@@ -818,7 +820,7 @@ def _copy_to_drive(image, drive, on_progress=None, cancelled=None):
 
 def rp2_ports():
     """Serial ports that are MicroPython on an RP2 board."""
-    return _ports_with(RP2_MICROPYTHON_USB)
+    return set().union(*(_ports_with(usb) for usb in RP2_MICROPYTHON_USBS))
 
 
 def rp2_any_ports():
@@ -828,7 +830,8 @@ def rp2_any_ports():
         from serial.tools import list_ports as lp
     except ImportError:
         return set()
-    return {p.device for p in lp.comports() if p.vid in CIRCUITPYTHON_VIDS and p.pid not in RP2_BOOTLOADER_PIDS}
+    return {p.device for p in lp.comports() if p.vid in CIRCUITPYTHON_VIDS and p.pid not in RP2_BOOTLOADER_PIDS} \
+        | rp2_ports()
 
 
 def badge_ports(badge):

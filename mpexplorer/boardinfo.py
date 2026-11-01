@@ -15,8 +15,8 @@ Badge = namedtuple("Badge", "text fill")
 BADGES = {MICROPYTHON: Badge("MP", "#1F7A6D"), CIRCUITPYTHON: Badge("CP", "#6B3FA0"), None: Badge("??", "#6E6E6E")}
 FIRMWARE_NAMES = {MICROPYTHON: "MicroPython", CIRCUITPYTHON: "CircuitPython"}
 SHARED_USB_SERIALS = {"123456"}
-# the MicroPython RP2 build, the Tildagon, the 2022 badge, an EMF badge
-MICROPYTHON_USB = {(0x2E8A, 0x0005), (0x16D0, 0x120E), (0x16D0, 0x1114), (0x303A, 0x4001)}
+# the MicroPython RP2 build, Pimoroni's build, the Tildagon, the 2022 badge, an EMF badge
+MICROPYTHON_USB = {(0x2E8A, 0x0005), (0x16D0, 0x08C7), (0x16D0, 0x120E), (0x16D0, 0x1114), (0x303A, 0x4001)}
 ADAFRUIT_VID, RASPBERRY_PI_VID = 0x239A, 0x2E8A
 MAX_NICKNAME = 24
 
