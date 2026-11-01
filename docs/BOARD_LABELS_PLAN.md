@@ -1,7 +1,8 @@
-# Firmware markers (emoji) and board nicknames plan
+# Firmware badges (CP / MP) and board nicknames plan
 
 Status (2026-11-01): plan only, nothing built. Asked for by the owner: the port list does not make clear which firmware a board
-runs; add a marker per firmware type (the snake and the "inverted M") and a nickname for each unique board.
+runs; add a marker per firmware type and a nickname for each unique board. **Settled 2026-11-01:** the markers are the letters **CP** and **MP**
+shown as filled badges (text and background colours swapped, "inverted"); no emoji. (The owner first asked for 🐍 and an inverted M, then clarified.)
 
 ## What there is today
 - The port list (`ports.list_ports` / `port_label`) is `"/dev/ttyACM4  Pico 2 (rp2350a)  #8a64"`: port, a model name (USB guess, or what the board
@@ -23,19 +24,15 @@ runs; add a marker per firmware type (the snake and the "inverted M") and a nick
 - So the USB data alone separates the two families on these boards: the MicroPython builds report manufacturer `MicroPython` / product `Board in FS mode`
   (the same on every board), CircuitPython reports the board's own name. It is a good guess, not a proof: a custom MicroPython build can change the strings.
 - **A board with serial `000000000000` is not uniquely identified by USB.** Only the chip id, read after connecting, tells two of them apart.
-- **Emoji (checked with `fc-list ":charset=..."`):** 🐍 (U+1F40D) has **no font on this Pi**, so it would show as an empty box. The Debian package
-  `fonts-noto-color-emoji` (2.042, in apt) provides it; installing it is a system change that needs the owner's yes and `sudo`. The inverted M exists as a plain
-  letter, **Ɯ (U+019C, LATIN CAPITAL LETTER TURNED M)**, and it renders already (Noto Sans Display). There is no emoji for MicroPython; the circled M `Ⓜ` (U+24C2)
-  also renders (Noto Sans Symbols) but is not inverted.
-- MicroPython's own logo (micropython/logo) is itself a snake on a chip, and CircuitPython's mascot (Blinka) is a snake too: see the question below.
+- **Emoji were considered and dropped:** 🐍 (U+1F40D) has no font on this Pi (`fonts-noto-color-emoji` is in apt but not installed) and there is no emoji for
+  MicroPython. Plain letters in a coloured badge need no font anywhere.
 
-## Decisions needed from the owner
-1. **Which marker is which?** "The snake" and "the inverted M". Both firmwares have snake mascots, so this is not obvious. Plan default, to be confirmed:
-   **🐍 = CircuitPython, Ɯ (turned M) = MicroPython.**
-2. **Install the emoji font on this Pi?** `sudo apt install fonts-noto-color-emoji` (about 10 MB). Without it 🐍 is an empty box here. The owner chose emoji
-   (2026-11-01); this is the one system change the plan needs. Other computers need an emoji font too (most desktops have one); the app falls back (see B).
-3. **Nickname editing:** Device menu item `Name this board...` plus a pencil button next to the port box (plan default), or only the menu?
-4. Boards of unknown firmware (a custom build, a board never connected to): no marker, or a dot? (Plan default: the dot `·`.)
+## Decisions
+Settled: letters **CP** and **MP**, as inverted (filled) badges. Plan defaults for the rest, to be changed on request:
+1. **Colours:** white bold text on a filled rounded badge, a different fill per firmware so they differ at a glance and not only by the letters:
+   CircuitPython purple `#6B3FA0`, MicroPython teal `#1F7A6D` (white on either is above 4.5:1 contrast). Unknown firmware: a grey outlined badge with `??`.
+2. **Nickname editing:** `Device > Name this board...` plus a small pencil button next to the port box.
+3. **Both panes:** each pane shows its own badge, because each can hold a different board.
 
 ## Design
 ### A. Firmware kind of a board (GUI-free, new `mpexplorer/boardinfo.py`)
@@ -47,18 +44,18 @@ runs; add a marker per firmware type (the snake and the "inverted M") and a nick
 3. The guess is shown as the marker without any hint; nothing says "guessed". A wrong guess is fixed by one connect.
 `ports.list_ports` and the firmware tools use this one function.
 
-### B. Markers (the owner chose emoji, 2026-11-01)
-- A **text prefix**, so the source box stays a `ComboBoxText` and nothing about `device_of()`, `Pane.source()` or the tests' use of the box changes:
-  `🐍 /dev/ttyACM4  Pico 2 (rp2350a)  #8a64` and `Ɯ /dev/ttyACM2  Pico 2 (RP2350)  #1e0a`. An unknown board gets a plain dot `·`. `device_of()` must skip the marker:
-  it takes the first token that starts with `/dev/` or `COM` (a marker is one character plus a space, never a path).
-- **Emoji font check, once at start** (`boardinfo.emoji_ok()`): ask Pango which font would draw U+1F40D (`Pango.Context.load_fontset(...).get_font(0x1F40D)`;
-  a family with "Emoji" in its name means yes). If not, the snake falls back to the letters **CP** and the turned M to **MP** in the same place, so the list is
-  still clear without any font. Ɯ needs no emoji font.
-- The pane's frame label (`Device: /dev/ttyACM4  Pico 2 (rp2350a)  CircuitPython 10.3.1`) starts with the marker too, and always names the firmware:
-  `MicroPython 1.29.0` as well as `CircuitPython 10.3.1`. Console window titles and the Window menu get the marker as text. The firmware tools' device list gets the
-  marker on running boards ("running CircuitPython" / "running MicroPython" is already there in the details).
-- **Fallback if emoji turn out ugly or blurry** (colour emoji can look odd in a small dropdown on a light theme): the earlier design, two small drawn images in a
-  `Gtk.ComboBox` with a pixbuf cell, is kept as plan B and costs one extra phase.
+### B. Badges
+- **In the drop-down rows:** the source box becomes a `Gtk.ComboBox` with an entry over a `ListStore(badge text, badge fill, row text)`. Each row has a
+  `CellRendererText` for the badge (`foreground` white, `background` the fill, bold, a little `xpad`) before the row's own text. The row text stays exactly as
+  it is today (`/dev/ttyACM4  Pico 2 (rp2350a)  #8a64`) so `device_of()`, `Pane.source()` and every saved port string keep working. `fill_sources` takes
+  `(badge, text)` pairs; the badge is never part of the entry's text.
+- **Beside the box:** the box's entry cannot hold a coloured part, so a small `Gtk.Label` styled by CSS (`.fw-cp`, `.fw-mp`, `.fw-unknown`) sits left of it and shows the
+  badge of the chosen row; it updates when the choice changes and when a connect or install teaches the app the firmware. The CSS goes in the app's one stylesheet
+  and uses the theme's own font; the fill colours are fixed, the text white, so it reads on light and dark themes.
+- **Pane label:** the frame label (`Device: /dev/ttyACM4  Pico 2 (rp2350a)  CircuitPython 10.3.1`) is replaced by a small box (badge + label) through
+  `Gtk.Frame.set_label_widget`, and always names the firmware: `MicroPython 1.29.0` as well as `CircuitPython 10.3.1`.
+- **Plain text places** (console window title, Window menu, status messages): a bracketed prefix, `[CP]` / `[MP]`, since menus cannot show colours reliably.
+- **Firmware tools' device list** (a text `ComboBoxText`): the same `[CP]` / `[MP]` prefix on running boards.
 
 ### C. Nicknames
 - Setting `boards.nicknames`: board key -> text (at most 24 characters, control characters removed, blank = remove). The key is the chip id (`chip:<hex>`) when the
@@ -77,17 +74,17 @@ runs; add a marker per firmware type (the snake and the "inverted M") and a nick
 ### D. Phases
 1. **`boardinfo.py` and settings** (GUI-free, fully tested): `firmware_kind`, `boards.firmware`, `boards.nicknames`, `boards.ids`, label formatting, shared-serial
    handling. Tests with fake `ListPortInfo` rows built from the bench table above. No owner test needed.
-2. **Markers:** the emoji font check and fallback, the prefix in the port list, `device_of` skipping it, the frame label and the firmware name in every label.
-   Tests with and without an emoji font (the check is injectable), a rendered screenshot under Xvfb with the font installed. Owner test: look at the list with
-   three or more boards plugged in.
+2. **Badges:** the `ComboBox` change with the badge cell, the badge label beside it, the stylesheet, the pane label with the badge and the firmware name, the `[CP]`/`[MP]`
+   prefixes. Tests under Xvfb, the pane tests adapted to `(badge, text)` rows, and rendered screenshots (`Gdk.pixbuf_get_from_window`) of the list with several boards.
+   Owner test: look at the list and both panes with three or more boards plugged in.
 3. **Nicknames:** the menu item and pencil button, propagation to all the places above. Owner test: name two boards of one kind (two Pico 2s), replug in a
    different order, and connect.
-4. **Firmware tools and polish:** learned firmware kind written after an install, marker refresh after a switch, the dot for unknown, docs and README text.
+4. **Firmware tools and polish:** learned firmware kind written after an install, badge refresh after a switch, the grey `??` badge for unknown, docs and README text.
 
 ### E. Risks
-- The marker is part of the text in the box, so a saved source string (`general.last_port`, per-pane remembered sources) must be stored without it and
-  matched by port: `remember_source` and `port_choice` strip the marker, and an old setting without a marker still matches.
+- Swapping `ComboBoxText` for `ComboBox` touches every test that calls `append_text` / `get_active_text` on the source box: done once, behind `Pane.fill_sources` and
+  `Pane.source()`. Typing a port by hand in the entry must still work (the box keeps its entry), and a typed port gets the badge of any known row for it, else `??`.
 - A custom MicroPython build with another USB manufacturer string is guessed as unknown until it connects: acceptable, and corrected by learning.
-- Colour emoji in a GTK combo box row can be taller than the text and make the rows uneven: check on the Pi 5 display with `grim` before settling.
+- A coloured cell background in a drop-down row can look heavy with some themes (PiXflat is the Pi's): check on the Pi 5 display with `grim`, and use a thin badge (small `ypad`) rather than a full-height block.
 - Nicknames with odd characters in settings keys: keys go through `settings.segment()` already; values are plain strings.
 - Some boards read the same serial on every unit (`000000000000`): nothing here can separate them before connecting; the chip id does after.
