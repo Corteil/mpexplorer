@@ -1160,3 +1160,29 @@ def test_a_board_keeps_folders_by_chip_but_rts_and_model_by_usb(make_app, tmp_pa
     usb = segment("16d0:1114:123456")
     assert app.settings.get("boards.rts") == {usb: True}
     assert app.settings.get("boards.names") == {usb: "TiDAL with ESP32S3"}
+
+
+def test_paste_from_a_board_no_longer_connected_explains_and_copies_nothing(make_app, tmp_path, monkeypatch):
+    app = make_app()
+    old = DeviceBackend(RawREPL(FakeSerial()))
+    app.connected(DeviceBackend(RawREPL(FakeSerial())), str(tmp_path), "/dev/ttyACM0", "303a:4001:AAA")
+    pump()
+    app.clipboard.set("copy", [(old, "/main.py")])
+    said, started = [], []
+    monkeypatch.setattr("mpexplorer.gtkui.app.info", lambda parent, title, text: said.append(text))
+    monkeypatch.setattr(app, "_start_copy", lambda *a: started.append(a))
+    app.paste()
+    assert not started and "no longer connected" in said[0] and "Host pane" in said[0]
+    assert not app.clipboard.items
+
+
+def test_paste_from_the_connected_board_still_works(make_app, tmp_path, monkeypatch):
+    app = make_app()
+    dev = DeviceBackend(RawREPL(FakeSerial()))
+    app.connected(dev, str(tmp_path), "/dev/ttyACM0", "303a:4001:AAA")
+    pump()
+    app.clipboard.set("copy", [(dev, "/main.py")])
+    started = []
+    monkeypatch.setattr(app, "_start_copy", lambda *a: started.append(a))
+    app.paste()
+    assert len(started) == 1
