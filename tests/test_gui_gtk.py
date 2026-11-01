@@ -1540,4 +1540,4 @@ def test_dragging_shows_an_icon_not_the_whole_row(make_app, tmp_path, monkeypatc
     select_rows(app.left, "main.py", "lib")
     app.left._drag_icon(None)
     assert shown[2] == "edit-copy" and shown[0] != shown[1] and all(shown)
-    assert all(x < 0 and y < 0 for x, y in spots)   # below and right of the pointer's tip
+    assert set(spots) == {(16, 16)}                 # the pointer's tip is at the middle of the 32 px icon
