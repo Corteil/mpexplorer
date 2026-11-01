@@ -620,6 +620,16 @@ def device_label(drive, running=None):
     return "%s at %s" % (name, drive.path)
 
 
+def labelled(drive, running=None, nickname=""):
+    """device_label with the firmware tag a running board earns ('[CP] ...', '[MP] ...') and its nickname."""
+    text = device_label(drive, running)
+    if drive.method not in ("repl", "badge"):
+        return text                 # a board in a bootloader runs nothing yet
+    tag = "[CP]" if is_circuitpython(drive) else "[MP]"
+    name, _, where = text.rpartition(" at ")
+    return "%s %s%s at %s" % (tag, '"%s"  ' % nickname if nickname else "", name, where)
+
+
 def can_enter_bootloader(drive):
     return drive.method == "repl" or (drive.method == "badge" and BADGES[drive.board_id].boot_from_repl)
 
