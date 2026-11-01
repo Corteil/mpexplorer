@@ -6,6 +6,7 @@ import time
 from .. import firmware as fw
 from ..backends import human
 from ..errors import Cancelled
+from ..cp_firmware import CircuitPythonCatalog
 from ..firmware_catalog import NUKE_FILE, Build, Catalog, default_build, saved_text
 from .common import GLib, Gtk, ask_yes_no, error
 
@@ -29,6 +30,7 @@ class DeviceDialog(Gtk.Dialog):
         super().__init__(title=title, transient_for=app, modal=True)
         self.app, self.drives, self.running, self.result = app, [], False, None
         self.catalog = Catalog()
+        self.cp_catalog = CircuitPythonCatalog()
         self.load_id, self.closed, self.outcome, self.tool_problem = 0, False, "", ""
         self.chip_reading, self.chip_error, self.chip_retry = None, "", 0
         self.running_info, self.info_reading, self.filling, self.prefer = {}, None, False, None
@@ -374,17 +376,25 @@ class FirmwareDialog(DeviceDialog):
         self.use_site.connect("toggled", lambda _b: self._source_changed())
         grid.attach(self.use_site, 0, 0, 1, 1)
         self.site_rows = Gtk.Grid(column_spacing=10, row_spacing=6, hexpand=True)
-        self.site_rows.attach(Gtk.Label(label="Board", xalign=1), 0, 0, 1, 1)
+        self.firmware_label = Gtk.Label(label="Firmware", xalign=1, no_show_all=True)
+        self.firmware_box = Gtk.ComboBoxText(hexpand=True, no_show_all=True)       # Pico boards only: both are offered
+        self.firmware_box.append_text("MicroPython")
+        self.firmware_box.append_text("CircuitPython")
+        self.firmware_box.set_active(0)
+        self.firmware_box.connect("changed", lambda _b: self._firmware_changed())
+        self.site_rows.attach(self.firmware_label, 0, 0, 1, 1)
+        self.site_rows.attach(self.firmware_box, 1, 0, 1, 1)
+        self.site_rows.attach(Gtk.Label(label="Board", xalign=1), 0, 1, 1, 1)
         self.product_box = Gtk.ComboBoxText(hexpand=True)
         self.product_box.connect("changed", lambda _b: self._product_changed())
-        self.site_rows.attach(self.product_box, 1, 0, 1, 1)
-        self.site_rows.attach(Gtk.Label(label="Version", xalign=1), 0, 1, 1, 1)
+        self.site_rows.attach(self.product_box, 1, 1, 1, 1)
+        self.site_rows.attach(Gtk.Label(label="Version", xalign=1), 0, 2, 1, 1)
         self.build_box = Gtk.ComboBoxText(hexpand=True)
         self.build_box.connect("changed", lambda _b: self._check())
-        self.site_rows.attach(self.build_box, 1, 1, 1, 1)
+        self.site_rows.attach(self.build_box, 1, 2, 1, 1)
         self.all_builds = Gtk.CheckButton(label="Show preview builds and other variants")
         self.all_builds.connect("toggled", lambda _b: self._fill_builds())
-        self.site_rows.attach(self.all_builds, 1, 2, 1, 1)
+        self.site_rows.attach(self.all_builds, 1, 3, 1, 1)
         grid.attach(self.site_rows, 0, 1, 1, 1)
         grid.attach(self.use_file, 0, 2, 1, 1)
         self.chooser = Gtk.FileChooserButton(title="Choose a firmware file", action=Gtk.FileChooserAction.OPEN)
@@ -420,10 +430,26 @@ class FirmwareDialog(DeviceDialog):
             self._connect_new_port()
 
     def device_changed(self, drive):
+        pico = bool(drive and drive.method == "uf2" and drive.chip in ("rp2040", "rp2350"))
+        self.firmware_label.set_visible(pico)
+        self.firmware_box.set_visible(pico)
         chip = self._list_for(drive)
         if chip != self.list_chip:
             self.list_chip = chip
             self._load_boards(chip)
+
+    @property
+    def firmware(self):
+        """'MicroPython' or 'CircuitPython': the second only for Pico boards (UF2 bootloader), where it is offered."""
+        return self.firmware_box.get_active_text() if self.firmware_box.get_visible() else "MicroPython"
+
+    @property
+    def site(self):
+        return self.cp_catalog if self.firmware == "CircuitPython" else self.catalog
+
+    def _firmware_changed(self):
+        self.outcome = ""
+        self._load_boards(self.list_chip)
 
     def _list_for(self, drive):
         """(chip, the badges to include) to list boards for. On esptool, only once the chip has been read."""
@@ -442,7 +468,7 @@ class FirmwareDialog(DeviceDialog):
         self.product_box.remove_all()
         self.build_box.remove_all()
         if key:
-            self._in_background(lambda: self.catalog.boards(*key), self._boards_loaded)
+            self._in_background(lambda: self.site.boards(*key), self._boards_loaded)
 
     def _boards_loaded(self, res, exc):
         if exc:
@@ -464,7 +490,7 @@ class FirmwareDialog(DeviceDialog):
         self.build_box.remove_all()
         board, drive = self.product(), self.drive()
         if board and drive:
-            self._in_background(lambda: self.catalog.builds(board.id, drive.chip), self._builds_loaded)
+            self._in_background(lambda: self.site.builds(board.id, drive.chip), self._builds_loaded)
         self._check()
 
     def _builds_loaded(self, res, exc):
@@ -572,7 +598,7 @@ class FirmwareDialog(DeviceDialog):
         site = self.use_site.get_active()
         build, path = (self.build(), None) if site else (None, self.chooser.get_filename())
         erase_first = self.erase.get_active()
-        options = {}
+        options = {} if self.firmware == "MicroPython" else {"firmware": self.firmware}
         if drive.method == "esptool":
             options["erase"] = erase_first
             if site:
@@ -603,11 +629,11 @@ class FirmwareDialog(DeviceDialog):
         if not build:
             return path
         self._stage("Getting %s" % build.filename)
-        image = self.catalog.download(build, on_progress=self._progress, cancelled=self.cancel_event.is_set)
+        image = self.site.download(build, on_progress=self._progress, cancelled=self.cancel_event.is_set)
         try:
             fw.check_image(image, drive.chip, self._flash_bytes(drive))
         except fw.FirmwareError:
-            self.catalog.forget(build)          # the next try downloads it again
+            self.site.forget(build)          # the next try downloads it again
             raise
         return image
 
@@ -617,8 +643,8 @@ class FirmwareDialog(DeviceDialog):
             return ("Written and checked. The app cannot follow this board as it starts: reset it yourself and Scan "
                     "for its port.\nSHA-256 %s" % sha)
         self.connect_btn.show()
-        return "Installed: MicroPython %s on %s, now at %s.\nSHA-256 %s" % (
-            self.result.release, self.result.machine, self.result.port, sha)
+        return "Installed: %s %s on %s, now at %s.\nSHA-256 %s" % (
+            self.firmware, self.result.release, self.result.machine, self.result.port, sha)
 
     def _connect_new_port(self):
         port = self.result.port

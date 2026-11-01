@@ -4,7 +4,8 @@ Status (2026-11-01): phases 1 and 2 built on branch `circuitpython-mode` (`mpexp
 detects it, finds its `CIRCUITPY` drive by USB serial = `boot_out.txt` UID, and shows the drive as the device pane, with Run, console and
 terminal over serial. Checked on the real Pico 2 by script (not through the window). Phase 4 libraries built on `cp-libraries` (`mpexplorer/cpbundle.py`): Adafruit and Community bundles in
 the Install libraries dialog, tried on the real Pico 2 (install, import, remove). Not built: phase 3 (serial-only), clock, Open with in place,
-CircuitPython firmware in the installer, outdated-library check. Earlier: plan only. Asked for by the owner. Facts marked "checked" were fetched on 2026-11-01; anything marked
+outdated-library check. CircuitPython firmware in the installer is built on `cp-firmware` (`mpexplorer/cp_firmware.py`, Firmware choice
+for Pico boards in Tools > Install firmware): run on a real Pico W by script, MicroPython -> CircuitPython 10.3.1 -> MicroPython 1.29.0. Earlier: plan only. Asked for by the owner. Facts marked "checked" were fetched on 2026-11-01; anything marked
 "unverified" must be tried on a real CircuitPython board before it is relied on (none is on the bench yet).
 
 ## Goals

@@ -865,3 +865,32 @@ def test_connect_after_an_install_uses_a_free_pane(setup, monkeypatch):
     d._connect_new_port()
     assert used == [app.left] and app.left.source() == "/dev/ttyACM3"
     app.conns.clear()
+
+
+class FakeCircuitPythonCatalog(FakeCatalog):
+    BOARDS = [Board("raspberry_pi_pico", "Pico", "Raspberry Pi")]
+    BUILDS = [Build("adafruit-circuitpython-raspberry_pi_pico-en_US-10.3.1.uf2", "10.3.1", "", "", False, "https://x/")]
+
+
+def test_a_pico_can_be_given_circuitpython_instead(setup, monkeypatch):
+    make, _, errors, _, tmp = setup
+    monkeypatch.setattr(dialog, "CircuitPythonCatalog", FakeCircuitPythonCatalog)
+    calls = []
+
+    def fake(path, drive, on_progress, on_stage, cancelled, firmware):
+        calls.append((path, firmware))
+        return fw.Installed("/dev/ttyACM9", "10.3.1", "Raspberry Pi Pico with rp2040")
+    monkeypatch.setattr(fw, "install_and_verify", fake)
+    d = make()
+    assert d.firmware_box.get_visible() and d.firmware == "MicroPython"
+    wait_until(lambda: [b.id for b in d.boards] == ["RPI_PICO", "RPI_PICO_W"])
+    d.firmware_box.set_active(1)                                    # CircuitPython
+    wait_until(lambda: [b.id for b in d.boards] == ["raspberry_pi_pico"])
+    d.product_box.set_active(0)
+    wait_until(lambda: d.build() is not None)
+    image = uf2(tmp / "cp.uf2")
+    d.cp_catalog.image = image
+    d.install()
+    wait_until(lambda: not d.running)
+    assert calls == [(image, "CircuitPython")] and not errors
+    assert "Installed: CircuitPython 10.3.1" in d.note.get_text()
