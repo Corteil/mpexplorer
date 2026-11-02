@@ -739,13 +739,16 @@ def erase_esptool(drive, on_stage=None, cancelled=None, tool=None):
                  300.0)
 
 
-def erase_uf2(image, drive, on_progress=None, cancelled=None, timeout=90.0, poll=0.5):
+def erase_uf2(image, drive, on_progress=None, cancelled=None, timeout=90.0, poll=0.5, on_stage=None):
     """Run the erase tool from a UF2 drive. It erases, then restarts into the bootloader, so the drive comes back."""
     check_nuke_uf2(image)
     if read_drive(drive.path) != drive:
         raise FirmwareError("The board at %s has gone or changed. Scan again." % drive.path)
     before = {d.path for d in detect() if d.path != drive.path}
+    stage = on_stage or (lambda text: None)
+    stage("Sending the erase tool")
     _copy_to_drive(image, drive, on_progress, cancelled)
+    stage("Erasing the flash (this takes a while; the board restarts when it is done)")
     if not wait_gone(drive):
         raise FirmwareError("The board did not start the erase. It is still in its bootloader.")
     end = time.monotonic() + timeout
@@ -768,7 +771,7 @@ def wait_gone(drive, timeout=20.0, poll=0.1):
         time.sleep(poll)
 
 
-def install(image, drive, on_progress=None, cancelled=None, gone_timeout=20.0):
+def install(image, drive, on_progress=None, cancelled=None, gone_timeout=20.0, on_stage=None):
     """Copy a checked UF2 to a bootloader drive and wait for the board to restart.
 
     A cancel can leave the flash part written: the board stays in its bootloader, ready for another try. The board may
@@ -779,6 +782,8 @@ def install(image, drive, on_progress=None, cancelled=None, gone_timeout=20.0):
     if read_drive(drive.path) != drive:
         raise FirmwareError("The board at %s has gone or changed. Scan again." % drive.path)
     _copy_to_drive(image, drive, on_progress, cancelled)
+    if on_stage:
+        on_stage("Finishing the write and restarting the board")
     if not wait_gone(drive, gone_timeout):
         raise FirmwareError("The board did not restart after the copy. It is still in its bootloader.")
     return info
@@ -801,6 +806,7 @@ def _copy_to_drive(image, drive, on_progress=None, cancelled=None):
                 raise Cancelled()
             try:
                 sent += out.write(view[sent:sent + step])
+                os.fsync(out.fileno())      # else the bar races ahead: the OS only caches the write
             except OSError as e:
                 if len(data) - sent > step:
                     raise FirmwareError("Writing to the board failed after %d of %d bytes: %s" % (sent, len(data), e))
@@ -911,14 +917,14 @@ def install_and_verify(image, drive, on_progress=None, on_stage=None, cancelled=
     if firmware == "MicroPython":
         before = rp2_ports()
         stage("Copying the firmware")
-        install(image, drive, on_progress, cancelled)
+        install(image, drive, on_progress, cancelled, on_stage=stage)
         stage("Waiting for MicroPython to start")
         port = wait_for_new_port(before)
         stage("Checking the board on %s" % port)
         return identify(port, drive.chip)
     before = rp2_any_ports()            # a CircuitPython board has its own USB id, so any new RP2 port counts
     stage("Copying the firmware")
-    install(image, drive, on_progress, cancelled)
+    install(image, drive, on_progress, cancelled, on_stage=stage)
     stage("Waiting for %s to start" % firmware)
     # a CircuitPython first boot formats its drive, which takes a while
     port = wait_for_new_port(before, timeout=60.0, ports=rp2_any_ports, firmware=firmware)
