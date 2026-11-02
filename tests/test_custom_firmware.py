@@ -140,3 +140,15 @@ def test_a_direct_url_is_one_board_with_one_build(tmp_path):
     cat = cf.make_catalog(src, str(tmp_path), lambda url: Reply(UF2, url))
     assert [b.id for b in cat.boards()[0]] == ["Maker"]
     assert cat.builds("Maker")[0][0].filename == "my_board.uf2"
+
+
+def test_the_pico_lipo_preset_lists_the_boards_and_skips_the_with_filesystem_twins():
+    preset = next(p for p in S.FIRMWARE_PRESETS if p["name"] == "Pimoroni Pico LiPo")
+    assert preset["repo"] == "pimoroni/pico-lipo"
+    names = ["pimoroni_pico_lipo2xl_w-v1.26.1-micropython.uf2",
+             "pimoroni_pico_lipo2xl_w-v1.26.1-micropython-with-filesystem.uf2",
+             "pimoroni_pico_lipo_16mb-v1.26.1-micropython.uf2"]
+    reply = json.dumps([{"published_at": "2026-05-01T00:00:00Z", "prerelease": False,
+                         "assets": [{"name": n, "browser_download_url": "https://github.com/x/" + n} for n in names]}])
+    builds = cf.parse_releases(reply, preset["pattern"])
+    assert [b.filename for b in builds] == [names[0], names[2]] and builds[0].version == "v1.26.1"

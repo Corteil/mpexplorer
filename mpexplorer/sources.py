@@ -24,6 +24,9 @@ FIRMWARE_PRESETS = (
      "firmware": "micropython"},
     {"name": "Pimoroni MicroPython (RP2350)", "kind": "github", "repo": "pimoroni/pimoroni-pico-rp2350",
      "pattern": DEFAULT_PATTERN, "firmware": "micropython"},
+    # the LiPo boards have their own repo; its '-with-filesystem' twins carry example files, so only the plain builds
+    {"name": "Pimoroni Pico LiPo", "kind": "github", "repo": "pimoroni/pico-lipo",
+     "pattern": r"^(?P<board>.+?)-(?P<version>v?\d[\w.]*)-micropython\.uf2$", "firmware": "micropython"},
 )
 LIBRARY_PRESETS = (
     {"name": "Pimoroni phew", "kind": "mip", "repo": "pimoroni/phew", "for": "micropython"},

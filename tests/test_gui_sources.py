@@ -56,10 +56,11 @@ def test_the_menu_offers_the_presets_and_custom_and_greys_the_ones_already_added
     try:
         items = [i.get_label() for i in mgr.add_menu.get_children() if isinstance(i, Gtk.MenuItem) and i.get_label()]
         assert items == ["Pimoroni MicroPython (pimoroni/pimoroni-pico)",
-                         "Pimoroni MicroPython (RP2350) (pimoroni/pimoroni-pico-rp2350)", "Custom..."]
+                         "Pimoroni MicroPython (RP2350) (pimoroni/pimoroni-pico-rp2350)",
+                         "Pimoroni Pico LiPo (pimoroni/pico-lipo)", "Custom..."]
         S.add_source(app.settings, "firmware", S.validate_firmware_source(S.FIRMWARE_PRESETS[0]))
         enabled = [i.get_sensitive() for i in mgr.add_menu.get_children() if i.get_label()]
-        assert enabled == [False, True, True]
+        assert enabled == [False, True, True, True]
         assert [r[0] for r in mgr.store] == ["Pimoroni MicroPython"]
     finally:
         app.destroy()
