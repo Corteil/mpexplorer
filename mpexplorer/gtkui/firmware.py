@@ -304,6 +304,7 @@ class DeviceDialog(Gtk.Dialog):
         self.cancel_event.clear()
         self.cancel_btn.set_sensitive(True)
         self.cancel_btn.show()
+        self._stop_pulse()
         self.bar.set_fraction(0)
         self.bar.show()
         for w in self.locked_widgets():
@@ -321,10 +322,37 @@ class DeviceDialog(Gtk.Dialog):
         threading.Thread(target=run, daemon=True).start()
 
     def _progress(self, done, total):
-        GLib.idle_add(self.bar.set_fraction, done / total)
+        GLib.idle_add(self._set_fraction, done / total)
 
     def _stage(self, text):
-        GLib.idle_add(self.note.set_text, text + " ...")
+        GLib.idle_add(self._new_stage, text)
+
+    def _set_fraction(self, fraction):
+        self._stop_pulse()
+        self.bar.set_fraction(fraction)
+
+    def _new_stage(self, text):
+        """Each stage starts from an empty bar; one with no byte count (waiting, checking) shows it pulsing instead of
+        staying full from the stage before."""
+        self.note.set_text(text + " ...")
+        self.bar.set_fraction(0)
+        self._start_pulse()
+
+    def _start_pulse(self):
+        if not getattr(self, "_pulse_id", 0):
+            self._pulse_id = GLib.timeout_add(120, self._pulse)
+
+    def _pulse(self):
+        if not self.running:
+            self._pulse_id = 0
+            return False
+        self.bar.pulse()
+        return True
+
+    def _stop_pulse(self):
+        if getattr(self, "_pulse_id", 0):
+            GLib.source_remove(self._pulse_id)
+            self._pulse_id = 0
 
     def unlocked_widgets(self):
         return (self.board_box,)
@@ -334,6 +362,7 @@ class DeviceDialog(Gtk.Dialog):
 
     def _job_done(self, res, exc, done):
         self.running = False
+        self._stop_pulse()
         self.cancel_btn.hide()
         self.bar.hide()
         self.close_btn.set_sensitive(True)

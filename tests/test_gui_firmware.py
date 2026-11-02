@@ -1040,3 +1040,19 @@ def test_manage_sources_opens_the_manager_and_the_firmware_box_follows_it(setup,
     opened[0]()                                                                  # the manager closed
     assert [row[0] for row in d.firmware_box.get_model()] == ["MicroPython", "CircuitPython"]
     assert d.source_name == "MicroPython" and "Pimoroni MicroPython" not in d.custom_catalogs
+
+
+def test_each_stage_starts_from_an_empty_bar_and_pulses_until_bytes_are_counted(setup):
+    make, *_ = setup
+    d = make()
+    d.running = True
+    d._set_fraction(1.0)                                 # a copy that has finished
+    assert d.bar.get_fraction() == 1.0
+    d._new_stage("Waiting for MicroPython to start")     # no byte count: not left full, and pulsing
+    assert d.bar.get_fraction() == 0 and d._pulse_id and "Waiting" in d.note.get_text()
+    pump(400)
+    d._set_fraction(0.5)                                 # a stage that counts bytes stops the pulsing
+    assert d.bar.get_fraction() == 0.5 and not d._pulse_id
+    d._new_stage("Checking the board")
+    d._job_done(None, None, lambda res: "")              # the job ending stops it too
+    assert not d._pulse_id
