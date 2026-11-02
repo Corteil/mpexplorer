@@ -129,9 +129,20 @@ def version_key(text):
     return tuple(int(n) for n in re.findall(r"\d+", text or ""))
 
 
+def exact_release(version):
+    """The release with its revision from `os.uname().version`: 'picow v1.29.0-2 on 2026-08-31' -> '1.29.0-2'.
+    Stock builds say 'v1.29.0 on ...', and a development build 'v1.27.0-72-g1234abc' (its -72 counts commits, not a
+    revision): both give no revision, so '' for those."""
+    m = re.search(r"(?:^|\s)v?(\d+\.\d+\.\d+-\d+)(?=\s|$)", version or "")
+    return m.group(1) if m else ""
+
+
 def newer_than(candidate, running="", installed=""):
     """Is `candidate` newer than the board? An install recorded from this source compares exactly. Otherwise only the
     release the board reports (1.29.0, with no revision) can be used, so an equal release is never called newer."""
     if installed:
         return version_key(candidate) > version_key(installed)
-    return bool(running) and version_key(candidate)[:3] > version_key(running)[:3]
+    if not running:
+        return False
+    have = version_key(running)
+    return version_key(candidate)[:max(3, len(have))] > have

@@ -8,7 +8,9 @@ holds `hashes` ([path, short hash] pairs) and `deps` ([name, version]); a file i
 import hashlib
 import json
 import os
+import re
 import urllib.error
+import urllib.parse
 import urllib.request
 
 from .errors import BackendError
@@ -59,15 +61,22 @@ def parse_index(data):
 
 
 class Catalog:
-    def __init__(self, cache_dir=None, opener=_open_url):
-        self.dir, self.opener = cache_dir or default_cache_dir(), opener
+    def __init__(self, cache_dir=None, opener=_open_url, base=INDEX):
+        """`base` is the index's address; another one (a maker's own v2 index) may read only its own site."""
+        self.base, self.opener = base.rstrip("/"), opener
+        self.dir = cache_dir or default_cache_dir()
+        if self.base == INDEX:
+            self.allowed = ALLOWED
+        else:
+            self.allowed = ("https://%s/" % (urllib.parse.urlsplit(self.base).hostname or "-"),)
+            self.dir = os.path.join(self.dir, "index-" + re.sub(r"[^A-Za-z0-9]+", "_", self.base)[-60:])
 
     def _read(self, url, limit):
-        if not url.startswith(ALLOWED):
+        if not url.startswith(self.allowed):
             raise LibraryError("Refusing to download from %s" % url)
         try:
             with self.opener(url) as reply:
-                if not reply.geturl().startswith(ALLOWED):
+                if not reply.geturl().startswith(self.allowed):
                     raise LibraryError("The download was redirected to %s" % reply.geturl())
                 data = reply.read(limit + 1)
         except (OSError, urllib.error.HTTPError, ValueError) as e:
@@ -80,7 +89,7 @@ class Catalog:
         """(libraries, saved): saved is None for a fresh index, else the time of the saved copy used instead."""
         path = os.path.join(self.dir, "index.json")
         try:
-            data = self._read(INDEX + "/index.json", MAX_INDEX)
+            data = self._read(self.base + "/index.json", MAX_INDEX)
             libs = parse_index(data)
         except LibraryError as e:
             try:
@@ -100,7 +109,7 @@ class Catalog:
         last = None
         for kind in kinds:
             try:
-                url = "%s/package/%s/%s/%s.json" % (INDEX, kind, name, version)
+                url = "%s/package/%s/%s/%s.json" % (self.base, kind, name, version)
                 return json.loads(self._read(url, MAX_INDEX)), kind
             except (LibraryError, ValueError) as e:
                 last = e
@@ -134,7 +143,7 @@ class Catalog:
             with open(path, "rb") as f:
                 data = f.read()
         except OSError:
-            data = self._read("%s/file/%s/%s" % (INDEX, hash_[:2], hash_), MAX_FILE)
+            data = self._read("%s/file/%s/%s" % (self.base, hash_[:2], hash_), MAX_FILE)
             if hashlib.sha256(data).hexdigest()[:len(hash_)] != hash_:
                 raise LibraryError("A downloaded file does not match its hash (%s)." % hash_)
             os.makedirs(os.path.dirname(path), exist_ok=True)

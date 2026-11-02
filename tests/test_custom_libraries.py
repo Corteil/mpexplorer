@@ -135,3 +135,30 @@ def test_a_custom_bundle_stays_on_its_own_repo_and_reports_pypi_needs(tmp_path):
     cat.meta["adafruit_thing"]["external_dependencies"] = ["sparkfun_qwiic_i2c", "adafruit_bus_device"]
     cat.resolve(["adafruit_thing"], 10)
     assert cat.external == ["sparkfun_qwiic_i2c"]        # the bundle's own library was installed, the PyPI one was not
+
+
+def test_a_makers_own_package_index_is_read_like_micropython_lib_but_only_from_its_own_site(tmp_path):
+    import hashlib
+    base = "https://dl.maker.example/pi/v2"
+    data = b"# tool\n"
+    h = hashlib.sha256(data).hexdigest()[:8]
+    pages = {base + "/index.json": json.dumps({"v": 2, "packages": [
+                 {"name": "tool", "version": "1.2", "versions": {"py": ["1.2"]}}]}).encode(),
+             base + "/package/py/tool/latest.json": json.dumps({"version": "1.2", "hashes": [["tool.py", h]]}).encode(),
+             "%s/file/%s/%s" % (base, h[:2], h): data}
+    src = {"name": "Maker index", "kind": "index", "url": base + "/", "for": "micropython"}
+    assert CL.validate_library_source(src)["url"] == base                       # a trailing slash is dropped
+    cat = CL.make_catalog(CL.validate_library_source(src), str(tmp_path / "c"), site(pages))
+    libs, saved = cat.libraries()
+    assert saved is None and [(lib.name, lib.version) for lib in libs] == [("tool", "1.2")]
+    plan = cat.resolve(["tool"])
+    dest = str(tmp_path / "lib")
+    assert libraries.install(cat, LocalBackend(), plan, dest) == (1, 0)
+    assert (tmp_path / "lib" / "tool.py").read_bytes() == data
+    got = CL.check_source(src, Settings(), str(tmp_path / "k"), site(pages))
+    assert got.ok and "1 libraries in the index" in got.message and got.trust_host == "dl.maker.example"
+    with pytest.raises(libraries.LibraryError, match="Refusing"):
+        cat._read("https://elsewhere.example/index.json", 100)
+    with pytest.raises(S.SourceError, match="https://"):
+        CL.validate_library_source(dict(src, url="http://dl.maker.example/pi/v2"))
+    assert libraries.Catalog().allowed == libraries.ALLOWED                   # the built-in one is unchanged

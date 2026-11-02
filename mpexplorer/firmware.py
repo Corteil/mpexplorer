@@ -12,6 +12,7 @@ import sys
 import time
 from dataclasses import dataclass
 
+from . import sources
 from .errors import BackendError, Cancelled
 from .ports import short_model
 from .transport import DeviceError, RawREPL, TransportError
@@ -124,6 +125,7 @@ class RunningInfo:
     machine: str
     release: str
     flash_mb: int | None
+    exact: str = ""             # the revision from os.uname().version when it has one ('1.29.0-2'), else ''
 
 
 @dataclass
@@ -505,12 +507,14 @@ for m in (1,2,4,8,16):
 print(n)
 print(os.uname().machine)
 print(os.uname().release)
+print(os.uname().version)
 """
 _REPL_SIZE_CP = """
 import os
 print(0)
 print(os.uname().machine)
 print(os.uname().release)
+print(os.uname().version)
 """
 _REPL_READ = """
 import uctypes,binascii,hashlib
@@ -529,7 +533,8 @@ def read_running(port, open_board=RawREPL.open_board, circuitpython=False):
         raise FirmwareError("Cannot read %s: is it connected in the app? (%s)" % (port, e))
     try:
         lines = repl.exec(_REPL_SIZE_CP if circuitpython else _REPL_SIZE, timeout=10).decode().strip().splitlines()
-        return RunningInfo(lines[1], lines[2], int(lines[0]) or None)
+        return RunningInfo(lines[1], lines[2], int(lines[0]) or None,
+                           sources.exact_release(lines[3]) if len(lines) > 3 else "")
     except (TransportError, ValueError, IndexError) as e:
         raise FirmwareError("Cannot read %s: %s" % (port, e))
     finally:

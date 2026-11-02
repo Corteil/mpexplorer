@@ -283,7 +283,7 @@ class DeviceDialog(Gtk.Dialog):
         info = self.running_info.get(drive.path)
         usb = board_id(drive.path)
         record = self.app.settings.get("boards.installed").get(usb, {}) if usb.count(":") == 2 else {}
-        release = info.release if isinstance(info, fw.RunningInfo) else ""
+        release = (info.exact or info.release) if isinstance(info, fw.RunningInfo) else ""
 
         def done(found):
             self.prefer = found.path
