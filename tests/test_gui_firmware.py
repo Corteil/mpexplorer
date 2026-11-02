@@ -226,7 +226,7 @@ def test_the_window_cannot_close_while_installing(setup, monkeypatch):
 def test_install_and_verify_runs_the_steps_in_order(tmp_path, monkeypatch):
     order = []
     monkeypatch.setattr(fw, "rp2_ports", lambda: order.append("ports") or {"/dev/a"})
-    monkeypatch.setattr(fw, "install", lambda *a: order.append("install"))
+    monkeypatch.setattr(fw, "install", lambda *a, **k: order.append("install"))
     monkeypatch.setattr(fw, "wait_for_new_port", lambda before: order.append(before) or "/dev/b")
     monkeypatch.setattr(fw, "identify", lambda port, chip: fw.Installed(port, "1", chip))
     drive = fw.BootDrive("/x", "m", "RPI-RP2", "rp2040")
@@ -625,7 +625,7 @@ def test_erase_asks_twice_and_either_no_stops_it(setup, monkeypatch, answers):
     make, *_ = setup
     replies = iter(answers)
     monkeypatch.setattr(dialog, "ask_yes_no", lambda *a: next(replies))
-    monkeypatch.setattr(fw, "erase_uf2", lambda *a: pytest.fail("erased"))
+    monkeypatch.setattr(fw, "erase_uf2", lambda *a, **k: pytest.fail("erased"))
     d = make(cls=dialog.EraseDialog)
     d.erase_flash()
     assert not d.running
@@ -643,7 +643,7 @@ def test_erasing_a_uf2_board_gets_the_tool_checks_it_and_says_it_is_empty(setup,
     tool = erase_tool_at(monkeypatch, tmp)
     ran = []
     monkeypatch.setattr(fw, "check_nuke_uf2", lambda path: ran.append("checked"))
-    monkeypatch.setattr(fw, "erase_uf2", lambda image, drive, p, c: ran.append(image))
+    monkeypatch.setattr(fw, "erase_uf2", lambda image, drive, p, c, **k: ran.append(image))
     d = make(cls=dialog.EraseDialog)
     d.erase_flash()
     wait_until(lambda: not d.running)
@@ -665,7 +665,7 @@ def test_erasing_a_badge_uses_esptool(setup, monkeypatch):
 def test_a_bad_erase_tool_is_dropped_and_nothing_is_erased(setup, monkeypatch):
     make, _, errors, _, tmp = setup
     erase_tool_at(monkeypatch, tmp)
-    monkeypatch.setattr(fw, "erase_uf2", lambda *a: pytest.fail("erased"))
+    monkeypatch.setattr(fw, "erase_uf2", lambda *a, **k: pytest.fail("erased"))
     d = make(cls=dialog.EraseDialog)
     d.erase_flash()
     wait_until(lambda: not d.running)
@@ -677,7 +677,7 @@ def test_the_firmware_tool_can_erase_a_pico_first_then_installs_on_the_drive_tha
     erase_tool_at(monkeypatch, tmp)
     monkeypatch.setattr(fw, "check_nuke_uf2", lambda path: None)
     back = fw.BootDrive("/media/pi/NEW", "m", "RPI-RP2", "rp2040")
-    monkeypatch.setattr(fw, "erase_uf2", lambda image, drive, p, c: back)
+    monkeypatch.setattr(fw, "erase_uf2", lambda image, drive, p, c, **k: back)
     got = []
 
     def fake(image, drive, on_progress, on_stage, cancelled):
@@ -848,7 +848,7 @@ def test_a_job_on_a_bootloader_closes_nothing(setup, monkeypatch):
     monkeypatch.setattr(app, "disconnect", lambda *a, **k: pytest.fail("closed a board"))
     monkeypatch.setattr(fw, "check_nuke_uf2", lambda p: None)
     monkeypatch.setattr(FakeCatalog, "erase_tool", lambda self, p, c: "x", raising=False)
-    monkeypatch.setattr(fw, "erase_uf2", lambda *a: None)
+    monkeypatch.setattr(fw, "erase_uf2", lambda *a, **k: None)
     d = make(cls=dialog.EraseDialog)
     d.erase_flash()
     wait_until(lambda: not d.running)

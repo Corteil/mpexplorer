@@ -397,3 +397,17 @@ def test_a_board_that_refuses_says_why(monkeypatch):
     monkeypatch.setattr(fw, "detect", lambda: [])
     with pytest.raises(fw.FirmwareError, match="refused.*not allowed"):
         fw.enter_bootloader("/dev/x", timeout=0, open_board=opener(BootRepl(fw.DeviceError("not allowed"))))
+
+
+def test_the_copy_waits_for_the_board_after_every_chunk_so_progress_is_real(tmp_path, monkeypatch):
+    """A write only reaches the OS cache, so without an fsync per chunk the bar fills long before the board has it."""
+    import os
+    from mpexplorer import firmware as fw
+    image = tmp_path / "x.uf2"
+    image.write_bytes(bytes(512 * 200))                              # 200 blocks: four chunks of 64
+    drive = type("D", (), {"path": str(tmp_path)})()
+    events = []
+    real = os.fsync
+    monkeypatch.setattr(os, "fsync", lambda fd: events.append("sync") or real(fd))
+    fw._copy_to_drive(str(image), drive, lambda done, total: events.append(done))
+    assert events.count("sync") >= 4 and events.index("sync") < events.index(32768)       # synced, then reported

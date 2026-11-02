@@ -119,7 +119,7 @@ def test_wait_for_new_port_names_the_firmware():
 def test_install_and_verify_for_circuitpython_waits_for_any_new_rp2_port(tmp_path, monkeypatch):
     order = []
     monkeypatch.setattr(fw, "rp2_any_ports", lambda: order.append("ports") or {"/dev/a"})
-    monkeypatch.setattr(fw, "install", lambda *a: order.append("install"))
+    monkeypatch.setattr(fw, "install", lambda *a, **k: order.append("install"))
 
     def waited(before, ports, firmware, timeout):
         order.append((before, ports is fw.rp2_any_ports, firmware, timeout))

@@ -394,7 +394,7 @@ class DeviceDialog(Gtk.Dialog):
             self.catalog.forget(Build(NUKE_FILE, "", "", "", False))
             raise
         self._stage("Erasing flash")
-        return fw.erase_uf2(image, drive, self._progress, self.cancel_event.is_set)
+        return fw.erase_uf2(image, drive, self._progress, self.cancel_event.is_set, on_stage=self._stage)
 
     def _erase(self, drive):
         if drive.method == "esptool":
