@@ -19,7 +19,11 @@ def _firmware_newest(src):
 def _library_newest(src):
     catalog = custom_libraries.make_catalog(custom_libraries.validate_library_source(src))
     libs, _saved = catalog.libraries()
-    return "release %s" % catalog.tag if src["kind"] == "bundle" else (libs[0].version if libs else "none")
+    if src["kind"] == "bundle":
+        return "release %s" % catalog.tag
+    if src["kind"] == "folder":
+        return "%d librar%s" % (len(libs), "y" if len(libs) == 1 else "ies")
+    return libs[0].version if libs else "none"
 
 
 SECTIONS = {
@@ -154,40 +158,78 @@ class AddLibrarySourceDialog(AddSourceDialog):
     def build_form(self, grid):
         self.is_repo = Gtk.RadioButton(label="A bundle on GitHub (release zips, like the Adafruit bundles)")
         self.is_url = Gtk.RadioButton(label="A package.json repository (the mip format)", group=self.is_repo)
-        self.is_repo.connect("toggled", lambda _b: self._kind_changed())
+        self.is_folder = Gtk.RadioButton(label="A folder or .zip file on this computer (your own libraries)",
+                                         group=self.is_repo)
+        self.is_index = Gtk.RadioButton(label="A package index like micropython-lib's (a folder with index.json)",
+                                        group=self.is_repo)
+        for radio in (self.is_repo, self.is_url, self.is_index, self.is_folder):
+            radio.connect("toggled", lambda _b: self._kind_changed())
         grid.attach(self.is_repo, 1, 1, 1, 1)
         grid.attach(self.is_url, 1, 2, 1, 1)
+        grid.attach(self.is_index, 1, 3, 1, 1)
+        grid.attach(self.is_folder, 1, 4, 1, 1)
         self.address_label = Gtk.Label(xalign=1)
         self.address = Gtk.Entry(hexpand=True)
-        grid.attach(self.address_label, 0, 3, 1, 1)
-        grid.attach(self.address, 1, 3, 1, 1)
+        grid.attach(self.address_label, 0, 5, 1, 1)
+        grid.attach(self.address, 1, 5, 1, 1)
+        self.browse = Gtk.Box(spacing=6)
+        for label, folder in (("Choose a folder...", True), ("Choose a .zip...", False)):
+            b = Gtk.Button(label=label)
+            b.connect("clicked", lambda _b, f=folder: self._browse(f))
+            self.browse.pack_start(b, False, False, 0)
+        grid.attach(self.browse, 1, 6, 1, 1)
         self.pattern_label = Gtk.Label(label="File prefix", xalign=1)
         self.pattern = Gtk.Entry(hexpand=True, placeholder_text="the start of the release file names, e.g. qwiic-py")
-        grid.attach(self.pattern_label, 0, 4, 1, 1)
-        grid.attach(self.pattern, 1, 4, 1, 1)
+        grid.attach(self.pattern_label, 0, 7, 1, 1)
+        grid.attach(self.pattern, 1, 7, 1, 1)
         self.firmware = Gtk.ComboBoxText()
         self.firmware.append("micropython", "MicroPython")
         self.firmware.append("circuitpython", "CircuitPython")
         self.firmware.set_active(1)
-        grid.attach(Gtk.Label(label="For", xalign=1), 0, 5, 1, 1)
-        grid.attach(self.firmware, 1, 5, 1, 1)
+        grid.attach(Gtk.Label(label="For", xalign=1), 0, 8, 1, 1)
+        grid.attach(self.firmware, 1, 8, 1, 1)
+
+    def _browse(self, folder):
+        action = Gtk.FileChooserAction.SELECT_FOLDER if folder else Gtk.FileChooserAction.OPEN
+        dlg = Gtk.FileChooserDialog(title="Choose a folder" if folder else "Choose a .zip file", transient_for=self,
+                                    action=action)
+        dlg.add_buttons("Cancel", Gtk.ResponseType.CANCEL, "Choose", Gtk.ResponseType.OK)
+        if not folder:
+            zips = Gtk.FileFilter()
+            zips.set_name("Zip files")
+            zips.add_pattern("*.zip")
+            dlg.add_filter(zips)
+        path = dlg.get_filename() if dlg.run() == Gtk.ResponseType.OK else None
+        dlg.destroy()
+        if path:
+            self.address.set_text(path)
 
     def _kind_changed(self):
-        bundle = self.is_repo.get_active()
-        self.address_label.set_text("Repository" if bundle else "Repository or address")
-        self.address.set_placeholder_text("owner/name, e.g. sparkfun/qwiic_py" if bundle else
+        bundle, folder = self.is_repo.get_active(), self.is_folder.get_active()
+        index = self.is_index.get_active()
+        self.address_label.set_text("Folder or .zip" if folder else "Index address" if index else
+                                    "Repository" if bundle else "Repository or address")
+        self.address.set_placeholder_text("/home/pi/my-libs or /home/pi/my-libs.zip" if folder else
+                                          "https://example.com/pi/v2 (the folder with index.json)" if index else
+                                          "owner/name, e.g. sparkfun/qwiic_py" if bundle else
                                           "owner/name (add @branch), or https://.../package.json")
         self.pattern.set_visible(bundle)
         self.pattern_label.set_visible(bundle)
+        self.browse.set_visible(folder)
         self.firmware.set_active_id("circuitpython" if bundle else "micropython")
 
     def source(self):
         text = self.address.get_text().strip()
+        firmware = self.firmware.get_active_id()
+        if self.is_folder.get_active():
+            return {"name": self.name.get_text(), "kind": "folder", "path": text, "for": firmware}
+        if self.is_index.get_active():
+            return {"name": self.name.get_text(), "kind": "index", "url": text, "for": firmware}
         if self.is_repo.get_active():
             return {"name": self.name.get_text(), "kind": "bundle", "repo": text, "prefix": self.pattern.get_text(),
-                    "for": self.firmware.get_active_id()}
+                    "for": firmware}
         key = "url" if text.startswith("https://") else "repo"
-        return {"name": self.name.get_text(), "kind": "mip", key: text, "for": self.firmware.get_active_id()}
+        return {"name": self.name.get_text(), "kind": "mip", key: text, "for": firmware}
 
 
 class SourcesManager(Gtk.Box):

@@ -15,6 +15,17 @@ board over USB serial. **Nothing is installed on the board** in normal use: it w
 - **Firmware badges and nicknames:** every board in the port list carries a **CP** (CircuitPython) or **MP** (MicroPython) badge, the
   pane label names the firmware and version, and *Device > Name this board* (or the bookmark button by the port box) gives a board a
   nickname that follows it by chip id, kept on this computer only
+- **CircuitPython boards** work too: files go through the mounted `CIRCUITPY` drive, and Run, the REPL console and the terminal go over
+  serial. *Open with* edits a file on the drive in place
+- **Install libraries** (Tools menu): micropython-lib for MicroPython, the Adafruit and Community bundles for CircuitPython, fetched on the
+  Pi and written to `/lib` (the board needs no network). *Check for updates* compares each installed library with its source, and the
+  Show filter and *Select installed* act on the result. **Custom sources** (Preferences > Sources, or *Manage sources...* in the dialog)
+  add a maker's bundle repo (SparkFun Qwiic), a `package.json` repo (Pimoroni `phew`), a micropython-lib style index, or a folder or
+  .zip of your own libraries
+- **Custom firmware sources** (Tools > Install firmware > *Manage sources...*): a maker's GitHub releases (presets for Pimoroni MicroPython,
+  RP2350 and Pico LiPo) or a direct HTTPS link. A source is checked before it is saved, a site that is not GitHub is trusted only after
+  you say so, and the chip check still refuses a wrong image before anything is written
+- *Device > Board memory...* shows a connected board's flash chip, file system and RAM
 - Copy files and folders between the panes (buttons, drag, or copy and paste). Dragging onto a folder copies into it, or moves
   into it within one pane
 - Copy, cut, paste, rename, delete, new file / folder, properties, free space

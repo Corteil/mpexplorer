@@ -186,3 +186,25 @@ def test_preferences_has_a_sources_page_and_the_firmware_dialog_a_manage_button(
         prefs.destroy()
     finally:
         app.destroy()
+
+
+def test_a_folder_of_the_owners_own_libraries_is_added_without_any_site_to_trust(tmp_path, monkeypatch):
+    app = App(settings=Settings.load(str(tmp_path / "cfg.json")))
+    try:
+        mine = tmp_path / "mylibs"
+        mine.mkdir()
+        (mine / "blink.py").write_text("print(1)\n")
+        mgr = ui.SourcesManager(app, app, section="libraries")                # the real Check: it is all local
+        dlg = mgr.add_custom()
+        dlg.name.set_text("My libs")
+        dlg.is_folder.set_active(True)
+        assert dlg.browse.get_visible() and not dlg.pattern.get_visible()
+        dlg.address.set_text(str(mine))
+        assert dlg.source() == {"name": "My libs", "kind": "folder", "path": str(mine), "for": "micropython"}
+        dlg._response(dlg, Gtk.ResponseType.OK)
+        wait_until(lambda: app.settings.get("sources.libraries"))
+        assert app.settings.get("sources.libraries")[0]["path"] == str(mine)
+        assert app.settings.get("sources.trusted_hosts") == []
+        assert [r[0] for r in mgr.store] == ["My libs"] and mgr.store[0][1] == str(mine)
+    finally:
+        app.destroy()

@@ -1,6 +1,6 @@
 # Hand checks (CircuitPython, libraries, badges, custom sources)
 
-All hand checks below were done by the owner in the real window on 2026-11-01 and passed. Each first passed by script or under a fake display.
+Rounds 1 to 5 were done by the owner in the real window on 2026-11-01 and passed; round 6 is waiting. Each first passed by script or under a fake display.
 To repeat them, start the app from `main` after closing any old window. Tell Claude what you see; screenshots help.
 
 | Round | Area | Result |
@@ -10,6 +10,7 @@ To repeat them, start the app from `main` after closing any old window. Tell Cla
 | 3 | Badges and nicknames | OK |
 | 4 | Custom firmware sources | OK |
 | 5 | Custom library sources | OK |
+| 6 | Phase 5: folder and index library sources, exact revision, LiPo preset, board memory | not yet tried |
 
 Bench boards: a Pico 2 with CircuitPython (`CIRCUITPY` drive), a Pico 2 with MicroPython, a Pico W with MicroPython 1.29.0.
 
@@ -85,9 +86,19 @@ Only do this on a board you don't mind wiping (switching firmware empties its fi
    On a CircuitPython board pick *SparkFun Qwiic* and install one library; **Check for updates** works on both.
 3. A package that needs PyPI libraries says so in the confirmation instead of failing silently.
 
+## Round 6 (phase 5; tests and real boards by script only, **not yet clicked in the real window**)
+1. **Folder or zip library source:** Preferences > Sources > Library sources > Add > Custom..., choose *A folder or .zip file on this computer*, use *Choose a folder...*
+   or *Choose a .zip...*, name it, Check and add. In Install libraries pick it: each top-level `.py` or `.mpy` file and each package folder is a library. Install one,
+   edit the file in your folder, Check for updates: it should say `update available`.
+2. **Package index source:** Custom... > *A package index like micropython-lib's*, with the address of a folder that holds `index.json`. Asks you to trust the site.
+3. **Exact Pimoroni revision:** with a Pimoroni build running (the Pico LiPo 2 XL W), Tools > Install firmware > Start bootloader, then pick *Pimoroni Pico LiPo*: the
+   version matching the running one is not marked `(newer than this board)`, a later revision is.
+4. **Pico LiPo preset:** Add > *Pimoroni Pico LiPo*; the boards include `pimoroni_pico_lipo2xl_w`.
+5. **Board memory:** Device > Board memory... on each connected board; CircuitPython boards say the flash chip is not reported.
+
 ---
 
 ## Known gaps (not bugs to report)
 - A CircuitPython board whose drive is not mounted cannot be connected (serial-only mode is not built).
 - Remove deletes everything a package lists, even a file two packages share (`urequests` and `requests`).
-- Not yet built (phase 5 of `docs/CUSTOM_SOURCES_PLAN.md`): a local folder or zip library source, a custom micropython-lib index, and reading the exact Pimoroni revision from the board.
+- Serial-only CircuitPython (no mounted drive) and flash size for CircuitPython boards are not built.

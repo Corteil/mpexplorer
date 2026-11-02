@@ -130,7 +130,8 @@ SPEC = {
     "boards.ids": ({}, str_dict),                   # USB id -> chip id (learned at connect)
     "boards.installed": ({}, installed_table),      # chip id -> {source, version, sha256} of a custom install
     "sources.firmware": ([], source_list(("github", "url"), ("repo", "url", "pattern", "firmware"))),
-    "sources.libraries": ([], source_list(("bundle", "mip", "folder"), ("repo", "url", "path", "prefix", "for"))),
+    "sources.libraries": ([], source_list(("bundle", "mip", "folder", "index"),
+                                          ("repo", "url", "path", "prefix", "for"))),
     "sources.trusted_hosts": ([], str_list),        # sites (other than GitHub) the owner approved for custom sources
     "open_with.auto_upload": (True, boolean),       # upload saves made in an external program (docs/OPEN_WITH_PLAN.md)
     "open_with.by_extension": ({}, str_dict),       # ".py" -> "editor" | "app:<desktop id>" | "custom:<name>"

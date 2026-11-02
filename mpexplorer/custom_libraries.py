@@ -1,8 +1,10 @@
 """Custom library sources: a catalog for each (bundle repo or `package.json` repo) and the Check before one is saved."""
 import re
 
-from . import cpbundle, mip_source, sources
-from .libraries import LibraryError
+import os
+
+from . import cpbundle, local_source, mip_source, sources
+from .libraries import Catalog, LibraryError
 
 
 def validate_library_source(src):
@@ -35,6 +37,19 @@ def validate_library_source(src):
         else:
             raise sources.SourceError("A GitHub repo looks like owner/name (add @branch for a branch), for example "
                                       "pimoroni/phew; or give the address of a package.json.")
+    elif kind == "index":
+        url = (src.get("url") or "").strip().rstrip("/")
+        if not url.startswith("https://") or not sources.host_of(url):
+            raise sources.SourceError("The address of the index must start with https:// (the folder that holds "
+                                      "index.json, like https://micropython.org/pi/v2).")
+        out["url"] = url
+    elif kind == "folder":
+        path = os.path.expanduser((src.get("path") or "").strip())
+        if not path or not os.path.isabs(path):
+            raise sources.SourceError("Give the full path of a folder or a .zip file on this computer.")
+        if not (os.path.isdir(path) or (path.lower().endswith(".zip") and os.path.isfile(path))):
+            raise sources.SourceError("%s is not a folder or a .zip file." % path)
+        out["path"] = path
     else:
         raise sources.SourceError("Unknown kind of library source: %r" % kind)
     return out
@@ -44,6 +59,12 @@ def make_catalog(src, cache_dir=None, opener=None):
     kw = {"opener": opener} if opener else {}
     if src["kind"] == "bundle":
         return cpbundle.Catalog(src, cache_dir, **kw)
+    if src["kind"] == "folder":
+        return local_source.LocalFolder(src)
+    if src["kind"] == "index":
+        catalog = Catalog(cache_dir, **kw, base=src["url"])
+        catalog.title = src["name"]
+        return catalog
     return mip_source.MipRepo(src, cache_dir, **kw)
 
 
@@ -53,12 +74,16 @@ def check_source(source, settings, cache_dir=None, opener=None):
         src = validate_library_source(source)
         catalog = make_catalog(src, cache_dir, opener)
         host = sources.host_of(src.get("url") or "https://github.com/")
-        ask = host if not sources.is_trusted(settings, host) else None
+        ask = host if src["kind"] != "folder" and not sources.is_trusted(settings, host) else None
         libs, _saved = catalog.libraries()
         if not libs:
             raise LibraryError("Found no libraries in %s." % src["name"])
         if src["kind"] == "bundle":
             summary = "%d libraries, newest release %s" % (len(libs), catalog.tag)
+        elif src["kind"] == "index":
+            summary = "%d libraries in the index" % len(libs)
+        elif src["kind"] == "folder":
+            summary = "%d librar%s in %s" % (len(libs), "y" if len(libs) == 1 else "ies", src["path"])
         else:
             files = len(catalog.resolve([catalog.name])[-1][3])
             summary = "%s %s: %d file%s" % (catalog.name, libs[0].version, files, "" if files == 1 else "s")
