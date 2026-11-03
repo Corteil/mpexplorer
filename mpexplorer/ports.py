@@ -14,6 +14,16 @@ KNOWN_BOARDS = {
 }
 
 
+def pyserial_ports():
+    """The default lister: pyserial's ports (device, vid, pid, serial_number, manufacturer, product, description).
+    The Android app passes its own `lister` returning objects with the same fields."""
+    try:
+        from serial.tools import list_ports as lp
+    except ImportError:
+        return []
+    return list(lp.comports())
+
+
 def _key(p):
     return "%04x:%04x:%s" % (p.vid, p.pid or 0, p.serial_number or "")
 
@@ -37,27 +47,19 @@ def port_label(p, names=None, nickname=""):
     return "%s  %s" % (p.device, "%s  %s" % (quoted(nickname), name) if nickname else name)
 
 
-def list_ports(names=None):
+def list_ports(names=None, lister=None):
     """Dropdown entries; names maps board id -> the model learned at an earlier connect (settings 'boards.names')."""
-    try:
-        from serial.tools import list_ports as lp
-    except ImportError:
-        return []
     # onboard UARTs (/dev/ttyAMA*, ttyS*) have no USB ids and no description: they are not boards, so leave them out
-    ports = [p for p in lp.comports() if p.vid is not None]
+    ports = [p for p in (lister or pyserial_ports)() if p.vid is not None]
     ports.sort(key=lambda p: (p.vid != 0x2E8A, p.device))   # RP2 boards first
     return [port_label(p, names) for p in ports]
 
 
-def board_id(device):
+def board_id(device, lister=None):
     """A key that stays the same for one board whichever /dev/ttyACMx it appears as: vid:pid:serial, else the path."""
-    try:
-        from serial.tools import list_ports as lp
-        for p in lp.comports():
-            if p.device == device and p.vid is not None:
-                return _key(p)
-    except ImportError:
-        pass
+    for p in (lister or pyserial_ports)():
+        if p.device == device and p.vid is not None:
+            return _key(p)
     return device
 
 
@@ -69,15 +71,11 @@ def device_of(entry):
 Entry = namedtuple("Entry", "device text kind nickname")      # kind: boardinfo.MICROPYTHON / CIRCUITPYTHON / None
 
 
-def list_boards(settings):
+def list_boards(settings, lister=None):
     """What the source box shows, with what each port runs and its nickname: [Entry(device, text, kind, nickname)].
     `text` is what `list_ports` gives plus the nickname, so `device_of(text)` still finds the port."""
-    try:
-        from serial.tools import list_ports as lp
-    except ImportError:
-        return []
     names = settings.get("boards.names")
-    ports = [p for p in lp.comports() if p.vid is not None]
+    ports = [p for p in (lister or pyserial_ports)() if p.vid is not None]
     ports.sort(key=lambda p: (p.vid != 0x2E8A, p.device))
     out = []
     for p in ports:

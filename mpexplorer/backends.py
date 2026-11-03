@@ -27,8 +27,8 @@ class LocalBackend:
     label = "Host"
     in_place = True         # its files are on this computer: a program can open them where they are, no copy needed
 
-    def __init__(self):
-        self.root = os.path.expanduser("~")
+    def __init__(self, root=None):
+        self.root = root or os.path.expanduser("~")     # the Android app passes its own folder
 
     def join(self, a, b):
         return os.path.join(a, b)

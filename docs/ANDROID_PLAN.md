@@ -41,7 +41,8 @@ Kivy UI -> JobRunner (one worker thread) -> Backend (Local = phone folder | Devi
 - **UI lives in `mpexplorer/kivyui/`** and also runs on the desktop (`python -m mpexplorer --kivy`). Most UI work then happens on
   the Pi against real boards, and only the packaging and the USB adapter need a phone. This matches the project rule
   "keep logic out of the GUI code".
-- **Layout:** one list with a **Phone / Board** switch (phone screens are small); a tablet layout can show two panes later.
+- **Layout:** one list with a **Phone / Board** switch by default (phone screens are small), plus an option for two panes
+  side by side on a large phone or tablet.
   Plain Kivy with `RecycleView` for the file list. KivyMD is optional and adds build weight.
 - **Host side = the app's own folder** (works without permissions). Getting files in and out of shared storage uses the Storage
   Access Framework (file picker for upload, "save as" for download), via `androidstorage4kivy` or `plyer`.
@@ -94,8 +95,14 @@ test `ssl` in the build); board nicknames and remembered folders (settings alrea
 | Throughput | the Tildagon's output to the host is capped near 11 KB/s (HANDOFF) | same on the phone; not an Android problem |
 | Build time and pain | first Buildozer build is slow and fragile | pin versions, cache in CI |
 
-## Questions for you
-1. Which phone and Android version will you test on?
-2. Which board first: Tildagon, or a Pico (simpler, no badge OS to interrupt)?
-3. Where should the app live: a `kivyui/` folder in this repo (recommended, shares the core and tests), or a separate repo?
-4. Phone-only single list, or also a two-pane tablet layout?
+## Decisions (2026-11-03)
+1. **Test phone:** Pixel 10 Pro XL, Android 17.
+2. **First board:** Pico (no badge OS to interrupt). Tildagon and the 2022 badge follow once the Pico works.
+3. **Where it lives:** `mpexplorer/kivyui/` in this repo, sharing the core and the tests.
+4. **Layout:** both. Single list with a Phone / Board switch by default, and an option for two panes side by side, which
+   suits a large phone such as the Pro XL (and tablets). Choose by a setting, defaulting from the window width.
+
+## Status
+- Phase 1 (seams in the core) is started on branch `android-plan`: `RawREPL.open(opener=...)` and `open_pyserial`,
+  `ports.*(lister=...)` and `LocalBackend(root=...)`, with `tests/test_android_seams.py`. Verified by the fake-board tests only.
+- Phase 0 (the spike on the phone) still needs you and the Pixel: it cannot be run from here.

@@ -29,6 +29,19 @@ class DeviceError(TransportError):
         self.traceback = tb
 
 
+def open_pyserial(port, baud=115200, rts=False):
+    """The default opener: a pyserial port with DTR asserted and RTS as asked."""
+    import serial
+    ser = serial.serial_for_url(port, baudrate=baud, timeout=0.1, do_not_open=True)
+    # RTS asserted can reset ESP32-S3 boards. DTR must be asserted: the Tildagon's USB CDC corrupts
+    # any output over ~256 bytes while DTR is low.
+    # (The 2022 badge is the exception: it says nothing unless RTS is asserted too; see `rts` and Preferences.)
+    ser.dtr = True
+    ser.rts = bool(rts)
+    ser.open()
+    return ser
+
+
 class RawREPL:
     def __init__(self, ser, paste=None, adaptive=True):
         """paste: None = use raw-paste if the firmware supports it, False = never, True = same as None.
@@ -49,15 +62,10 @@ class RawREPL:
         self.lock = threading.RLock()
 
     @classmethod
-    def open(cls, port, baud=115200, paste=None, adaptive=True, rts=False):
-        import serial
-        ser = serial.serial_for_url(port, baudrate=baud, timeout=0.1, do_not_open=True)
-        # RTS asserted can reset ESP32-S3 boards. DTR must be asserted: the Tildagon's USB CDC corrupts
-        # any output over ~256 bytes while DTR is low.
-        # (The 2022 badge is the exception: it says nothing unless RTS is asserted too; see `rts` and Preferences.)
-        ser.dtr = True
-        ser.rts = bool(rts)
-        ser.open()
+    def open(cls, port, baud=115200, paste=None, adaptive=True, rts=False, opener=None):
+        """Open `port` and wrap it. `opener(port, baud, rts)` returns an open serial-like object (read, in_waiting,
+        write, flush, close); the default is pyserial (open_pyserial). The Android app passes its USB-OTG one."""
+        ser = (opener or open_pyserial)(port, baud, rts)
         return cls(ser, paste=paste, adaptive=adaptive)
 
     @classmethod
