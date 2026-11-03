@@ -38,9 +38,13 @@ Kivy UI -> JobRunner (one worker thread) -> Backend (Local = phone folder | Devi
                                           RawREPL(ser)  <- AndroidSerial (usbserial4a)  on the phone
                                                         <- pyserial                      on the Pi / desktop
 ```
-- **UI lives in `mpexplorer/kivyui/`** and also runs on the desktop (`python -m mpexplorer --kivy`). Most UI work then happens on
-  the Pi against real boards, and only the packaging and the USB adapter need a phone. This matches the project rule
-  "keep logic out of the GUI code".
+- **The Android app is a separate repo** (working name `mpexplorer-android`). It holds the Kivy UI, `buildozer.spec`, the USB
+  adapter and the APK workflow, and uses this repo's GUI-free core as a library. This repo only gets the small seams
+  (Phase 1) and stays free of Kivy. The UI still runs on the desktop from the Android repo (`python main.py`) so most work
+  can be done on the Pi against real boards; only packaging and the USB adapter need a phone.
+- **How the core gets into the APK:** the Android repo's workflow checks out this repo at a pinned ref (a tag or commit) and
+  copies the `mpexplorer/` package into the build folder before running Buildozer (symlinks are unreliable). The GTK-only
+  and firmware modules are left out of the copy. Locally, `pip install -e ../mpexplorer` does the same job.
 - **Layout:** one list with a **Phone / Board** switch by default (phone screens are small), plus an option for two panes
   side by side on a large phone or tablet.
   Plain Kivy with `RecycleView` for the file list. KivyMD is optional and adds build weight.
@@ -64,9 +68,9 @@ sort, filter and hidden files; download, upload, rename, delete, new folder, cop
 `Progress` with Cancel; conflict dialog from `ConflictPolicy`; text editor that saves back; Run; emulated console. Tested with the
 fake board and a Kivy smoke test under xvfb (same approach as the `gui` CI job).
 
-**Phase 3 - Android packaging.** `android/buildozer.spec`, a small script that copies the core package into the build folder
-(symlinks are unreliable with Buildozer), a USB device filter and attach intent, and a GitHub Actions job that builds a debug APK
-and uploads it as an artifact. Sideload the APK; Play Store is not a goal.
+**Phase 3 - Android packaging (in the Android repo).** `buildozer.spec`, a script that copies the pinned core package into the
+build folder, a USB device filter and attach intent, and a GitHub Actions job that builds a debug APK and uploads it as an
+artifact. Sideload the APK; Play Store is not a goal.
 
 **Phase 4 - storage and sharing.** Picker for upload, "save as" for download, and a Share-to-mpexplorer intent so a file from
 another app can be sent to a board.
@@ -98,7 +102,8 @@ test `ssl` in the build); board nicknames and remembered folders (settings alrea
 ## Decisions (2026-11-03)
 1. **Test phone:** Pixel 10 Pro XL, Android 17.
 2. **First board:** Pico (no badge OS to interrupt). Tildagon and the 2022 badge follow once the Pico works.
-3. **Where it lives:** `mpexplorer/kivyui/` in this repo, sharing the core and the tests.
+3. **Where it lives:** a separate repo, `mpexplorer-android` (changed on 2026-11-03 from `mpexplorer/kivyui/`). Core changes stay
+   in this repo and reach the app by pinned ref. Phase 2 and 3 below happen in the Android repo.
 4. **Layout:** both. Single list with a Phone / Board switch by default, and an option for two panes side by side, which
    suits a large phone such as the Pro XL (and tablets). Choose by a setting, defaulting from the window width.
 
