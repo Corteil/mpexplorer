@@ -6,3 +6,7 @@ __pycache__/
 dist/
 build/
 .venv/
+# Flash backups and firmware images: they can hold Wi-Fi passwords and are large. Keep them out of the repo.
+Backups/
+*.uf2
+*.bin
