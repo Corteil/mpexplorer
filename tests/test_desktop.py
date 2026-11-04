@@ -78,3 +78,17 @@ def test_cli_flag_needs_no_gtk(tmp_path):
 def test_desktop_file_ships_in_the_package():
     text = (ROOT / "pyproject.toml").read_text()
     assert '"mpexplorer.desktop"' in text and (ROOT / "mpexplorer" / "mpexplorer.desktop").exists()
+
+
+def test_release_notes_have_changelog_and_install_for_the_tag():
+    sys.path.insert(0, str(ROOT / "packaging"))
+    try:
+        import release_notes
+    finally:
+        sys.path.pop(0)
+    text = release_notes.notes("v0.1.0")
+    assert text.startswith("First release.") and "### Known limits" in text
+    assert "git+https://github.com/Corteil/mpexplorer@v0.1.0\n" in text and "{tag}" not in text
+    assert "## [0.1.0]" not in text and "## [Unreleased]" not in text
+    with pytest.raises(SystemExit):
+        release_notes.notes("v9.9.9")
