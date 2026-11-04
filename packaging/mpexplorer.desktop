@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=MicroPython Explorer
+GenericName=File explorer for MicroPython boards
+Comment=Dual-pane file explorer, REPL console and terminal for MicroPython and CircuitPython boards
+Exec=mpexplorer
+Icon=mpexplorer
+Terminal=false
+Categories=Development;Electronics;Utility;
+Keywords=micropython;circuitpython;pico;esp32;tildagon;serial;
