@@ -126,7 +126,7 @@ label if one is missing on another theme.
 - [x] Screenshots in the README (main window, console; 2026-10-31, rendered against the fake board, path boxes set by hand for the picture).
 - [x] Terminal mode screenshot in the README (2026-11-01, rendered against the fake board). (Main window screenshot redone for side-by-side, 2026-11-01.)
 - [x] Deleted the leftover GitHub branches (`claude/micropython-file-explorer-gui-7tsgfy`, `handoff-pi`, `wire-settings` were fully merged; `todo-refresh` was a stale 2026-10-30 TODO snapshot), by the owner's word 2026-11-01. Only `main` and the Dependabot branch are left.
-- [x] `packaging/mpexplorer.desktop` and `packaging/install-launcher.sh` (2026-11-04, install script run into a temporary HOME; launcher not clicked on the Pi's taskbar yet).
+- [x] `mpexplorer --install-desktop` (2026-11-04: shipped in the package, tested into a temporary HOME and from an installed wheel; launcher not clicked on the Pi yet). Earlier: `packaging/mpexplorer.desktop` and `packaging/install-launcher.sh` (2026-11-04, install script run into a temporary HOME; launcher not clicked on the Pi's taskbar yet).
 
 ## 4. Later / ideas
 - [ ] Saved connection profiles (port, last folders).

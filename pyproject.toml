@@ -41,7 +41,7 @@ mpexplorer = "mpexplorer.__main__:main"
 include = ["mpexplorer*"]
 
 [tool.setuptools.package-data]
-mpexplorer = ["icon.png"]
+mpexplorer = ["icon.png", "mpexplorer.desktop"]
 
 [tool.pytest.ini_options]
 pythonpath = ["tests", "."]

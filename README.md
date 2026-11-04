@@ -64,6 +64,7 @@ board over USB serial. **Nothing is installed on the board** in normal use: it w
 sudo apt install python3-gi gir1.2-gtk-3.0 gir1.2-vte-2.91 pipx
 sudo usermod -aG dialout $USER      # serial access; log out and in again
 pipx install --system-site-packages git+https://github.com/Corteil/mpexplorer@v0.1.0
+mpexplorer --install-desktop      # optional: menu entry and desktop icon
 mpexplorer
 ```
 Drop the `@v0.1.0` to follow the development version on `main`. `mpexplorer --version` prints the installed version, and
@@ -76,9 +77,10 @@ The Tools menu can install firmware, back up or restore the flash, and erase it.
 The interface is GTK 3 through PyGObject (`python3-gi`, already on Raspberry Pi OS); `--system-site-packages` lets
 pipx see it. `gir1.2-vte-2.91` is only needed for the console's Terminal mode.
 
-For a desktop launcher and taskbar icon, run `sh packaging/install-launcher.sh` from a checkout. It copies
-`packaging/mpexplorer.desktop` and the icon into `~/.local/share`. The window reports the app id `mpexplorer`, which is how
-the taskbar finds them.
+For a menu entry, desktop icon and taskbar icon, run `mpexplorer --install-desktop` once after installing
+(`--uninstall-desktop` removes them). It writes the launcher and icon into `~/.local/share` and a copy onto the desktop;
+no root is needed. From a checkout, `sh packaging/install-launcher.sh` does the same. The window reports the app id
+`mpexplorer`, which is how the taskbar finds them.
 
 ## Development
 ```
