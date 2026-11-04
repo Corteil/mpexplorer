@@ -51,6 +51,13 @@ board over USB serial. **Nothing is installed on the board** in normal use: it w
   `__pycache__`, `.git`, `*.pyc` are skipped. Files are written under a temporary name so a cancel never loses
   the old copy.
 - Built-in text editor that saves straight back to the board; run a script and see its output; soft reset
+- **Choose the program that opens a file:** double-click or Enter opens a file with the program saved for its extension, or the
+  built-in editor if none is saved. Right-click > **Open with...** (Shift+Enter) lists the built-in editor, *Run on the board*
+  (for `.py` files), the hex and image viewers, every desktop app installed for that file type, and a **Custom command** such as
+  `geany {file}`. Tick *Always use this for .ext files* to make it the default; change or remove defaults in
+  **Edit > Preferences > File types**. Files on the host open directly. A file on a board is downloaded to a private cache,
+  opened in the program, and each save is uploaded back (if the board's copy changed meanwhile you choose overwrite, keep both or
+  skip). The status bar's *Pause* button holds uploads, and Preferences can turn automatic upload off
 
 ## Install (Raspberry Pi OS)
 ```
