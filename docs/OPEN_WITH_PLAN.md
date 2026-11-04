@@ -19,7 +19,8 @@ into a `{file}` template; `remember_handler()` saves the default. Nothing from t
   `EditManager.tick()` from the 100 ms `_poll`.
 - Verified: tests (core and GTK under Xvfb), a script driving the real GTK app against a Pico 2 with a scratch file (open, save,
   close, quit), and by hand by the owner on the Pico 2 (open `main.py` in Geany, save, close Geany: the edit was on the board).
-  **Not verified by hand:** the conflict dialog, a host file, the Tildagon, the RP2040 Pico, large files.
+  Owner also tried it on a badge by hand (2026-11-04; which badge and what was checked not itemised).
+  **Not verified by hand:** the conflict dialog, a host file, the RP2040 Pico, large files.
 
 ### Where the build differs from the plan above
 - It **polls** the cache copy (a `stat` every 0.5 s, a SHA-256 only when the stat changed or a save is waiting) instead of a Gio file

@@ -63,7 +63,8 @@ label if one is missing on another theme.
 - [x] (Decided: saves upload automatically; Geany first.) Phase 1: `openwith.py` (settings, associations, `{file}` commands, upload watcher) with tests, no GUI. (Done 2026-10-30.)
 - [x] Device files: download to a private cache, launch the program, upload saves back with a conflict check. (Done 2026-10-30 for Geany, via right-click; the owner confirmed it on the Pico 2. Still to try by hand: the conflict dialog, a host file, the Tildagon.)
 - [x] `open_with.auto_upload` is read and the Pause/Resume button exists (owner confirmed 2026-10-31).
-- [ ] Try the conflict dialog (overwrite, keep both, skip) by hand, and Open with on the Tildagon and an RP2040.
+- [x] Open with on a badge, by hand (owner, 2026-11-04; which badge and which steps were not itemised).
+- [ ] Try the conflict dialog (overwrite, keep both, skip) by hand, and Open with on an RP2040.
 - [x] GTK: Open with... chooser, "remember for this type", context menu (built 2026-10-30 on branch `open-with-chooser`; tests only, not tried by hand).
 - [x] Open with...: Shift+Enter; ask before opening an executable-looking file with a system app (owner confirmed 2026-10-31).
 - [x] Hex and image viewers, File types preferences page (owner confirmed 2026-10-31).
