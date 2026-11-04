@@ -54,9 +54,11 @@ board over USB serial. **Nothing is installed on the board** in normal use: it w
 ```
 sudo apt install python3-gi gir1.2-gtk-3.0 gir1.2-vte-2.91 pipx
 sudo usermod -aG dialout $USER      # serial access; log out and in again
-pipx install --system-site-packages git+https://github.com/Corteil/mpexplorer
+pipx install --system-site-packages git+https://github.com/Corteil/mpexplorer@v0.1.0
 mpexplorer
 ```
+Drop the `@v0.1.0` to follow the development version on `main`. `mpexplorer --version` prints the installed version, and
+[CHANGELOG.md](CHANGELOG.md) lists what changed.
 Plug the board in, press **Scan**, choose it in a pane's list, and press that pane's **Connect**.
 
 The Tools menu can install firmware, back up or restore the flash, and erase it. A badge or other ESP32-S3 needs
