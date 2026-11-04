@@ -1,5 +1,7 @@
 # mpexplorer
 
+[![CI](https://github.com/Corteil/mpexplorer/actions/workflows/ci.yml/badge.svg)](https://github.com/Corteil/mpexplorer/actions/workflows/ci.yml)
+
 A dual-pane file explorer with a GUI for MicroPython boards (Raspberry Pi Pico / Pico 2, EMF Camp badges from 2022 (TiLDA Mk6), 2024
 (Tildagon) and 2026, anything that runs MicroPython). It runs on a **Raspberry Pi 5** (or any computer with Python 3 and GTK 3) and talks to the
 board over USB serial. **Nothing is installed on the board** in normal use: it works through the stock raw REPL, like `mpremote`.
@@ -67,10 +69,9 @@ The Tools menu can install firmware, back up or restore the flash, and erase it.
 The interface is GTK 3 through PyGObject (`python3-gi`, already on Raspberry Pi OS); `--system-site-packages` lets
 pipx see it. `gir1.2-vte-2.91` is only needed for the console's Terminal mode.
 
-For a desktop launcher, create `~/.local/share/applications/mpexplorer.desktop` with `Exec=mpexplorer`,
-`Icon=mpexplorer` and `Type=Application`, and copy `mpexplorer/icon.png` to
-`~/.local/share/icons/hicolor/256x256/apps/mpexplorer.png`. The window reports the app id `mpexplorer`, which is how
-the taskbar finds that file and its icon.
+For a desktop launcher and taskbar icon, run `sh packaging/install-launcher.sh` from a checkout. It copies
+`packaging/mpexplorer.desktop` and the icon into `~/.local/share`. The window reports the app id `mpexplorer`, which is how
+the taskbar finds them.
 
 ## Development
 ```
@@ -80,6 +81,12 @@ ruff check . && pytest
 Tests use a fake board that speaks the raw REPL, so no hardware is needed. See [docs/DESIGN.md](docs/DESIGN.md).
 
 ## Status
-The core and the GTK interface are written. The GUI has been used by hand on a Raspberry Pi 5 with a Tildagon
-(see [docs/HANDOFF.md](docs/HANDOFF.md) for what is verified). Tested boards are listed in
-[docs/HARDWARE.md](docs/HARDWARE.md); please add yours.
+The core and the GTK interface are written, and the tests (fake board, real MicroPython, GTK windows under a virtual display)
+run in CI. See [CHANGELOG.md](CHANGELOG.md).
+
+**Tested by hand on a Raspberry Pi 5**, with these boards: Tildagon (2024/2026), 2022 TiLDA Mk6 badge, Pico, Pico 2 and Pico W
+(CircuitPython only on a Pico 2). **Not tested on real hardware:** other ESP32-S3 boards, and two boards at once beyond a
+Pico 2 and a Pico W copy. Details, and what exactly was checked, are in [docs/HANDOFF.md](docs/HANDOFF.md) and
+[docs/HARDWARE.md](docs/HARDWARE.md); please add your board.
+
+Security notes, including the warning that flash backups can contain Wi-Fi passwords: [SECURITY.md](SECURITY.md).
