@@ -2,11 +2,12 @@
 
 All notable changes to mpexplorer. The format follows [Keep a Changelog](https://keepachangelog.com/).
 
-## [Unreleased]
+## [0.1.1] - 2026-11-04
 
 ### Added
 - `mpexplorer --install-desktop` adds a menu entry, desktop icon and taskbar icon for the current user, from files shipped
   in the package (no checkout needed); `--uninstall-desktop` removes them. `packaging/install-launcher.sh` now runs it.
+- Release notes include install instructions for the release's tag.
 
 ## [0.1.0] - 2026-11-04
 
