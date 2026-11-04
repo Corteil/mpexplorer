@@ -122,7 +122,7 @@ label if one is missing on another theme.
 
 ## 3. Release and housekeeping
 - [x] Release prep (2026-11-04, branch `release-0.1.0-prep`): CHANGELOG, package metadata, `--version`, release workflow checks the tag against the version and runs lint, tests and `twine check`; the stray flash backup `Backups/unicorn.md` removed from the tree and `Backups/`, `*.uf2`, `*.bin` ignored.
-- [ ] Merge that branch (owner says so), then tag `v0.1.0` to exercise `release.yml` and check the GitHub release. Remove "Unreleased" from the 0.1.0 heading in `CHANGELOG.md` when tagging.
+- [ ] Merge that branch (owner says so), then tag `v0.1.0` to exercise `release.yml` and check the GitHub release. 
 - [x] Screenshots in the README (main window, console; 2026-10-31, rendered against the fake board, path boxes set by hand for the picture).
 - [x] Terminal mode screenshot in the README (2026-11-01, rendered against the fake board). (Main window screenshot redone for side-by-side, 2026-11-01.)
 - [x] Deleted the leftover GitHub branches (`claude/micropython-file-explorer-gui-7tsgfy`, `handoff-pi`, `wire-settings` were fully merged; `todo-refresh` was a stale 2026-10-30 TODO snapshot), by the owner's word 2026-11-01. Only `main` and the Dependabot branch are left.

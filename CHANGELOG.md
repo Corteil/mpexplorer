@@ -2,7 +2,7 @@
 
 All notable changes to mpexplorer. The format follows [Keep a Changelog](https://keepachangelog.com/).
 
-## [0.1.0] - Unreleased
+## [0.1.0] - 2026-11-04
 
 First release.
 
