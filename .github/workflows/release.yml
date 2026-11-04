@@ -21,7 +21,7 @@ jobs:
       - run: pip install -e '.[dev]' build twine
       - run: ruff check . && pytest -q
       - run: python -m build && twine check dist/*
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           files: dist/*
           generate_release_notes: true
