@@ -22,7 +22,7 @@ the code or, if the fake is wrong, in `tests/fakedevice.py`.
 
 ## Building the Windows version
 The **Windows build** workflow (`.github/workflows/windows-build.yml`) does it on `windows-latest`; run it from the Actions tab,
-or push a change under `packaging/windows/`. By hand, in an MSYS2 UCRT64 shell:
+and it runs by itself on every push that changes `mpexplorer/`, `packaging/windows/`, the workflow or `pyproject.toml`. By hand, in an MSYS2 UCRT64 shell:
 ```
 pacman -S --needed mingw-w64-ucrt-x86_64-{gtk3,adwaita-icon-theme,python,python-gobject,python-pip,python-setuptools,python-pyserial,python-pillow,python-cryptography,python-yaml,pyinstaller,pyinstaller-hooks-contrib}
 python -m pip install --break-system-packages --no-build-isolation . "esptool>=5,<6"
