@@ -4,11 +4,17 @@ Status (2026-11-06): **planned, not started.** Nothing here has been tried on Wi
 `main` (`02e9bc7`, v0.1.1); sections 2 to 4 also use the PuTTY and Tera Term manuals, quoted where it matters. Anything marked
 *unverified* is from memory and must be checked on a real Windows machine before it is relied on.
 
-## Decisions
-- **Owner, 2026-11-06:** on Windows the console window has **one** kind of REPL (the emulated one) plus a **button that opens the
-  board's real terminal in an external program**. The Mode row with the two radio buttons is not shown there.
-- **Proposed, not yet confirmed:** keep **GTK 3** for the Windows build. MSYS2 packages GTK 3, GTK 4 and PyGObject (*unverified*),
-  so a GTK 4 port is not needed for Windows; it would be a rewrite of every window and would not give a terminal widget either.
+## Decisions (owner, 2026-11-06)
+- On Windows the console window has **one** kind of REPL (the emulated one) plus a **button that opens the board's real terminal
+  in an external program**. The Mode row with the two radio buttons is not shown there.
+- **GTK 3** for the Windows build. MSYS2 packages GTK 3, GTK 4 and PyGObject (*unverified*), so no GTK 4 port is needed; it would
+  be a rewrite of every window and would not give a terminal widget either.
+- **After the external terminal closes, reconnect automatically** (`terminal.reconnect` defaults to `auto`; `ask` and `never` stay
+  available as settings).
+- **Windows 10 and 11 only.** (MSYS2's UCRT64 toolchain needs Windows 10 or later anyway.)
+- **First release: a portable zip**, no installer yet (see "Portable build" below).
+- **Code signing: yes.** The owner has to supply a certificate or a signing service; until then builds are unsigned and the README
+  says what SmartScreen will show. The executables in the zip are what get signed.
 
 ## 1. What stops the program running on Windows today
 Portable already: serial through pyserial (`COMn`, vendor/product ids), raw REPL, copy/sync logic, settings JSON, board paths
@@ -21,7 +27,7 @@ Portable already: serial through pyserial (`COMn`, vendor/product ids), raw REPL
 | Config and cache folders | `settings.py` (`~/.config`), `libraries.py`, `clipboard.py`, `watchdog.py` (`~/.cache`) | wrong places on Windows | one helper: `%APPDATA%` / `%LOCALAPPDATA%` (honouring the existing `MPEXPLORER_CONFIG`) |
 | Finding drives | `circuitpython.py` (`/proc/mounts`, `CIRCUITPY1`), `firmware.py` `detect()` (`/proc/self/mounts`, `INFO_UF2.TXT`) | Linux only | list drive letters and volume labels (`CIRCUITPY`, a drive holding `INFO_UF2.TXT`) |
 | Open with | `openwith.py` (`SYSTEM_OPEN = "xdg-open {file}"`, `os.chmod 0o600`) and the Gio app list | `xdg-open` missing; Gio lists few Windows apps | `os.startfile` for the system default, custom commands for the rest, chmod is a harmless no-op |
-| Desktop launcher | `desktop.py` (`.desktop` files) | Linux only | installer with a Start Menu shortcut, the icon built into the exe, an explicit app id for the taskbar |
+| Desktop launcher | `desktop.py` (`.desktop` files) | Linux only | none for the portable zip (run it from its folder); the icon is built into the exe and the process sets an explicit app id so the taskbar groups and names it. A Start Menu shortcut comes with a later installer |
 | Terminal mode | `gtkui/terminal.py` (VTE) | no Windows build of VTE (*unverified for MSYS2*) | section 3 |
 | esptool | `firmware.py` runs it as a separate program (`pipx install esptool`) | a standalone build has no pipx | bundle it (the `firmware` extra in `pyproject.toml`) |
 | File names from the board | `ops.copy_tree`, sync | names Windows refuses (`:`, `*`, trailing dot, `CON`/`NUL`), two board files that differ only in letter case, paths over 260 characters | check names before writing and say which file and why; long-path prefix |
@@ -35,10 +41,19 @@ Route: **MSYS2 UCRT64 + PyInstaller** (package names *unverified*: `mingw-w64-uc
 - Bundle: the GTK/Gdk/GdkPixbuf/Pango/Atk typelibs and DLLs, the gdk-pixbuf loaders cache, GSettings schemas
   (`glib-compile-schemas`), an icon theme (Adwaita + hicolor; the code already falls back to text labels when an icon is missing),
   fonts, `icon.png`; a launcher or runtime hook sets `GI_TYPELIB_PATH`, `GDK_PIXBUF_MODULE_FILE`, `XDG_DATA_DIRS`.
-- Output: a **folder plus an installer** (Inno Setup or similar), not a single exe: a one-file exe unpacks on every start and
-  is flagged by antivirus more often. Without a code-signing certificate Windows SmartScreen will warn on first run.
+- Output: a **folder, shipped as a zip** (first release; an installer such as Inno Setup can come later), not a single exe: a
+  one-file exe unpacks on every start and is flagged by antivirus more often. Without a code-signing certificate Windows
+  SmartScreen will warn on first run; the decision is to sign (see Decisions).
 - Expect: roughly 100 to 200 MB, a non-native look, high-DPI scaling needing care (a DPI-aware manifest).
-- CI: `windows-latest` with `msys2/setup-msys2`, upload the folder as an artifact, later attach it to the release workflow.
+- CI: `windows-latest` with `msys2/setup-msys2`, upload the folder as an artifact, later attach the zip to the release workflow.
+
+### Portable build
+- Unzip anywhere and run `mpexplorer.exe`; nothing is written outside the folder except the user's settings and cache.
+- Settings and caches go to `%APPDATA%\mpexplorer` / `%LOCALAPPDATA%\mpexplorer` as for any program. *Proposed:* if a file named
+  `portable.txt` sits next to the exe, keep settings and caches in a `data` folder beside it instead (the way Tera Term's
+  `portable.ini` works), so the whole thing can live on a USB stick.
+- The exe needs no Python or GTK installed; the board drivers are Windows' own (Windows 10 and 11 include a USB serial driver
+  for the CDC boards; the UF2 bootloader appears as a normal drive).
 - Rejected for now: **Tk** (removed on 2026-10-30; the app has grown far past what the old code did), **Qt/PySide6** (easiest
   packaging but a rewrite), **WSL2** (not a standalone binary).
 
@@ -53,9 +68,11 @@ is a console program, not a widget, so it cannot be embedded either. Hence:
   1. confirm ("mpexplorer will disconnect while the terminal is open");
   2. leave the raw REPL (the board is at its `>>>` prompt) and close the port, without a reset unless the user has that option on;
   3. start the program, **without a shell** (an argument list), with `{port}`, `{baud}`, `{title}` and `{portnum}` filled in;
-  4. watch the process; when it exits offer to reconnect (default: ask; setting: ask / reconnect automatically / never);
+  4. watch the process; when it exits **reconnect automatically** (setting `terminal.reconnect`: `auto` (default) / `ask` / `never`);
   5. after a reset the board can come back under another port name, so find it again by `ports.board_id()` (vid:pid:serial).
-- Settings: `terminal.external_command` (template, empty = the default for this system) and `terminal.reconnect`.
+- Settings: `terminal.external_command` (template, empty = the default for this system) and `terminal.reconnect` (default `auto`).
+- Auto-reconnect waits for the board to come back (a port with the same `board_id`, up to a timeout) and says so in the status bar;
+  if it does not appear it stops and tells the user, so a board that was unplugged does not leave the app polling forever.
 - While it is open the file panes are disconnected and a badge's screen stays frozen as it is when connected today.
 
 ### Launch commands
@@ -109,12 +126,12 @@ is a console program, not a widget, so it cannot be embedded either. Hence:
    building with spaces and quotes, no shell, `COMn` to number, defaults per OS, close-leaves-REPL, reconnect after a port rename,
    program missing (clear message, stay connected), non-zero exit.
 4. **Packaging spike:** the MSYS2 + PyInstaller build in CI as an artifact; list what breaks.
-5. **Installer, signing decision, README Windows section, hardware tests** (the table above), then fill in `docs/HARDWARE.md`.
+5. **Portable zip, signing, README Windows section, hardware tests** (the table above), then fill in `docs/HARDWARE.md`. Signing needs the
+   owner's certificate or signing service; an installer is later work.
 
-Rough effort (an estimate, not a measurement): 1 about 1-2 days, 2 half a day, 3 1-2 days, 4 1-3 days, 5 2-3 days.
+Rough effort (an estimate, not a measurement): 1 about 1-2 days, 2 half a day, 3 1-2 days, 4 1-3 days, 5 1-2 days without an installer.
 
-## Open questions for the owner
-- GTK 3 for Windows (proposed), or plan a GTK 4 port first?
-- After the external terminal closes: ask before reconnecting (proposed default) or reconnect automatically?
-- A code-signing certificate, or ship unsigned with a SmartScreen note? Windows 10 and 11 only?
-- First release as a portable zip, or an installer from the start?
+## Still open
+- The code-signing certificate or service (the owner), and whether signing runs in CI (needs a secret) or by hand on the release.
+- The hardware test table above, and what the PuTTY and Tera Term line states at open actually are (not in their manuals).
+- Whether `portable.txt` mode (proposed above) is wanted.

@@ -6,7 +6,7 @@ v1.26.0 and v1.28.0, and the `gui` job: GTK windows under xvfb). Older sections 
 
 ## Windows build (planned 2026-11-06)
 Plan: `docs/WINDOWS_PLAN.md` (what blocks Windows today, GTK 3 on MSYS2, one REPL plus an external-terminal button, PuTTY / Tera Term / miniterm
-launch commands from their manuals, the hardware tests needed). Not started; the owner has not confirmed GTK 3 vs GTK 4 or the reconnect default.
+launch commands from their manuals, the hardware tests needed). Not started. Decided by the owner on 2026-11-06: GTK 3, auto-reconnect after the external terminal, Windows 10/11 only, portable zip first, sign the build (certificate still to come).
 
 ## CircuitPython and libraries (2026-11-01, later session on the Pi)
 Plan and what was seen on real boards: `docs/CIRCUITPYTHON_PLAN.md`. Hand checks done by the owner 2026-11-01 (`docs/HAND_CHECKS.md`, with the three problems they found, all fixed). All of it is on `main` (CI green at
