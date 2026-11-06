@@ -10,6 +10,7 @@ import re
 import shlex
 import stat
 import subprocess
+import sys
 import time
 from collections import namedtuple
 from dataclasses import dataclass, field
@@ -23,12 +24,24 @@ PART_SUFFIX = ".mpx-part"
 
 
 # -- choosing the program -------------------------------------------------
-def expand_command(template, path):
+def split_command(template, platform=None):
+    """A command template as a list of words. On Windows backslashes are path separators, not escapes, so a quoted
+    program path under C:/Program Files (written with backslashes) keeps them; double quotes group words on both."""
+    if (platform or sys.platform).startswith("win"):
+        lex = shlex.shlex(template, posix=False)
+        lex.whitespace_split = True
+        lex.commenters = ""
+        words = list(lex)
+        return [w[1:-1] if len(w) >= 2 and w[0] == w[-1] and w[0] in "\"'" else w for w in words]
+    return shlex.split(template)
+
+
+def expand_command(template, path, platform=None):
     """'geany {file}' -> ['geany', path]: the argument list for subprocess (never a shell, so odd file names are safe).
 
     The template is split first and {file} replaced afterwards, so spaces and quotes in the path cannot split or break
     an argument. A template without {file} gets the path appended. ValueError for an empty template or bad quoting."""
-    argv = shlex.split(template)
+    argv = split_command(template, platform)
     if not argv:
         raise ValueError("the command is empty")
     if any("{file}" in a for a in argv):
@@ -100,7 +113,16 @@ def remember_handler(settings, name, handler, custom=None):
     return key
 
 
-SYSTEM_OPEN = "xdg-open {file}"        # the "system default application" handler
+def system_open_command(platform=None):
+    """The "system default application" handler: xdg-open on Linux; on Windows explorer.exe, which opens a file with the
+    program Windows has for its type (still an argument list, never a shell); open on macOS."""
+    platform = platform or sys.platform
+    if platform.startswith("win"):
+        return "explorer.exe {file}"
+    return "open {file}" if platform == "darwin" else "xdg-open {file}"
+
+
+SYSTEM_OPEN = system_open_command()
 EXECUTABLE_EXTENSIONS = (".sh", ".bash", ".run", ".bin", ".appimage", ".desktop", ".exe", ".msi", ".bat", ".cmd",
                          ".com", ".scr", ".jar", ".command")
 
@@ -256,6 +278,21 @@ def download_for_edit(dev, remote, local, prog=None, **watcher_args):
     return Watcher(local, remote, baseline, **watcher_args)
 
 
+def crlf_note(path):
+    """For a .py file saved with Windows line endings (CRLF): a short note to add to the status line, else ''.
+    The bytes are uploaded as they are; MicroPython runs such a file, but a sync sees it as changed."""
+    if not path.lower().endswith(".py"):
+        return ""
+    try:
+        with open(path, "rb") as f:
+            data = f.read(1 << 20)
+    except OSError:
+        return ""
+    if b"\r\n" not in data:
+        return ""
+    return ": it has Windows line endings (CRLF), which MicroPython runs, but Sync will see the file as changed"
+
+
 def upload_changes(dev, watcher, choice=None, prog=None):
     """Send the local copy back. Returns 'uploaded', 'conflict' (ask the user, then call again with a choice) or
     'skipped'.
@@ -292,6 +329,9 @@ def upload_changes(dev, watcher, choice=None, prog=None):
 # -- editing in place: the sessions ---------------------------------------
 def launch_program(argv):
     """Start an external program detached from us and from the terminal; it may outlive mpexplorer."""
+    if sys.platform.startswith("win"):     # no sessions there: a new process group keeps our Ctrl+C away from it
+        return subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
     return subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                             start_new_session=True)
 
@@ -308,6 +348,7 @@ class Session:
     retry_after: float = 0.0            # after a failed upload, do not try again before this time
     last_active: float = 0.0
     notes: list = field(default_factory=list)
+    crlf_told: bool = False             # said once that the program saved Windows line endings
 
 
 class EditManager:
@@ -424,7 +465,9 @@ class EditManager:
             if result == "conflict":
                 self._upload(s, self.ask_conflict(name) or "skip")
             elif result == "uploaded":
-                self.say("Uploaded %s (%s)" % (name, human(size)))
+                note = "" if s.crlf_told else crlf_note(s.watcher.local)
+                s.crlf_told = s.crlf_told or bool(note)
+                self.say("Uploaded %s (%s)%s" % (name, human(size), note))
                 self.refresh()
             else:
                 self.say("Not uploaded: %s" % name)

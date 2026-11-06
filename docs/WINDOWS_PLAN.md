@@ -1,6 +1,6 @@
 # Plan: a Windows standalone build, and the external terminal
 
-Status (2026-11-06): **step 1 started** on branch `windows-portability` (see "Progress" below); the GUI has not been run on Windows.
+Status (2026-11-06): **steps 1 and 2 done** (code and tests; step 1 is untested in the window and with boards on Windows) (see "Progress" below); the GUI has not been run on Windows.
 
 ## Progress (2026-11-06, on the owner's Windows 11 PC, Python 3.12, no GTK)
 - Done: `paths.py` (`config_dir`, `cache_dir`, `settings_file`, `portable.txt` mode with the read-only fallback and `portable_problem()`),
@@ -13,9 +13,20 @@ Status (2026-11-06): **step 1 started** on branch `windows-portability` (see "Pr
 - Suite on Windows: 485 passed, 38 skipped (pty / real MicroPython, the Linux launcher, a shell-script fake esptool, six Open with
   tests whose fake board uses host paths as board paths, and the GUI tests without PyGObject). The fake board gained `os.uname` and
   `os.statvfs` shims where the host has none.
-- Not done in step 1: a drives view in the host pane (the helper exists, the pane does not use it), the Windows hidden attribute,
-  CIRCUITPY / UF2 drive discovery by drive letter, Open with (`os.startfile`), checking a whole copy for case clashes and long paths
-  before it starts, the CRLF warning.
+- Step 1 finished (2026-11-06, branch `windows-step1-rest`):
+  - **Drives view:** on Windows, Up from a drive root opens "This PC" (`backends.DRIVES`), one folder per drive letter; nothing can be
+    written there. Shown as `C:\`, `E:\` (the volume label is not shown yet).
+  - **Hidden files:** `Entry.hidden` carries the Windows hidden attribute; the pane hides it like a leading dot (`backends.is_hidden`).
+  - **Drives for boards:** `winnames.removable_drives()` (GetDriveTypeW, A: and B: never asked); `CIRCUITPY` drives by volume label
+    (`circuitpython.mounts`), UF2 drives by `INFO_UF2.TXT` on each removable drive (`firmware.detect`).
+  - **Open with:** the system default is `explorer.exe {file}` on Windows (an argument list, no shell); commands are split without
+    POSIX escapes there, so `"C:\Program Files\...\geany.exe" {file}` works; programs start in their own process group.
+  - **Copy check:** before writing a folder's files to a Windows disk, `ops.check_windows_names` refuses names Windows cannot store and
+    names that differ only in case, naming the file and the reason. Paths over the limit get the long-path prefix (`LocalBackend._long`).
+  - **CRLF:** after an Open with upload of a `.py` file with Windows line endings, the status line says so once per file
+    (`openwith.crlf_note`); the bytes are uploaded as they are.
+  - Tests: `tests/test_windows_core.py`. Suite on Windows: 500 passed, 38 skipped. **None of it tried in the GTK window on Windows**
+    (no GTK there until step 4) or with a real board on a Windows PC.
 - Step 2 done (2026-11-06): CI job `windows` on `windows-latest`, Python 3.11 and 3.13, ruff + the suite with `-rs` so every skip and its
   reason is in the log. No GUI tests there (no PyGObject) until the packaging step brings MSYS2. Section 1 comes from reading the code on
 `main` (`02e9bc7`, v0.1.1); sections 2 to 4 also use the PuTTY and Tera Term manuals, quoted where it matters. Anything marked

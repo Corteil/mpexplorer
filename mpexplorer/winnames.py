@@ -80,6 +80,25 @@ def list_drives(bitmask=None, label_of=None):
     return [(r, label_of(r)) for r in roots]
 
 
+DRIVE_REMOVABLE = 2     # GetDriveTypeW: USB sticks, and the UF2 / CIRCUITPY drives boards show
+
+
+def drive_type(root):
+    try:
+        import ctypes
+        return ctypes.windll.kernel32.GetDriveTypeW(root)
+    except (AttributeError, OSError):
+        return 0
+
+
+def removable_drives(drives=None, type_of=None):
+    """[(root, label)] of removable drives (where UF2 bootloaders and CIRCUITPY appear). A: and B: are never asked,
+    so an old floppy drive cannot stall a scan. drives and type_of are for tests."""
+    type_of = type_of or drive_type
+    drives = list_drives() if drives is None else drives
+    return [(r, label) for r, label in drives if r[0].upper() not in "AB" and type_of(r) == DRIVE_REMOVABLE]
+
+
 def volume_label(root):
     """The volume label of a drive root, or an empty string."""
     try:

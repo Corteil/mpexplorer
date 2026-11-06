@@ -1,6 +1,6 @@
 """One directory listing bound to a backend (host or device)."""
 from .. import boardinfo
-from ..backends import human
+from ..backends import human, is_hidden
 from .common import Gdk, GLib, Gtk, error, fmt_time, icon_button, scrolled
 
 HOST = "Host"
@@ -288,7 +288,7 @@ class Pane(Gtk.Frame):
         flt = self.filter_entry.get_text().lower()
         show_hidden = self.app.show_hidden
         rows = [e for e in self._entries
-                if (show_hidden or not e.name.startswith(".")) and flt in e.name.lower()]
+                if (show_hidden or not is_hidden(e)) and flt in e.name.lower()]
         show_mtime = self.title == "Host" or self.app.settings.get("general.device_mtimes")
         order = self._sort[0] if show_mtime or self._sort[0] != "modified" else "name"     # no times: sort by name
         key = {"name": lambda e: e.name.lower(), "size": lambda e: e.size,

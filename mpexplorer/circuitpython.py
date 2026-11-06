@@ -10,6 +10,7 @@ import re
 import shutil
 import time
 
+from . import winnames
 from .backends import LocalBackend
 from .errors import BackendError
 from .transport import DeviceError
@@ -29,8 +30,12 @@ def detect(repl):
     return (out[0].lower(), out[1]) if len(out) >= 2 else (None, "")
 
 
-def mounts(text=None):
-    """Mount points of FAT drives named CIRCUITPY (udisks adds a number when there are two: CIRCUITPY1)."""
+def mounts(text=None, drives=None):
+    """Mount points of FAT drives named CIRCUITPY (udisks adds a number when there are two: CIRCUITPY1).
+    On Windows, the removable drive letters whose volume label is CIRCUITPY (`drives` is for tests)."""
+    if drives is not None or (text is None and winnames.is_windows()):
+        drives = winnames.removable_drives() if drives is None else drives
+        return [root for root, label in drives if re.fullmatch(r"CIRCUITPY\d*", label or "", re.I)]
     if text is None:
         try:
             with open("/proc/mounts", encoding="utf-8") as f:

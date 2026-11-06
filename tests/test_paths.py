@@ -6,7 +6,7 @@ import posixpath
 import pytest
 
 from mpexplorer import paths, winnames
-from mpexplorer.backends import LocalBackend
+from mpexplorer.backends import DRIVES, LocalBackend
 from mpexplorer.errors import BackendError
 
 
@@ -120,7 +120,8 @@ def test_local_backend_free_space_and_parent(tmp_path):
     be = LocalBackend()
     assert be.free_space(str(tmp_path)) > 0
     assert be.parent(str(tmp_path / "x")) == str(tmp_path)
-    assert be.parent(os.path.abspath(os.sep)) == os.path.abspath(os.sep)
+    root = os.path.abspath(os.sep)
+    assert be.parent(root) == (DRIVES if os.name == "nt" else root)     # Windows: up from C:\ is the list of drives
 
 
 def test_local_backend_refuses_windows_names_only_on_windows(tmp_path, monkeypatch):

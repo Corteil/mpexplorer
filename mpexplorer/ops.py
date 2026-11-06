@@ -171,7 +171,10 @@ def copy_tree(src_be, src, dst_be, dst, prog, policy):
             dst_be.mkdir(dst)
         elif not existing.is_dir:
             raise BackendError("%s exists and is not a folder" % dst)
-        for e in sorted(src_be.listdir(src), key=lambda e: e.name):
+        entries = sorted(src_be.listdir(src), key=lambda e: e.name)
+        if getattr(dst_be, "windows", False):
+            check_windows_names(src, [e.name for e in entries])
+        for e in entries:
             copy_tree(src_be, src_be.join(src, e.name), dst_be, dst_be.join(dst, e.name), prog, policy)
         return
     target = policy.decide(dst_be, dst)
@@ -180,6 +183,20 @@ def copy_tree(src_be, src, dst_be, dst, prog, policy):
         return
     keep = st.mtime if getattr(src_be, "key", None) == "device" and st.mtime >= MIN_VALID_MTIME else None
     _copy_file(src_be, src, dst_be, target, prog, keep)
+
+
+def check_windows_names(folder, names):
+    """Before any file of `folder` is written to a Windows disk: refuse names Windows cannot store, and names that
+    differ only in letter case (Windows would keep one file for both), saying which and why."""
+    from . import winnames
+    for n in names:
+        why = winnames.name_problem(n)
+        if why:
+            raise BackendError("Cannot copy %s from %s: %s. Rename it on the board first." % (n, folder, why))
+    clashes = winnames.case_clashes(names)
+    if clashes:
+        raise BackendError("Cannot copy %s: it holds %s, names that differ only in capital letters. Windows would keep "
+                           "only one of them: rename one on the board first." % (folder, " and ".join(clashes[0])))
 
 
 def _collect(be, path, is_dir, out, prog):

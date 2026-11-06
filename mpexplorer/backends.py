@@ -22,6 +22,15 @@ class Entry:
     is_dir: bool
     size: int = 0
     mtime: float = 0.0
+    hidden: bool = False        # the Windows hidden attribute (a leading dot counts too: is_hidden)
+
+
+def is_hidden(entry):
+    return entry.hidden or entry.name.startswith(".")
+
+
+FILE_ATTRIBUTE_HIDDEN = 2
+DRIVES = "This PC"              # on Windows, the host pane's top level: one folder per drive letter
 
 
 class LocalBackend:
@@ -31,31 +40,47 @@ class LocalBackend:
 
     def __init__(self):
         self.root = os.path.expanduser("~")
+        self.windows = winnames.is_windows()        # a test may set it to exercise the drives view anywhere
 
     def join(self, a, b):
-        return os.path.join(a, b)
+        return b if self.windows and a == DRIVES else os.path.join(a, b)
 
     def parent(self, p):
-        return winnames.parent_path(p)
+        r"""The folder above p. On Windows the parent of a drive root (C:\) is the list of drives, DRIVES."""
+        if self.windows and p == DRIVES:
+            return DRIVES
+        up = winnames.parent_path(p)
+        return DRIVES if self.windows and up == p else up
+
+    def _long(self, p):
+        return winnames.long_path(p) if self.windows else p
 
     def basename(self, p):
         return os.path.basename(p.rstrip(os.sep))
 
     def _check_name(self, p):
         """On Windows, say which name it refuses and why, before the operating system gives a vague error."""
-        if winnames.is_windows():
+        if self.windows and p == DRIVES:
+            raise BackendError("Files cannot be put in the list of drives: open a drive first.")
+        if self.windows:
             why = winnames.name_problem(os.path.basename(p))
             if why:
                 raise BackendError("Cannot create %s here: %s." % (os.path.basename(p), why))
 
+    def list_drives(self):
+        return winnames.list_drives()
+
     def listdir(self, p, mtimes=True):
+        if self.windows and p == DRIVES:
+            return [Entry(root, True) for root, _label in self.list_drives()]
         out = []
-        with os.scandir(p) as it:
+        with os.scandir(self._long(p)) as it:
             for e in it:
                 try:
                     st = e.stat()
                     d = e.is_dir()
-                    out.append(Entry(e.name, d, 0 if d else st.st_size, st.st_mtime))
+                    hidden = bool(getattr(st, "st_file_attributes", 0) & FILE_ATTRIBUTE_HIDDEN)
+                    out.append(Entry(e.name, d, 0 if d else st.st_size, st.st_mtime, hidden))
                 except OSError:
                     out.append(Entry(e.name, False))
         return out
@@ -64,8 +89,10 @@ class LocalBackend:
         os.utime(p, (t, t))
 
     def stat(self, p):
+        if self.windows and p == DRIVES:
+            return Entry(DRIVES, True)
         try:
-            st = os.stat(p)
+            st = os.stat(self._long(p))
         except OSError:
             return None
         d = os.path.isdir(p)
@@ -73,7 +100,7 @@ class LocalBackend:
 
     def mkdir(self, p):
         self._check_name(p)
-        os.mkdir(p)
+        os.mkdir(self._long(p))
 
     def remove(self, p):
         os.remove(p)
@@ -86,14 +113,16 @@ class LocalBackend:
         os.rename(a, b)
 
     def open_read(self, p):
-        return open(p, "rb")
+        return open(self._long(p), "rb")
 
     def open_write(self, p):
         self._check_name(p)
-        return open(p, "wb")
+        return open(self._long(p), "wb")
 
     def free_space(self, p):
-        return shutil.disk_usage(p).free
+        if self.windows and p == DRIVES:
+            raise BackendError("Open a drive to see its free space.")
+        return shutil.disk_usage(self._long(p)).free
 
     def checksum(self, p):
         h = hashlib.sha256()

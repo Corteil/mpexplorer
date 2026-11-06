@@ -123,9 +123,8 @@ label if one is missing on another theme.
 ## 2h. Windows build and the external terminal (plan: `docs/WINDOWS_PLAN.md`)
 Decided (owner, 2026-11-06): on Windows the console is the emulated REPL plus an "Open in external terminal..." button (no Mode radios);
 GTK 3 via MSYS2; reconnect automatically after the external terminal closes; Windows 10 and 11 only; first release a portable zip; sign the build (waits for the owner's certificate); `portable.txt` next to the exe keeps settings in a `data` folder.
-- [ ] Portability fixes in the core. Done on `windows-portability` (2026-11-06): config/cache folders + `portable.txt`, disk space, drive roots,
-      Windows file names refused with a reason, four Windows bugs (see the plan's Progress). Left: drives view, hidden attribute, drive letters for
-      CIRCUITPY/UF2, Open with (`os.startfile`), case-clash/long-path check before a copy, CRLF warning.
+- [x] Portability fixes in the core (2026-11-06): folders + `portable.txt`, disk space, drives view, hidden attribute, CIRCUITPY/UF2 by drive
+      letter, Open with, Windows names and case clashes before a copy, long paths, CRLF note. Not yet tried in the window on Windows or with boards.
 - [x] Windows CI job (`windows-latest`, Python 3.11 and 3.13) running the portable tests (2026-11-06).
 - [ ] External terminal: `extterm.py`, the button (all platforms), Preferences (`terminal.external_command`, `terminal.reconnect`); miniterm default.
 - [ ] MSYS2 + PyInstaller packaging spike as a CI artifact; terminal fallback is the external button.

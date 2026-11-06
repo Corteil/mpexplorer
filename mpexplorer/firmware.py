@@ -13,7 +13,7 @@ import threading
 import time
 from dataclasses import dataclass
 
-from . import paths, sources
+from . import paths, sources, winnames
 from .errors import BackendError, Cancelled
 from .ports import short_model
 from .transport import DeviceError, RawREPL, TransportError
@@ -176,12 +176,16 @@ def _mount_points(mounts_file):
     return points
 
 
-def detect(mounts_file="/proc/self/mounts"):
-    """Mounted UF2 bootloader drives. A drive counts only if it holds INFO_UF2.TXT, never by its name."""
-    try:
-        points = _mount_points(mounts_file)
-    except OSError:
-        return []
+def detect(mounts_file=None, drives=None):
+    """Mounted UF2 bootloader drives. A drive counts only if it holds INFO_UF2.TXT, never by its name.
+    Linux reads the mount table; Windows asks for its removable drive letters (`drives` is for tests)."""
+    if drives is not None or (mounts_file is None and winnames.is_windows()):
+        points = [root for root, _label in (winnames.removable_drives() if drives is None else drives)]
+    else:
+        try:
+            points = _mount_points(mounts_file or "/proc/self/mounts")
+        except OSError:
+            return []
     return [d for d in map(read_drive, points) if d]
 
 
@@ -220,7 +224,7 @@ def detect_running_badges():
             for name in BADGES for port in sorted(badge_ports(name))]
 
 
-def detect_all(mounts_file="/proc/self/mounts"):
+def detect_all(mounts_file=None):
     return (detect(mounts_file) + detect_rom() + detect_running() + detect_running_circuitpython()
             + detect_running_badges())
 
