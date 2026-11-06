@@ -128,7 +128,7 @@ GTK 3 via MSYS2; reconnect automatically after the external terminal closes; Win
 - [x] Windows CI job (`windows-latest`, Python 3.11 and 3.13) running the portable tests (2026-11-06).
 - [x] External terminal: `extterm.py`, the button (all platforms), Preferences (`terminal.external_command`, `terminal.reconnect`); miniterm default (2026-11-06, tests only).
 - [ ] Try it by hand: miniterm on the Pi with a Pico, then on Windows; reconnect after a soft reset that moves the port.
-- [ ] MSYS2 + PyInstaller packaging spike as a CI artifact; terminal fallback is the external button.
+- [x] MSYS2 + PyInstaller packaging as a CI artifact (2026-11-06, workflow `windows-build.yml`; the built exe passes its self-test on the runner). Not looked at by hand yet.
 - [ ] Hardware tests on a Windows PC: miniterm / PuTTY / Tera Term against a Tildagon, a Pico and a CircuitPython Pico (does opening the port reset the board?).
 - [ ] Portable zip as a CI artifact and release asset, README Windows section; `portable.txt` mode; signing only once the owner has a certificate (waiting); installer later.
 

@@ -30,8 +30,7 @@ jobs:
           python -c "import gi; gi.require_version('Gtk', '3.0'); from gi.repository import Gtk; print('GTK', Gtk.get_major_version(), Gtk.get_minor_version(), Gtk.get_micro_version())"
       - name: Install mpexplorer, esptool and the test tools
         run: python -m pip install --break-system-packages --no-build-isolation . "esptool>=5,<6" pytest-timeout
-      - name: Tests in MSYS2's Python, GUI tests included (allowed to fail while the build is new)
-        continue-on-error: true
+      - name: Tests in MSYS2's Python, GUI tests included
         run: python -m pytest -q -rs --timeout=60 -p no:cacheprovider
       - name: Build
         run: pyinstaller --noconfirm --clean packaging/windows/mpexplorer.spec

@@ -86,6 +86,15 @@ For a menu entry, desktop icon and taskbar icon, run `mpexplorer --install-deskt
 no root is needed. From a checkout, `sh packaging/install-launcher.sh` does the same. The window reports the app id
 `mpexplorer`, which is how the taskbar finds them.
 
+## Windows (preview, untested with boards)
+A portable build for Windows 10 and 11 is made by the **Windows build** workflow (Actions tab, artifact
+`mpexplorer-windows`): unzip it anywhere and run `mpexplorer.exe`. Nothing needs installing: GTK, Python, pyserial,
+miniterm and esptool are inside. Settings go to `%APPDATA%\mpexplorer`; create a file named `portable.txt` beside the
+exe (rename `portable.txt.example`) to keep them in a `data` folder there instead, for a USB stick.
+The build is **not signed yet**, so Windows SmartScreen says "Windows protected your PC" on the first run: choose
+*More info*, then *Run anyway*. The console has the emulated REPL and **Open in external terminal...** (there is no
+built-in terminal on Windows). This build has not yet been tried with a board on a Windows PC: see `docs/WINDOWS_PLAN.md`.
+
 ## Development
 ```
 pip install -e '.[dev]'

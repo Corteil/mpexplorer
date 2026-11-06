@@ -1,6 +1,6 @@
 # Plan: a Windows standalone build, and the external terminal
 
-Status (2026-11-06): **steps 1 to 3 done in code and tests** (see "Progress"). None of it has been tried in the window on Windows or with a board on a Windows PC; step 3 has not been tried by hand anywhere.
+Status (2026-11-06): **steps 1 to 4 done in code and tests**, and the Windows build is made in CI (see "Progress"). None of it has been tried in the window on Windows or with a board on a Windows PC; step 3 has not been tried by hand anywhere.
 
 ## Progress (2026-11-06, on the owner's Windows 11 PC, Python 3.12, no GTK)
 - Done: `paths.py` (`config_dir`, `cache_dir`, `settings_file`, `portable.txt` mode with the read-only fallback and `portable_problem()`),
@@ -41,6 +41,19 @@ Status (2026-11-06): **steps 1 to 3 done in code and tests** (see "Progress"). N
   - A frozen build runs itself with `--miniterm` (`__main__`), since it has no separate Python.
   - Tests: `tests/test_extterm.py` (also runs the real miniterm with the default options against a missing port), three GUI tests in
     `tests/test_gui_gtk.py` (Linux CI). **Not tried with a real board or by hand on any system**; the hardware table in section 3 is still empty.
+- Step 4 built (2026-11-06, branch `windows-build`): `.github/workflows/windows-build.yml` on `windows-latest` with MSYS2 UCRT64
+  (GTK 3.24.52, Python 3.14), `packaging/windows/` (launcher with an AppUserModelID, PyInstaller spec). The folder holds two programs on one
+  `_internal`: `mpexplorer.exe` (window) and `mpexplorer-console.exe` (`--self-test`, `--version`, and the helpers that need stdout:
+  `--miniterm`, `--esptool`; esptool 5.6.0 is bundled and runs with no console window). The workflow runs the whole suite in MSYS2's
+  Python, **GUI tests included, on Windows** (722 passed, 37 skipped after the fixes below), builds, then runs the built exe: `--self-test`
+  opens the real window and checks GTK, the PNG loader, the Adwaita icons and a host listing (all ok on the runner), `--esptool version`
+  (v5.6.0), `--miniterm --help`. Size: 124 MB folder, 60 MB zip, uploaded as the artifact `mpexplorer-windows` (14 days) with a
+  `portable.txt.example`.
+  - Found by it: MSYS2's Python uses `/` as its separator while `MSYSTEM` is set (so `C:\` came back as `C:/`, fixed in `winnames`);
+    a Preferences test that the Linux CI never ran (the `gui` job now runs every `tests/test_gui_*.py`).
+  - Not done: the window has **not been looked at on Windows** (no screenshot, no hand use), no high-DPI check, no board on a Windows
+    PC, unsigned (SmartScreen warns; README says what to click), not attached to releases yet, no installer. Python 3.14 in MSYS2 is
+    newer than the 3.11-3.13 the package is tested on elsewhere.
 
 Where this plan came from: section 1 from reading the code on `main` (`02e9bc7`, v0.1.1); sections 2 to 4 also use the PuTTY and Tera Term
 manuals, quoted where it matters. Anything marked *unverified* is from memory and must be checked on a real Windows machine before it is relied on.
