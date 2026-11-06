@@ -1,5 +1,6 @@
 import json
 
+import fakedevice  # noqa: F401  (gives Windows the os.uname and os.statvfs the board's snippets use)
 from mpexplorer import meminfo
 
 

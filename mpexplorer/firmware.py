@@ -3,16 +3,17 @@ import base64
 import hashlib
 import importlib.util
 import os
+import queue
 import re
-import select
 import shutil
 import struct
 import subprocess
 import sys
+import threading
 import time
 from dataclasses import dataclass
 
-from . import sources
+from . import paths, sources
 from .errors import BackendError, Cancelled
 from .ports import short_model
 from .transport import DeviceError, RawREPL, TransportError
@@ -369,8 +370,7 @@ def find_esptool():
 
 
 def esptool_log_path():
-    base = os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache")
-    return os.path.join(base, "mpexplorer", ESPTOOL_LOG)
+    return os.path.join(paths.cache_dir(), ESPTOOL_LOG)
 
 
 def _esptool_tail(lines):
@@ -412,15 +412,28 @@ def _run_esptool(argv, on_progress, on_stage, cancelled, stall):
     log = open(log_path, "wb")
     log.write((" ".join(argv) + "\n").encode())
     try:
-        fd = proc.stdout.fileno()
+        chunks = queue.Queue()      # a reader thread, because select() does not work on a pipe on Windows
+
+        def reader(fd=proc.stdout.fileno()):
+            try:
+                while True:
+                    data = os.read(fd, 4096)
+                    chunks.put(data)
+                    if not data:
+                        return
+            except OSError:
+                chunks.put(b"")
+
+        threading.Thread(target=reader, daemon=True).start()
         while True:
             if cancelled and cancelled():
                 raise Cancelled()
             if time.monotonic() - last > stall:
                 raise FirmwareError("esptool stopped making progress.\n%s" % _esptool_tail(lines))
-            if not select.select([fd], [], [], 0.1)[0]:
+            try:
+                chunk = chunks.get(timeout=0.1)
+            except queue.Empty:
                 continue
-            chunk = os.read(fd, 4096)
             if not chunk:
                 break
             last = time.monotonic()

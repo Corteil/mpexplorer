@@ -19,6 +19,7 @@ ROM = fw.BootDrive("/dev/fake", "m", "ESP32-S3", "esp32s3", "esptool", fw.EspChi
 @pytest.fixture(autouse=True)
 def private_cache(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "cache"))
 
 
 class FlashRepl:
@@ -71,7 +72,8 @@ def test_a_pico2_backup_is_for_the_rp2350(tmp_path):
 def test_a_backup_is_private(tmp_path):
     out = str(tmp_path / "b.uf2")
     fw.backup_repl("/dev/x", out, open_board=opener(FlashRepl(flash_of())))
-    assert stat.S_IMODE(os.stat(out).st_mode) == 0o600
+    if os.name != "nt":      # modes mean nothing on Windows
+        assert stat.S_IMODE(os.stat(out).st_mode) == 0o600
 
 
 def test_a_read_that_does_not_check_out_leaves_no_file_and_resets(tmp_path):
@@ -121,7 +123,8 @@ def test_an_esp_backup_reads_the_whole_flash_stays_in_the_rom_and_is_private(tmp
     args = log.read_text()
     assert "--before no-reset --after no-reset read-flash 0 8388608" in args
     assert got.size == 8388608 and os.path.getsize(out) == 8388608 and seen == [0.5]
-    assert stat.S_IMODE(os.stat(out).st_mode) == 0o600
+    if os.name != "nt":      # modes mean nothing on Windows
+        assert stat.S_IMODE(os.stat(out).st_mode) == 0o600
 
 
 def test_an_esp_backup_of_the_wrong_size_is_not_kept(tmp_path):

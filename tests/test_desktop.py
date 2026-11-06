@@ -7,6 +7,8 @@ import pytest
 
 from mpexplorer import desktop
 
+pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="the launcher files are for Linux desktops")
+
 ROOT = Path(__file__).resolve().parent.parent
 
 

@@ -6,7 +6,7 @@ v1.26.0 and v1.28.0, and the `gui` job: GTK windows under xvfb). Older sections 
 
 ## Windows build (planned 2026-11-06)
 Plan: `docs/WINDOWS_PLAN.md` (what blocks Windows today, GTK 3 on MSYS2, one REPL plus an external-terminal button, PuTTY / Tera Term / miniterm
-launch commands from their manuals, the hardware tests needed). Not started. Decided by the owner on 2026-11-06: GTK 3, auto-reconnect after the external terminal, Windows 10/11 only, portable zip first with `portable.txt` mode, sign the build once the certificate arrives (we wait for it); Windows tests run on the owner's PC.
+launch commands from their manuals, the hardware tests needed). Step 1 started 2026-11-06 on branch `windows-portability`, from a session on the owner's Windows PC (the suite passes there; see the plan's "Progress"). On Windows the venv is `python -m venv` + `pip install -e .[dev]`; edit files with the Edit tool rather than shell heredocs (backslashes were mangled twice). Decided by the owner on 2026-11-06: GTK 3, auto-reconnect after the external terminal, Windows 10/11 only, portable zip first with `portable.txt` mode, sign the build once the certificate arrives (we wait for it); Windows tests run on the owner's PC.
 
 ## CircuitPython and libraries (2026-11-01, later session on the Pi)
 Plan and what was seen on real boards: `docs/CIRCUITPYTHON_PLAN.md`. Hand checks done by the owner 2026-11-01 (`docs/HAND_CHECKS.md`, with the three problems they found, all fixed). All of it is on `main` (CI green at

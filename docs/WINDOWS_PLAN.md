@@ -1,6 +1,21 @@
 # Plan: a Windows standalone build, and the external terminal
 
-Status (2026-11-06): **planned, not started.** Nothing here has been tried on Windows. Section 1 comes from reading the code on
+Status (2026-11-06): **step 1 started** on branch `windows-portability` (see "Progress" below); the GUI has not been run on Windows.
+
+## Progress (2026-11-06, on the owner's Windows 11 PC, Python 3.12, no GTK)
+- Done: `paths.py` (`config_dir`, `cache_dir`, `settings_file`, `portable.txt` mode with the read-only fallback and `portable_problem()`),
+  used by settings, clipboard, libraries, firmware, firmware catalog, watchdog and the Open with cache. `winnames.py` (`name_problem`,
+  `path_problem`, `case_clashes`, `long_path`, `parent_path`, `list_drives`, `volume_label`). `LocalBackend`: `shutil.disk_usage`, drive
+  roots are their own parent, Windows names refused with the reason (mkdir, rename, open for writing). Tests: `tests/test_paths.py`.
+- Bugs found by running the suite on Windows and fixed: esptool's output was read with `select()` on a pipe (fails on Windows: now a
+  reader thread); the CIRCUITPY copy called `fsync` on a read-only handle; `libraries._mkdirs` split host paths on `/`; the adaptive
+  upload probe timed sends with `time.monotonic()`, which ticks every ~15 ms on Windows (now `perf_counter`).
+- Suite on Windows: 485 passed, 38 skipped (pty / real MicroPython, the Linux launcher, a shell-script fake esptool, six Open with
+  tests whose fake board uses host paths as board paths, and the GUI tests without PyGObject). The fake board gained `os.uname` and
+  `os.statvfs` shims where the host has none.
+- Not done in step 1: a drives view in the host pane (the helper exists, the pane does not use it), the Windows hidden attribute,
+  CIRCUITPY / UF2 drive discovery by drive letter, Open with (`os.startfile`), checking a whole copy for case clashes and long paths
+  before it starts, the CRLF warning. Section 1 comes from reading the code on
 `main` (`02e9bc7`, v0.1.1); sections 2 to 4 also use the PuTTY and Tera Term manuals, quoted where it matters. Anything marked
 *unverified* is from memory and must be checked on a real Windows machine before it is relied on.
 

@@ -18,6 +18,18 @@ if not hasattr(os, "ilistdir"):             # MicroPython-only API used by the s
             yield (n, 0x4000 if d else 0x8000, 0, 0 if d else os.path.getsize(full))
     os.ilistdir = _ilistdir
 
+if not hasattr(os, "uname"):                # Windows has neither; the snippets expect them
+    import collections
+    _Uname = collections.namedtuple("uname_result", "sysname nodename release version machine")
+    os.uname = lambda: _Uname("Windows", "fake", "1.0", "fake-host", "x86_64")
+
+if not hasattr(os, "statvfs"):
+    def _statvfs(p):
+        import shutil
+        u = shutil.disk_usage(p)
+        return (4096, 4096, u.total // 4096, u.free // 4096, u.free // 4096, 0, 0, 0, 0, 255)
+    os.statvfs = _statvfs
+
 
 BANNER = 'MicroPython fake-1.0 on 2026-01-01; FakeBoard with FakeCPU\r\nType "help()" for more information.\r\n'
 

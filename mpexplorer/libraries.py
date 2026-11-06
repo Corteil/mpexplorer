@@ -13,6 +13,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+from . import paths
 from .errors import BackendError
 
 INDEX = "https://micropython.org/pi/v2"
@@ -28,8 +29,7 @@ class LibraryError(BackendError):
 
 
 def default_cache_dir():
-    base = os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache")
-    return os.path.join(base, "mpexplorer", "libs")
+    return os.path.join(paths.cache_dir(), "libs")
 
 
 def _open_url(url):
@@ -154,11 +154,12 @@ class Catalog:
 
 
 def _mkdirs(backend, path):
-    parts, cur = [p for p in path.split("/") if p], "/"
-    for p in parts:
-        cur = backend.join(cur, p)
-        if backend.stat(cur) is None:
-            backend.mkdir(cur)
+    if backend.stat(path) is not None:
+        return
+    parent = backend.parent(path)
+    if parent != path:
+        _mkdirs(backend, parent)
+    backend.mkdir(path)
 
 
 def install(catalog, backend, plan, dest=DEST, on_progress=None, cancelled=None):

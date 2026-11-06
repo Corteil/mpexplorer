@@ -166,8 +166,9 @@ def test_download_is_private_and_matches(dev, bd, tmp_path):
     local = str(tmp_path / "cache" / "board" / "main.py")
     w = openwith.download_for_edit(dev, bd + "/main.py", local)
     assert open(local, "rb").read() == b"print('hi')\n"
-    assert oct(os.stat(local).st_mode & 0o777) == "0o600"
-    assert oct(os.stat(os.path.dirname(local)).st_mode & 0o777) == "0o700"
+    if os.name != "nt":      # modes mean nothing on Windows
+        assert oct(os.stat(local).st_mode & 0o777) == "0o600"
+        assert oct(os.stat(os.path.dirname(local)).st_mode & 0o777) == "0o700"
     assert not w.pending
     with pytest.raises(FileNotFoundError):
         openwith.download_for_edit(dev, bd + "/missing.py", str(tmp_path / "x"))
@@ -292,6 +293,11 @@ class FakeProc:
         return None if self.alive else 0
 
 
+# The fake board runs on the host's own files, so its "device paths" are host paths: on Windows (C:\...) they cannot
+# look like a board's /path. The code under test is exercised by the other tests and on the Linux CI job.
+posix_device_paths = pytest.mark.skipif(os.name == "nt", reason="the fake board's paths are host paths")
+
+
 class Rig:
     def __init__(self, dev, bd, tmp_path, answer="skip"):
         self.dev, self.bd, self.clock, self.said, self.launched = dev, bd, Clock(), [], []
@@ -332,6 +338,7 @@ def rig(dev, bd, tmp_path):
     return Rig(dev, bd, tmp_path)
 
 
+@posix_device_paths
 def test_open_downloads_launches_and_uploads_each_save(rig, dev, bd):
     put(dev, bd + "/main.py", b"v1\n")
     rig.edit()
@@ -348,6 +355,7 @@ def test_open_downloads_launches_and_uploads_each_save(rig, dev, bd):
     assert rig.runner.labels == ["Downloading " + bd + "/main.py"] + ["Uploading " + bd + "/main.py"] * 2
 
 
+@posix_device_paths
 def test_no_upload_before_the_save_settles_or_without_a_change(rig, dev, bd):
     put(dev, bd + "/main.py", b"v1\n")
     rig.edit()
@@ -368,6 +376,7 @@ def test_opening_again_relaunches_without_downloading_twice(rig, dev, bd):
     assert len(rig.mgr.sessions) == 1 and len(rig.launched) == 2 and len(rig.runner.labels) == 1
 
 
+@posix_device_paths
 def test_conflict_asks_and_applies_the_answer(dev, bd, tmp_path):
     put(dev, bd + "/main.py", b"v1\n")
     rig = Rig(dev, bd, tmp_path, answer="keep_both")
@@ -427,6 +436,7 @@ def test_idle_session_is_dropped_only_after_the_program_has_gone(rig, dev, bd):
     assert not os.path.exists(rig.root + "/bd1")                        # empty cache folders are removed too
 
 
+@posix_device_paths
 def test_flush_and_close_board_keep_unsent_work(rig, dev, bd):
     put(dev, bd + "/a.py", b"a1\n")
     put(dev, bd + "/b.py", b"b1\n")
@@ -502,6 +512,7 @@ def test_forget_and_describe_handlers(settings):
     assert settings.get("open_with.by_extension") == {".py": "custom:geany"}
 
 
+@posix_device_paths
 def test_paused_saves_wait_then_go_up_when_released(rig, dev, bd):
     put(dev, bd + "/main.py", b"v1\n")
     rig.edit()
@@ -518,6 +529,7 @@ def test_paused_saves_wait_then_go_up_when_released(rig, dev, bd):
     assert read(dev, bd + "/main.py") == b"v2 half done\n"
 
 
+@posix_device_paths
 def test_pause_covers_files_opened_later_and_flush_does_not_send_held_saves(rig, dev, bd):
     put(dev, bd + "/a.py", b"a1\n")
     rig.mgr.set_paused(True)

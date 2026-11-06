@@ -14,7 +14,7 @@ from mpexplorer.settings import Settings
 
 
 def make_tree(root):
-    (root / "blink.py").write_text("print('blink')\n")
+    (root / "blink.py").write_text("print('blink')\n", newline="\n")
     (root / "tone.mpy").write_bytes(b"M\x06\x00\x1f")
     pkg = root / "mything"
     (pkg / "sub").mkdir(parents=True)

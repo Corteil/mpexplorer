@@ -142,7 +142,8 @@ def test_rename_run_and_epoch(dev, tmp_path):
 def test_helpers(local, tmp_path):
     (tmp_path / "a.tar.gz").write_text("")
     assert unique_name(local, str(tmp_path / "a.tar.gz")).endswith("a.tar (1).gz")
-    assert is_within(local, "/a/b/c", "/a/b") and not is_within(local, "/a/bc", "/a/b")
+    p = os.path.join
+    assert is_within(local, p("/a", "b", "c"), p("/a", "b")) and not is_within(local, p("/a", "bc"), p("/a", "b"))
     with pytest.raises(BackendError):
         copy_tree(local, str(tmp_path / "gone"), local, str(tmp_path / "x"), Progress(), ConflictPolicy())
 

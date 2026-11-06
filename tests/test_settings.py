@@ -32,8 +32,9 @@ def test_round_trip_and_file_permissions(path):
     assert again.get("general.last_port") == "/dev/ttyACM0" and again.get("window.width") == 900
     assert again.get("window.x") == -5 and again.get("open_with.by_extension") == {".py": "app:geany.desktop"}
     assert again.get("general.sort.host") == ["size", True] and again.problems == []
-    assert stat.S_IMODE(os.stat(path).st_mode) == 0o600
-    assert stat.S_IMODE(os.stat(os.path.dirname(path)).st_mode) == 0o700
+    if os.name != "nt":      # modes mean nothing on Windows
+        assert stat.S_IMODE(os.stat(path).st_mode) == 0o600
+        assert stat.S_IMODE(os.stat(os.path.dirname(path)).st_mode) == 0o700
     assert json.load(open(path))["version"] == st.VERSION
     assert not [f for f in os.listdir(os.path.dirname(path)) if f.endswith(".tmp")]
 
@@ -179,11 +180,15 @@ def test_concurrent_sets_and_saves(path):
 
 def test_config_path_rules(monkeypatch, tmp_path):
     monkeypatch.delenv("MPEXPLORER_CONFIG", raising=False)
-    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
-    assert config_path() == str(tmp_path / "xdg" / "mpexplorer" / "settings.json")
-    monkeypatch.delenv("XDG_CONFIG_HOME")
-    monkeypatch.setenv("HOME", str(tmp_path))
-    assert config_path() == str(tmp_path / ".config" / "mpexplorer" / "settings.json")
+    if os.name == "nt":
+        monkeypatch.setenv("APPDATA", str(tmp_path / "roaming"))
+        assert config_path() == str(tmp_path / "roaming" / "mpexplorer" / "settings.json")
+    else:
+        monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+        assert config_path() == str(tmp_path / "xdg" / "mpexplorer" / "settings.json")
+        monkeypatch.delenv("XDG_CONFIG_HOME")
+        monkeypatch.setenv("HOME", str(tmp_path))
+        assert config_path() == str(tmp_path / ".config" / "mpexplorer" / "settings.json")
     monkeypatch.setenv("MPEXPLORER_CONFIG", "/x/y.json")
     assert config_path() == "/x/y.json"
 

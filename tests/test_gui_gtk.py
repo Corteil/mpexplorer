@@ -1205,6 +1205,7 @@ def until(test, ms=5000):
 @pytest.fixture
 def private_cache(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "cache"))
 
 
 def test_copy_on_one_board_paste_on_another(make_app, tmp_path, private_cache):

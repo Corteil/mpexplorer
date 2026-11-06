@@ -122,11 +122,8 @@ class DriveBackend(LocalBackend):
 
     def copy_file(self, src, dst, on_bytes=None):
         shutil.copyfile(src, dst)
-        fd = os.open(dst, os.O_RDONLY)
-        try:
-            os.fsync(fd)
-        finally:
-            os.close(fd)
+        with open(dst, "r+b") as f:         # fsync needs a writable handle on Windows
+            os.fsync(f.fileno())
         if on_bytes:
             on_bytes(os.path.getsize(dst))
 

@@ -4,9 +4,11 @@ import hashlib
 import json
 import os
 import posixpath
+import shutil
 import time
 from dataclasses import dataclass
 
+from . import winnames
 from .errors import BackendError
 
 CHUNK = 2048
@@ -34,10 +36,17 @@ class LocalBackend:
         return os.path.join(a, b)
 
     def parent(self, p):
-        return os.path.dirname(p.rstrip(os.sep)) or os.sep
+        return winnames.parent_path(p)
 
     def basename(self, p):
         return os.path.basename(p.rstrip(os.sep))
+
+    def _check_name(self, p):
+        """On Windows, say which name it refuses and why, before the operating system gives a vague error."""
+        if winnames.is_windows():
+            why = winnames.name_problem(os.path.basename(p))
+            if why:
+                raise BackendError("Cannot create %s here: %s." % (os.path.basename(p), why))
 
     def listdir(self, p, mtimes=True):
         out = []
@@ -63,6 +72,7 @@ class LocalBackend:
         return Entry(self.basename(p), d, 0 if d else st.st_size, st.st_mtime)
 
     def mkdir(self, p):
+        self._check_name(p)
         os.mkdir(p)
 
     def remove(self, p):
@@ -72,17 +82,18 @@ class LocalBackend:
         os.rmdir(p)
 
     def rename(self, a, b):
+        self._check_name(b)
         os.rename(a, b)
 
     def open_read(self, p):
         return open(p, "rb")
 
     def open_write(self, p):
+        self._check_name(p)
         return open(p, "wb")
 
     def free_space(self, p):
-        st = os.statvfs(p)
-        return st.f_bavail * st.f_frsize
+        return shutil.disk_usage(p).free
 
     def checksum(self, p):
         h = hashlib.sha256()

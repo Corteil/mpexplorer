@@ -21,6 +21,8 @@ from mpexplorer.terminal import paste_bytes
 from mpexplorer.transport import DeviceError, RawREPL
 from test_terminal import DOWN, LEFT, UP, Term
 
+pytestmark = pytest.mark.skipif(os.name == "nt", reason="needs a pty (tests/ptyserial.py); run on Linux")
+
 
 @pytest.fixture
 def repl(mpy_shim_serial):

@@ -8,6 +8,7 @@ import urllib.error
 import urllib.request
 from dataclasses import asdict, dataclass
 
+from . import paths
 from .errors import Cancelled
 from .firmware import MAX_IMAGE, FirmwareError
 
@@ -98,8 +99,7 @@ def parse_builds(text, board_id, ext=".uf2"):
 
 
 def default_cache_dir():
-    base = os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache")
-    return os.path.join(base, "mpexplorer", "firmware")
+    return os.path.join(paths.cache_dir(), "firmware")
 
 
 def _open_url(url):

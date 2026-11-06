@@ -32,6 +32,7 @@ Staying in bootloader.
 @pytest.fixture(autouse=True)
 def private_cache(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "cache"))
 
 
 def esp_image(chip=9, flash=3, table=True, app=True, size=0x10100, magic=0xE9):
@@ -201,6 +202,7 @@ def no_module(monkeypatch):
     monkeypatch.setattr(fw.os.path, "expanduser", lambda p: "/nonexistent/esptool")
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="the fake tool is a shell script")
 def test_find_esptool_uses_a_program_on_the_path(tmp_path, monkeypatch, no_module):
     program = versioned_tool(tmp_path, "esptool", "5.6.0")
     monkeypatch.setattr(fw.shutil, "which", lambda name: program)

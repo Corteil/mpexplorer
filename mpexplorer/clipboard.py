@@ -2,12 +2,12 @@ import os
 import shutil
 import tempfile
 
+from . import paths
 from .ops import copy_tree, total_size
 
 
 def copied_dir():
-    base = os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache")
-    return os.path.join(base, "mpexplorer", "copied")
+    return os.path.join(paths.cache_dir(), "copied")
 
 
 class Clipboard:

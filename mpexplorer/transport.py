@@ -173,14 +173,14 @@ class RawREPL:
             ctl = 10.0 if timeout is None else timeout      # handshake steps always have a time limit
             want_paste = self._want_paste(len(data))
             try:
-                started = time.monotonic()
+                started = time.perf_counter()     # monotonic() ticks every ~15 ms on Windows
                 if not (want_paste and self._send_paste(data, ctl)):
                     for i in range(0, len(data), WRITE_BLOCK):
                         self.ser.write(data[i:i + WRITE_BLOCK])
                         time.sleep(WRITE_PAUSE)
                     self.ser.write(b"\x04")
                     self._read_until(b"OK", ctl)
-                self._note_rate(want_paste and self.paste, len(data), time.monotonic() - started)
+                self._note_rate(want_paste and self.paste, len(data), time.perf_counter() - started)
                 out = self._read_stream(timeout, on_output)
                 err = self._read_until(b"\x04", ctl)[:-1]
                 try:

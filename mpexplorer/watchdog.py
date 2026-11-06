@@ -7,10 +7,11 @@ import os
 import threading
 import time
 
+from . import paths
+
 
 def default_path():
-    base = os.environ.get("XDG_CACHE_HOME") or os.path.join(os.path.expanduser("~"), ".cache")
-    return os.path.join(base, "mpexplorer", "stalls.txt")
+    return os.path.join(paths.cache_dir(), "stalls.txt")
 
 
 class Watchdog:

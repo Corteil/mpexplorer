@@ -20,6 +20,8 @@ import os
 import tempfile
 import threading
 
+from . import paths
+
 VERSION = 1
 _MISSING = object()
 
@@ -141,12 +143,8 @@ SPEC = {
 
 
 def config_path():
-    """$MPEXPLORER_CONFIG, else $XDG_CONFIG_HOME/mpexplorer/settings.json, else ~/.config/mpexplorer/settings.json."""
-    explicit = os.environ.get("MPEXPLORER_CONFIG")
-    if explicit:
-        return explicit
-    base = os.environ.get("XDG_CONFIG_HOME") or os.path.join(os.path.expanduser("~"), ".config")
-    return os.path.join(base, "mpexplorer", "settings.json")
+    """$MPEXPLORER_CONFIG, else settings.json in paths.config_dir()."""
+    return paths.settings_file()
 
 
 def segment(text):

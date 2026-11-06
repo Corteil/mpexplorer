@@ -13,7 +13,7 @@ from ..clipboard import Clipboard, copied_dir
 from ..connection import Connection
 from ..errors import BackendError, Cancelled
 from ..jobs import JobRunner
-from .. import circuitpython
+from .. import circuitpython, paths
 from ..badgescreen import BadgeScreen
 from ..openwith import (SYSTEM_OPEN, EditManager, app_template, handler_for, looks_executable, parse_handler,
                         remember_handler)
@@ -42,8 +42,7 @@ MAX_IMAGE_BYTES = 2 * 1024 * 1024
 
 
 def cache_dir():
-    base = os.environ.get("XDG_CACHE_HOME") or os.path.join(os.path.expanduser("~"), ".cache")
-    return os.path.join(base, "mpexplorer", "open")
+    return os.path.join(paths.cache_dir(), "open")
 
 
 POPUP_DELAY = 1.0       # seconds a file job runs before its progress window opens
