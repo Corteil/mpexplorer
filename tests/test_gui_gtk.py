@@ -1696,3 +1696,59 @@ def test_sync_can_run_between_two_boards(make_app, tmp_path):
     dlg = SyncDialog(app, first, str(a), second, str(b), plan=build_plan(first, str(a), second, str(b)))
     pump()
     dlg.destroy()
+
+
+# -- Open in external terminal (docs/WINDOWS_PLAN.md section 3) ---------------------------------
+def test_the_console_offers_the_external_terminal_and_hides_the_mode_row_without_vte(make_app, tmp_path):
+    from mpexplorer.gtkui import terminal
+    app = make_app()
+    app.connected(DeviceBackend(RawREPL(FakeSerial())), str(tmp_path), "/dev/ttyACM0", "303a:4001:AAA")
+    app.open_console()
+    pump()
+    assert app.console.ext_btn.get_visible()
+    assert app.console.mode_row.get_visible() == terminal.available()
+
+
+def test_external_terminal_disconnects_runs_the_program_and_reconnects(make_app, tmp_path, monkeypatch):
+    from mpexplorer import extterm
+    app = make_app()
+    app.connected(DeviceBackend(RawREPL(FakeSerial())), str(tmp_path), "/dev/ttyACM0", "chip:01",
+                  usb="2e8a:0005:abc")
+    proc = types.SimpleNamespace(code=None)
+    proc.poll = lambda: proc.code
+    launched, reconnects, found = [], [], ["/dev/ttyACM2"]       # it comes back on another port
+    real = extterm.ExternalTerminal
+
+    def make_ext(*a, **kw):
+        kw.update(launcher=lambda argv, new_console: launched.append(argv) or proc, which=lambda n: "/usr/bin/" + n,
+                  finder=lambda key: found[0], platform="linux")
+        return real(*a, **kw)
+    monkeypatch.setattr(extterm, "ExternalTerminal", make_ext)
+    monkeypatch.setattr("mpexplorer.gtkui.app.ask_yes_no", lambda *a: True)
+    monkeypatch.setattr(app, "connect_device", lambda pane=None: reconnects.append((pane, pane.source())))
+    app.open_external_terminal(app.conns[app.right])
+    for _ in range(40):
+        pump(50)
+        if launched:
+            break
+    assert launched and launched[0][-2:] == ["/dev/ttyACM0", "115200"]
+    assert app.right not in app.conns                       # the port was given up before the program started
+    pump(700)
+    assert reconnects == []                                 # still running
+    proc.code = 0
+    pump(1200)
+    assert reconnects and reconnects[0][0] is app.right and reconnects[0][1].startswith("/dev/ttyACM2")
+
+
+def test_external_terminal_with_a_missing_program_stays_connected(make_app, tmp_path, monkeypatch):
+    from mpexplorer import extterm
+    app = make_app()
+    app.connected(DeviceBackend(RawREPL(FakeSerial())), str(tmp_path), "/dev/ttyACM0", "chip:01",
+                  usb="2e8a:0005:abc")
+    app.settings.set("terminal.external_command", "no-such-terminal {port}")
+    real, said = extterm.ExternalTerminal, []
+    monkeypatch.setattr(extterm, "ExternalTerminal", lambda *a, **kw: real(*a, which=lambda n: None, **kw))
+    monkeypatch.setattr("mpexplorer.gtkui.app.error", lambda parent, title, text: said.append(text))
+    app.open_external_terminal(app.conns[app.right])
+    pump()
+    assert said and "no-such-terminal was not found" in said[0] and app.right in app.conns

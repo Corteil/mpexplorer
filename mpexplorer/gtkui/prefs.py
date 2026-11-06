@@ -1,4 +1,5 @@
 """Preferences window: changes apply and are saved as soon as they are made."""
+from .. import extterm
 from ..openwith import describe_handler, forget_handler, normalize_extension, remember_handler
 from .common import Gio, Gtk, ask_yes_no, error, info, prompt, scrolled
 from .dialogs import ask_open_with
@@ -37,6 +38,7 @@ class PreferencesDialog(Gtk.Dialog):
         nb.append_page(general, Gtk.Label(label="General"))
 
         nb.append_page(self._file_types_page(), Gtk.Label(label="File types"))
+        nb.append_page(self._terminal_page(), Gtk.Label(label="Terminal"))
         nb.append_page(SourcesPage(app, self), Gtk.Label(label="Sources"))
 
         files = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8, margin=12)
@@ -53,6 +55,34 @@ class PreferencesDialog(Gtk.Dialog):
         self.settings.subscribe(self._setting_changed)
         self.connect("destroy", lambda _d: self.settings.unsubscribe(self._setting_changed))
         self.show_all()
+
+    # -- Terminal: the external program for the board's real REPL ----------------
+    def _terminal_page(self):
+        page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, margin=12)
+        page.pack_start(Gtk.Label(label="Open in external terminal runs this program on the board's port. Leave it "
+                                  "empty for miniterm (comes with mpexplorer). {port}, {portnum}, {baud} and {title} "
+                                  "are filled in; the command runs without a shell.", xalign=0, wrap=True),
+                        False, False, 0)
+        self.term_cmd = Gtk.ComboBoxText.new_with_entry()
+        for template in extterm.PRESETS.values():
+            self.term_cmd.append_text(template)
+        self.term_cmd.get_child().set_text(self.settings.get("terminal.external_command"))
+        self.term_cmd.get_child().set_placeholder_text("miniterm (the default)")
+        self.term_cmd.connect("changed", lambda c: self.settings.set("terminal.external_command",
+                                                                     c.get_child().get_text().strip()))
+        page.pack_start(self.term_cmd, False, False, 0)
+        page.pack_start(Gtk.Label(label="When the terminal closes:", xalign=0), False, False, 6)
+        self.reconnect = {}
+        group = None
+        for value, label in (("auto", "Reconnect to the board"), ("ask", "Ask whether to reconnect"),
+                             ("never", "Stay disconnected")):
+            rb = Gtk.RadioButton.new_with_label_from_widget(group, label)
+            group = group or rb
+            rb.set_active(self.settings.get("terminal.reconnect") == value)
+            rb.connect("toggled", lambda b, v=value: b.get_active() and self.settings.set("terminal.reconnect", v))
+            self.reconnect[value] = rb
+            page.pack_start(rb, False, False, 0)
+        return page
 
     # -- File types: the default program for each extension (Open with...) ------
     def _file_types_page(self):

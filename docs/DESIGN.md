@@ -94,6 +94,11 @@ its persistent state.
 - Limits: no tab completion, auto-indent or line editing on the board; helper names (`os json gc b _f _v`) share the
   namespace; a long-running command blocks other device operations because there is one worker thread.
 
+### External terminal (built 2026-11-06)
+`extterm.py` hands the port to another program (miniterm by default; PuTTY, Tera Term, picocom or a template) for systems without VTE
+and for anyone who prefers their own terminal. The window disconnects, starts the program as a job queued behind the close, polls it, and
+reconnects when it exits, finding the board by its USB id. See `docs/WINDOWS_PLAN.md` section 3.
+
 ### Terminal mode (built): the board's real REPL
 Keystrokes are passed straight through, so the board's own tab completion, history, auto-indent, paste mode (Ctrl-E),
 Ctrl-D and `input()` all work, with no emulation.

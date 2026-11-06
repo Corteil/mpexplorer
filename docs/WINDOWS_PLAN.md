@@ -1,6 +1,6 @@
 # Plan: a Windows standalone build, and the external terminal
 
-Status (2026-11-06): **steps 1 and 2 done** (code and tests; step 1 is untested in the window and with boards on Windows) (see "Progress" below); the GUI has not been run on Windows.
+Status (2026-11-06): **steps 1 to 3 done in code and tests** (see "Progress"). None of it has been tried in the window on Windows or with a board on a Windows PC; step 3 has not been tried by hand anywhere.
 
 ## Progress (2026-11-06, on the owner's Windows 11 PC, Python 3.12, no GTK)
 - Done: `paths.py` (`config_dir`, `cache_dir`, `settings_file`, `portable.txt` mode with the read-only fallback and `portable_problem()`),
@@ -28,9 +28,22 @@ Status (2026-11-06): **steps 1 and 2 done** (code and tests; step 1 is untested 
   - Tests: `tests/test_windows_core.py`. Suite on Windows: 500 passed, 38 skipped. **None of it tried in the GTK window on Windows**
     (no GTK there until step 4) or with a real board on a Windows PC.
 - Step 2 done (2026-11-06): CI job `windows` on `windows-latest`, Python 3.11 and 3.13, ruff + the suite with `-rs` so every skip and its
-  reason is in the log. No GUI tests there (no PyGObject) until the packaging step brings MSYS2. Section 1 comes from reading the code on
-`main` (`02e9bc7`, v0.1.1); sections 2 to 4 also use the PuTTY and Tera Term manuals, quoted where it matters. Anything marked
-*unverified* is from memory and must be checked on a real Windows machine before it is relied on.
+  reason is in the log. No GUI tests there (no PyGObject) until the packaging step brings MSYS2.
+- Step 3 built (2026-11-06, branch `external-terminal`):
+  - `extterm.py` (GUI-free): `command_for` (empty template = miniterm with `--dtr 1 --rts 0`, in a new console on Windows, inside the
+    first terminal emulator found on Linux: x-terminal-emulator, lxterminal, gnome-terminal, konsole, xfce4-terminal, xterm), templates with
+    `{port}` `{portnum}` `{baud}` `{title}` (PuTTY, Tera Term and picocom presets), `launch` (no shell), `find_port` (by USB id), and
+    `ExternalTerminal` (`check` before disconnecting, `start`, `running`, `board_port`, `gave_up` after 15 s).
+  - App: Device > "Open in external terminal..." and the console's button. It checks the program exists (a missing one leaves the board
+    connected), asks, disconnects (no reset unless that option is on), starts the program as a job queued after the close, polls it, then
+    reconnects per `terminal.reconnect` (`auto` / `ask` / `never`) on whatever port the board's USB id now has.
+  - Console: the Mode row is shown only where VTE is available. Preferences > Terminal: the command (with the presets) and the reconnect choice.
+  - A frozen build runs itself with `--miniterm` (`__main__`), since it has no separate Python.
+  - Tests: `tests/test_extterm.py` (also runs the real miniterm with the default options against a missing port), three GUI tests in
+    `tests/test_gui_gtk.py` (Linux CI). **Not tried with a real board or by hand on any system**; the hardware table in section 3 is still empty.
+
+Where this plan came from: section 1 from reading the code on `main` (`02e9bc7`, v0.1.1); sections 2 to 4 also use the PuTTY and Tera Term
+manuals, quoted where it matters. Anything marked *unverified* is from memory and must be checked on a real Windows machine before it is relied on.
 
 ## Decisions (owner, 2026-11-06)
 - On Windows the console window has **one** kind of REPL (the emulated one) plus a **button that opens the board's real terminal

@@ -7,6 +7,11 @@ def main():
     if "--version" in sys.argv[1:] or "-V" in sys.argv[1:]:      # before GTK is imported: works without PyGObject
         print("mpexplorer %s" % __version__)
         return
+    if sys.argv[1:2] == ["--miniterm"]:     # the frozen build's own miniterm, for "Open in external terminal"
+        from serial.tools import miniterm
+        sys.argv = ["miniterm"] + sys.argv[2:]
+        miniterm.main()
+        return
     if "--install-desktop" in sys.argv[1:] or "--uninstall-desktop" in sys.argv[1:]:   # also needs no GTK
         from .desktop import main as desktop_main
         desktop_main(sys.argv[1:])

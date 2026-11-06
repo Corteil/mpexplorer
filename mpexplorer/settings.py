@@ -39,6 +39,14 @@ def string(v):
     raise ValueError("expected text")
 
 
+def one_of(*choices):
+    def check(v):
+        if v in choices:
+            return v
+        raise ValueError("expected one of %s" % ", ".join(choices))
+    return check
+
+
 def integer(lo, hi):
     def check(v):
         if isinstance(v, bool) or not isinstance(v, int) or not lo <= v <= hi:
@@ -138,6 +146,8 @@ SPEC = {
     "open_with.auto_upload": (True, boolean),       # upload saves made in an external program (docs/OPEN_WITH_PLAN.md)
     "open_with.by_extension": ({}, str_dict),       # ".py" -> "editor" | "app:<desktop id>" | "custom:<name>"
     "open_with.custom": ({}, str_dict),             # name -> command with {file}
+    "terminal.external_command": ("", string),      # external terminal: a template with {port} {baud}...; "" = miniterm
+    "terminal.reconnect": ("auto", one_of("auto", "ask", "never")),     # after the external terminal closes
     "connection.fast_mode": (False, boolean),       # opt-in RAM-only agent (docs/AGENT_PLAN.md)
 }
 

@@ -1,7 +1,8 @@
 """REPL console window: type Python, run it on the board, see the output as it arrives.
 
 Two modes: emulated (raw REPL, lines run one at a time) and terminal (real REPL in a VTE widget, needs
-gir1.2-vte-2.91).
+gir1.2-vte-2.91). The Mode row is shown only where VTE is available (not on Windows); everywhere there is also
+"Open in external terminal...", which hands the port to another program and reconnects afterwards.
 """
 import queue
 
@@ -31,20 +32,23 @@ class ConsoleWindow(Gtk.Window):
         self.activity = Gtk.CheckButton(label="Show activity")
         self.activity.connect("toggled", lambda _c: self._toggle_activity())
         bar.pack_start(self.activity, False, False, 10)
+        self.ext_btn = Gtk.Button(label="Open in external terminal...")
+        self.ext_btn.set_tooltip_text("The board's real REPL in another program (miniterm unless Preferences > "
+                                      "Terminal says otherwise). mpexplorer disconnects while it is open.")
+        self.ext_btn.connect("clicked", lambda _b: self.app.open_external_terminal(self.conn))
+        bar.pack_end(self.ext_btn, False, False, 0)
         box.pack_start(bar, False, False, 0)
 
         mode = Gtk.Box(spacing=8)
         mode.pack_start(Gtk.Label(label="Mode:"), False, False, 0)
         self.emu_radio = Gtk.RadioButton.new_with_label(None, "Emulated (raw REPL)")
         self.term_radio = Gtk.RadioButton.new_with_label_from_widget(self.emu_radio, "Terminal (real REPL)")
-        if not terminal.available():
-            self.term_radio.set_sensitive(False)
-            self.term_radio.set_tooltip_text("Install gir1.2-vte-2.91 to enable the terminal")
         self._mode_guard = False
         self.term_radio.connect("toggled", lambda _r: self._mode_changed())
         mode.pack_start(self.emu_radio, False, False, 0)
         mode.pack_start(self.term_radio, False, False, 0)
         box.pack_start(mode, False, False, 0)
+        self.mode_row = mode
         self.box = box
         self.term = None
 
@@ -69,6 +73,8 @@ class ConsoleWindow(Gtk.Window):
         self.connect("delete-event", lambda *_: self.close() or True)
         app.windows.append(self)
         self.show_all()
+        if not terminal.available():        # one REPL, plus the external terminal button
+            mode.hide()
         self.inp.grab_focus()
         self._drain_id = GLib.timeout_add(50, self._drain)
 
@@ -104,7 +110,7 @@ class ConsoleWindow(Gtk.Window):
             self._set_mode(self.emu_radio)
             info(self, "Terminal", str(e))
             return
-        for w in (self.activity, self.run_btn, self.stop_btn):
+        for w in (self.activity, self.run_btn, self.stop_btn, self.ext_btn):
             w.set_sensitive(False)
         self.app.set_device_paused(True, self.conn)
         self.set_title(self.base_title + " - terminal (real REPL)")
@@ -116,7 +122,7 @@ class ConsoleWindow(Gtk.Window):
         self.box.remove(self.term)
         self.term = None
         self.emu.show()
-        for w in (self.activity, self.run_btn, self.stop_btn):
+        for w in (self.activity, self.run_btn, self.stop_btn, self.ext_btn):
             w.set_sensitive(True)
         self.app.set_device_paused(False, self.conn)
         self.set_title(self.base_title)

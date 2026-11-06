@@ -46,6 +46,10 @@ board over USB serial. **Nothing is installed on the board** in normal use: it w
   automatically), Ctrl+C/D/E/B, `_` and `input()`. Copy and paste with Ctrl+Shift+C / Ctrl+Shift+V. While the
   terminal is active the device pane is paused (the serial line has one user at a time); switch back and your
   variables are still there.
+  **Open in external terminal...** (in the console and the Device menu) gives the port to another program instead:
+  miniterm by default, or PuTTY, Tera Term, picocom or your own command (Preferences > Terminal). mpexplorer disconnects
+  while it is open and reconnects when it closes, even if the board comes back on another port. On a system without
+  VTE (Windows) this is the console's only terminal, and the Mode buttons are not shown.
 - **Folder sync** (Tools > Sync folders): compares by size and SHA-256 (computed on the
   device, so nothing is transferred to check), shows a preview, copies only what changed, optional mirror-delete.
   `__pycache__`, `.git`, `*.pyc` are skipped. Files are written under a temporary name so a cancel never loses

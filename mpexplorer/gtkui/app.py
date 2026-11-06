@@ -13,7 +13,7 @@ from ..clipboard import Clipboard, copied_dir
 from ..connection import Connection
 from ..errors import BackendError, Cancelled
 from ..jobs import JobRunner
-from .. import circuitpython, paths
+from .. import circuitpython, extterm, paths
 from ..badgescreen import BadgeScreen
 from ..openwith import (SYSTEM_OPEN, EditManager, app_template, handler_for, looks_executable, parse_handler,
                         remember_handler)
@@ -158,6 +158,7 @@ class App(Gtk.Window):
         add(v, "Refresh    F5", lambda: [p.refresh() for p in self.panes])
         d = menu("Device")
         add(d, "REPL console...", self.open_console)
+        add(d, "Open in external terminal...", self.open_external_terminal)
         add(d, "Run selected script", self.run_script)
         add(d, "Free space", self.free_space)
         add(d, "Board memory...", self.board_memory)
@@ -1073,6 +1074,68 @@ class App(Gtk.Window):
             conn.console.present()
         else:
             conn.console = ConsoleWindow(self, conn)
+
+    # -- the board's real REPL in another program (docs/WINDOWS_PLAN.md section 3) -------------
+    def open_external_terminal(self, conn=None):
+        """Disconnect, start the external terminal on the board's port, and reconnect when it closes."""
+        conn = conn or self.conn
+        pane = self._pane_of(conn) if conn else None
+        if not pane:
+            info(self, "Not connected", "Connect to a board first.")
+            return
+        if self.runner.busy:
+            info(self, "Busy", "Wait for the running file operation to finish first.")
+            return
+        ext = extterm.ExternalTerminal(conn.port, conn.usb or conn.port, self.settings.get("terminal.external_command"),
+                                       title="mpexplorer - %s" % (conn.label or conn.port))
+        try:
+            ext.check()
+        except (extterm.TerminalError, ValueError) as e:
+            error(self, "Cannot open the terminal", str(e))         # still connected: nothing was closed
+            return
+        again = {"auto": "reconnects when it closes", "ask": "asks whether to reconnect when it closes",
+                 "never": "stays disconnected afterwards"}[self.settings.get("terminal.reconnect")]
+        if not ask_yes_no(self, "Open in external terminal",
+                          "mpexplorer will disconnect from %s while %s has the port, and %s." % (
+                              conn.port, os.path.basename(ext.argv[0]), again)):
+            return
+
+        def started(_res, exc):
+            if exc:
+                self.set_status("The terminal did not start")
+                error(self, "Cannot open the terminal", str(exc))
+                return
+            self.set_status("Terminal open on %s: close it to come back here" % ext.port)
+            GLib.timeout_add(500, self._watch_terminal, ext, pane)
+        # queued after the disconnect's own close job, so the port is free before the program opens it
+        self.disconnect(pane, after=lambda: self.runner.submit(lambda prog: ext.start(), started,
+                                                               "Starting the terminal", quiet=True))
+
+    def _watch_terminal(self, ext, pane):
+        if pane in self.conns:                  # connected again by hand meanwhile: nothing left to do
+            return False
+        if ext.running():
+            return True
+        port = ext.board_port()
+        if port is None:
+            if ext.gave_up():
+                self.set_status("The terminal closed; the board did not come back")
+                error(self, "Board not found", "The terminal closed, but the board has not come back on any port. "
+                      "Plug it in again and press Connect.")
+                return False
+            self.set_status("The terminal closed: waiting for the board to come back ...")
+            return True
+        mode = self.settings.get("terminal.reconnect")
+        code = "" if not ext.exit_code else " (it ended with code %s)" % ext.exit_code
+        if mode == "never" or (mode == "ask" and not ask_yes_no(
+                self, "Terminal closed", "The terminal has closed%s. Reconnect to %s?" % (code, port))):
+            self.set_status("Terminal closed%s" % code)
+            return False
+        self.scan_ports()
+        text = next((t for t in self._ports if device_of(t) == port), port)
+        pane.fill_sources(self._ports, text, self._kinds)
+        self.connect_device(pane)
+        return False
 
     def sync_folders(self):
         src = self.active
