@@ -13,8 +13,12 @@ Status (2026-11-06): **planned, not started.** Nothing here has been tried on Wi
   available as settings).
 - **Windows 10 and 11 only.** (MSYS2's UCRT64 toolchain needs Windows 10 or later anyway.)
 - **First release: a portable zip**, no installer yet (see "Portable build" below).
-- **Code signing: yes.** The owner has to supply a certificate or a signing service; until then builds are unsigned and the README
-  says what SmartScreen will show. The executables in the zip are what get signed.
+- **Code signing: yes, but it waits for the certificate** (owner, 2026-11-06). Nothing is built or wired for signing until the owner
+  has one. Until then builds are unsigned and the README says what SmartScreen will show. The executables in the zip are what get signed.
+- **`portable.txt` mode: yes.** If a file named `portable.txt` sits next to the exe, settings and caches live in a `data` folder beside
+  it instead of `%APPDATA%` / `%LOCALAPPDATA%`.
+- **Tests run on the owner's Windows PC** (offered 2026-11-06), connected to this session through Remote Control; real boards for the
+  hardware table are plugged into that PC.
 
 ## 1. What stops the program running on Windows today
 Portable already: serial through pyserial (`COMn`, vendor/product ids), raw REPL, copy/sync logic, settings JSON, board paths
@@ -49,9 +53,11 @@ Route: **MSYS2 UCRT64 + PyInstaller** (package names *unverified*: `mingw-w64-uc
 
 ### Portable build
 - Unzip anywhere and run `mpexplorer.exe`; nothing is written outside the folder except the user's settings and cache.
-- Settings and caches go to `%APPDATA%\mpexplorer` / `%LOCALAPPDATA%\mpexplorer` as for any program. *Proposed:* if a file named
-  `portable.txt` sits next to the exe, keep settings and caches in a `data` folder beside it instead (the way Tera Term's
-  `portable.ini` works), so the whole thing can live on a USB stick.
+- Settings and caches go to `%APPDATA%\mpexplorer` / `%LOCALAPPDATA%\mpexplorer` as for any program. **If a file named `portable.txt`
+  sits next to the exe, they are kept in a `data` folder beside it instead** (the way Tera Term's `portable.ini` works), so the whole
+  thing can live on a USB stick. `MPEXPLORER_CONFIG` still overrides the settings file in both cases. The same helper that picks the
+  config and cache folders (step 1) decides this, and has tests for: no marker, marker present, marker present but the folder is
+  read-only (fall back to `%APPDATA%` and say so once).
 - The exe needs no Python or GTK installed; the board drivers are Windows' own (Windows 10 and 11 include a USB serial driver
   for the CDC boards; the UF2 bootloader appears as a normal drive).
 - Rejected for now: **Tk** (removed on 2026-10-30; the app has grown far past what the old code did), **Qt/PySide6** (easiest
@@ -132,6 +138,5 @@ is a console program, not a widget, so it cannot be embedded either. Hence:
 Rough effort (an estimate, not a measurement): 1 about 1-2 days, 2 half a day, 3 1-2 days, 4 1-3 days, 5 1-2 days without an installer.
 
 ## Still open
-- The code-signing certificate or service (the owner), and whether signing runs in CI (needs a secret) or by hand on the release.
+- The code-signing certificate or service (the owner; we wait for it), and whether signing then runs in CI (needs a secret) or by hand.
 - The hardware test table above, and what the PuTTY and Tera Term line states at open actually are (not in their manuals).
-- Whether `portable.txt` mode (proposed above) is wanted.

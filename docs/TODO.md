@@ -122,13 +122,13 @@ label if one is missing on another theme.
 
 ## 2h. Windows build and the external terminal (plan: `docs/WINDOWS_PLAN.md`)
 Decided (owner, 2026-11-06): on Windows the console is the emulated REPL plus an "Open in external terminal..." button (no Mode radios);
-GTK 3 via MSYS2; reconnect automatically after the external terminal closes; Windows 10 and 11 only; first release a portable zip; sign the build.
+GTK 3 via MSYS2; reconnect automatically after the external terminal closes; Windows 10 and 11 only; first release a portable zip; sign the build (waits for the owner's certificate); `portable.txt` next to the exe keeps settings in a `data` folder.
 - [ ] Portability fixes in the core (disk space, drive roots, config/cache folders, drive letters for CIRCUITPY/UF2, Open with, Windows file names).
 - [ ] Windows CI job (`windows-latest`) running the portable tests.
 - [ ] External terminal: `extterm.py`, the button (all platforms), Preferences (`terminal.external_command`, `terminal.reconnect`); miniterm default.
 - [ ] MSYS2 + PyInstaller packaging spike as a CI artifact; terminal fallback is the external button.
 - [ ] Hardware tests on a Windows PC: miniterm / PuTTY / Tera Term against a Tildagon, a Pico and a CircuitPython Pico (does opening the port reset the board?).
-- [ ] Portable zip as a CI artifact and release asset, README Windows section; signing once the owner has a certificate or service; installer later.
+- [ ] Portable zip as a CI artifact and release asset, README Windows section; `portable.txt` mode; signing only once the owner has a certificate (waiting); installer later.
 
 ## 3. Release and housekeeping
 - [x] Release prep (2026-11-04, branch `release-0.1.0-prep`): CHANGELOG, package metadata, `--version`, release workflow checks the tag against the version and runs lint, tests and `twine check`; the stray flash backup `Backups/unicorn.md` removed from the tree and `Backups/`, `*.uf2`, `*.bin` ignored.
