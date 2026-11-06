@@ -1699,6 +1699,17 @@ def test_sync_can_run_between_two_boards(make_app, tmp_path):
 
 
 # -- Open in external terminal (docs/WINDOWS_PLAN.md section 3) ---------------------------------
+def idle(app, monkeypatch):
+    """Let the connect's own jobs (the badge screen) finish, and record any message box instead of showing it."""
+    said = []
+    monkeypatch.setattr("mpexplorer.gtkui.app.info", lambda parent, title, text: said.append(title))
+    for _ in range(100):
+        pump(20)
+        if not app.runner.busy:
+            break
+    return said
+
+
 def test_the_console_offers_the_external_terminal_and_hides_the_mode_row_without_vte(make_app, tmp_path):
     from mpexplorer.gtkui import terminal
     app = make_app()
@@ -1714,6 +1725,7 @@ def test_external_terminal_disconnects_runs_the_program_and_reconnects(make_app,
     app = make_app()
     app.connected(DeviceBackend(RawREPL(FakeSerial())), str(tmp_path), "/dev/ttyACM0", "chip:01",
                   usb="2e8a:0005:abc")
+    told = idle(app, monkeypatch)
     proc = types.SimpleNamespace(code=None)
     proc.poll = lambda: proc.code
     launched, reconnects, found = [], [], ["/dev/ttyACM2"]       # it comes back on another port
@@ -1738,6 +1750,7 @@ def test_external_terminal_disconnects_runs_the_program_and_reconnects(make_app,
     proc.code = 0
     pump(1200)
     assert reconnects and reconnects[0][0] is app.right and reconnects[0][1].startswith("/dev/ttyACM2")
+    assert told == []
 
 
 def test_external_terminal_with_a_missing_program_stays_connected(make_app, tmp_path, monkeypatch):
@@ -1745,6 +1758,7 @@ def test_external_terminal_with_a_missing_program_stays_connected(make_app, tmp_
     app = make_app()
     app.connected(DeviceBackend(RawREPL(FakeSerial())), str(tmp_path), "/dev/ttyACM0", "chip:01",
                   usb="2e8a:0005:abc")
+    idle(app, monkeypatch)
     app.settings.set("terminal.external_command", "no-such-terminal {port}")
     real, said = extterm.ExternalTerminal, []
     monkeypatch.setattr(extterm, "ExternalTerminal", lambda *a, **kw: real(*a, which=lambda n: None, **kw))
