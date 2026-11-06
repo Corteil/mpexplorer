@@ -126,7 +126,7 @@ GTK 3 via MSYS2; reconnect automatically after the external terminal closes; Win
 - [ ] Portability fixes in the core. Done on `windows-portability` (2026-11-06): config/cache folders + `portable.txt`, disk space, drive roots,
       Windows file names refused with a reason, four Windows bugs (see the plan's Progress). Left: drives view, hidden attribute, drive letters for
       CIRCUITPY/UF2, Open with (`os.startfile`), case-clash/long-path check before a copy, CRLF warning.
-- [ ] Windows CI job (`windows-latest`) running the portable tests.
+- [x] Windows CI job (`windows-latest`, Python 3.11 and 3.13) running the portable tests (2026-11-06).
 - [ ] External terminal: `extterm.py`, the button (all platforms), Preferences (`terminal.external_command`, `terminal.reconnect`); miniterm default.
 - [ ] MSYS2 + PyInstaller packaging spike as a CI artifact; terminal fallback is the external button.
 - [ ] Hardware tests on a Windows PC: miniterm / PuTTY / Tera Term against a Tildagon, a Pico and a CircuitPython Pico (does opening the port reset the board?).

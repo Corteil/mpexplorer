@@ -15,7 +15,9 @@ Status (2026-11-06): **step 1 started** on branch `windows-portability` (see "Pr
   `os.statvfs` shims where the host has none.
 - Not done in step 1: a drives view in the host pane (the helper exists, the pane does not use it), the Windows hidden attribute,
   CIRCUITPY / UF2 drive discovery by drive letter, Open with (`os.startfile`), checking a whole copy for case clashes and long paths
-  before it starts, the CRLF warning. Section 1 comes from reading the code on
+  before it starts, the CRLF warning.
+- Step 2 done (2026-11-06): CI job `windows` on `windows-latest`, Python 3.11 and 3.13, ruff + the suite with `-rs` so every skip and its
+  reason is in the log. No GUI tests there (no PyGObject) until the packaging step brings MSYS2. Section 1 comes from reading the code on
 `main` (`02e9bc7`, v0.1.1); sections 2 to 4 also use the PuTTY and Tera Term manuals, quoted where it matters. Anything marked
 *unverified* is from memory and must be checked on a real Windows machine before it is relied on.
 

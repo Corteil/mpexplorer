@@ -21,6 +21,24 @@ jobs:
       - run: ruff check .
       - run: pytest -q
 
+  # The portable tests on Windows (docs/WINDOWS_PLAN.md step 2). The pty / real-MicroPython tests, the Linux launcher
+  # and the GUI tests (no PyGObject here) skip themselves; -rs lists every skip with its reason in the log.
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python }}
+      - run: pip install -e '.[dev]'
+      - run: ruff check .
+      - run: pytest -q -rs --timeout=60 -o faulthandler_timeout=60
+
   # The same behaviours against real MicroPython (unix port) instead of the fake board.
   micropython:
     runs-on: ubuntu-latest
