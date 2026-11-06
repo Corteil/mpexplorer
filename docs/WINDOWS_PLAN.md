@@ -58,7 +58,8 @@ Status (2026-11-06): **steps 1 to 4 done in code and tests**, and the Windows bu
   terminal crashed.** Cause, reproduced by script: `extterm.launch` redirected stdin, and on Windows redirecting one stream makes the child
   take the other two from the parent; the windowed `mpexplorer.exe` has none, so miniterm exited with code 1 on its first write. Fixed:
   nothing is redirected when the program gets its own console, and the bundled miniterm keeps its window open after an error. Checked by
-  script on the real Tildagon from a parent with no std handles (miniterm stayed up and answered `print(3*7)`); **not yet re-tried by hand**.
+  script on the real Tildagon from a parent with no std handles (miniterm stayed up and answered `print(3*7)`), then **confirmed by the
+  owner by hand with the fixed CI build (2026-11-06): the external terminal works and reconnects** (Tildagon, COM8, miniterm).
 
 Where this plan came from: section 1 from reading the code on `main` (`02e9bc7`, v0.1.1); sections 2 to 4 also use the PuTTY and Tera Term
 manuals, quoted where it matters. Anything marked *unverified* is from memory and must be checked on a real Windows machine before it is relied on.
