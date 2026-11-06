@@ -1,12 +1,59 @@
 # Handoff / project memory
 
-Written so a new Claude session can take over with no other context. Update it as you work. Last updated 2026-11-01, at
-`main` = `7555f6e` plus this docs update; CI green (Python 3.11/3.12/3.13, real MicroPython
-v1.26.0 and v1.28.0, and the `gui` job: GTK windows under xvfb). Older sections below are history and may be out of date.
+Written so a new Claude session can take over with no other context. Update it as you work. Last updated 2026-11-06, at
+`main` = `a23ba2f` plus this docs update; CI green (Linux 3.11/3.12/3.13, Windows 3.11/3.13, real MicroPython v1.26.0 and
+v1.28.0, the `gui` job running every `tests/test_gui_*.py` under xvfb) and the Windows build green. Older sections below are
+history and may be out of date.
 
-## Windows build (planned 2026-11-06)
-Plan: `docs/WINDOWS_PLAN.md` (what blocks Windows today, GTK 3 on MSYS2, one REPL plus an external-terminal button, PuTTY / Tera Term / miniterm
-launch commands from their manuals, the hardware tests needed). Step 1 started 2026-11-06 on branch `windows-portability`, from a session on the owner's Windows PC (the suite passes there; see the plan's "Progress"). On Windows the venv is `python -m venv` + `pip install -e .[dev]`; edit files with the Edit tool rather than shell heredocs (backslashes were mangled twice). Decided by the owner on 2026-11-06: GTK 3, auto-reconnect after the external terminal, Windows 10/11 only, portable zip first with `portable.txt` mode, sign the build once the certificate arrives (we wait for it); Windows tests run on the owner's PC.
+## START HERE (2026-11-06): the Windows build, done from the owner's Windows 11 PC
+That day's session ran on the owner's **Windows PC** (not the Pi), in the clone at `D:\OneDrive\Documents\Code\EMF_Camp\mpexplorer`.
+Plan and full progress: `docs/WINDOWS_PLAN.md` ("Progress"). All of it is merged on `main`.
+
+**Done (steps 1-4 of the plan):**
+- Step 1, core portability: `paths.py` (settings in `%APPDATA%\mpexplorer`, caches in `%LOCALAPPDATA%\mpexplorer`, `portable.txt`
+  beside the exe keeps both in a `data` folder; `helper_executable()`), `winnames.py` (Windows names, case clashes, long paths, drive
+  letters, removable drives). Host pane: "This PC" drives view above `C:\` (`backends.DRIVES`), the hidden attribute, names Windows
+  refuses checked before a copy writes a folder. CIRCUITPY found by volume label and UF2 drives by `INFO_UF2.TXT` on removable drive
+  letters. Open with: `explorer.exe {file}` as the system default, Windows quoting for commands. CRLF note after an Open with upload.
+- Step 2: CI job `windows` (windows-latest, Python 3.11 and 3.13).
+- Step 3: the external terminal (`extterm.py`): Device > "Open in external terminal..." and a console button; miniterm by default
+  (DTR on, RTS off), PuTTY / Tera Term / picocom presets, Preferences > Terminal; disconnects, starts it after the close job, reconnects
+  when it closes (`terminal.reconnect` auto/ask/never), finding the board by USB id. The console's Mode row shows only where VTE exists.
+- Step 4: `.github/workflows/windows-build.yml` (MSYS2 UCRT64, GTK 3.24.52, Python 3.14, PyInstaller; spec in `packaging/windows/`).
+  Two programs in one folder: `mpexplorer.exe` (window) and `mpexplorer-console.exe` (`--self-test`, `--version`, and the helpers that
+  need stdout: `--miniterm`, `--esptool`; esptool 5.6.0 bundled). It runs the whole suite in MSYS2's Python **with the GUI tests, on
+  Windows** (724 passed), builds, runs the exe's self-test, and uploads the zip (58 MB, 124 MB unzipped) as artifact
+  `mpexplorer-windows` for 14 days. It runs on every push that changes `mpexplorer/`, `packaging/windows/`, the workflow or
+  `pyproject.toml`, and by hand from the Actions tab.
+
+**Verified by hand (owner, Windows 11, Tildagon on COM8):** the CI build runs; the external terminal (miniterm) works and the app
+reconnects when it closes (after one fix, below). Nothing else in the window has been itemised on Windows yet.
+
+**Bugs that only Windows showed (all fixed):** esptool's output read with `select()` on a pipe; `fsync` on a read-only handle (CIRCUITPY
+copy); `libraries._mkdirs` splitting host paths on `/`; the upload-mode probe timing with `time.monotonic()` (15 ms ticks there; now
+`perf_counter`); MSYS2's Python using `/` as `os.sep` while `MSYSTEM` is set (drive roots, long paths); **miniterm crashing at once
+from the windowed exe** because `extterm.launch` redirected stdin, so Windows gave it the parent's missing stdout/stderr (now nothing is
+redirected when the program has its own console, and the bundled miniterm keeps its window open after an error).
+
+**Next (step 5 and loose ends):**
+1. The hardware table in `docs/WINDOWS_PLAN.md` section 3: miniterm / PuTTY / Tera Term against a Tildagon, a Pico and a CircuitPython Pico
+   on the Windows PC (does opening the port reset the board? REPL keys? reconnect after a port rename?). Then fill `docs/HARDWARE.md`.
+2. A hand pass over the window on Windows: drives view, hidden files, transfers, editor, Open with, firmware tools (UF2 drive, esptool),
+   high-DPI look. None of it has been looked at there beyond the terminal.
+3. Attach the zip to releases (`release.yml` builds only the wheel), the README Windows section is in place.
+4. Signing waits for the owner's certificate (decided). Installer later.
+5. Earlier open items still stand: the Pi hand checks in `docs/TODO.md`, round 6 of `docs/HAND_CHECKS.md`.
+
+**Working on the Windows PC (lessons):**
+- Shells: Git Bash and PowerShell. No MSYS2 or GTK locally, so the GUI tests only run in CI (Linux `gui` job, and the Windows build job).
+  Scratch venv: `python -m venv <scratch>/mpv` then `<scratch>/mpv/Scripts/pip install -e .[dev]`; run the suite to a log file.
+- **Bash heredocs and `sed` mangle backslashes here** (seen five times: `\n` became a newline, `\\` was halved). Write Python, regexes
+  and Windows paths with the Write / Edit tools.
+- To test the windowed exe's behaviour, start the parent **detached with no std handles** (`DETACHED_PROCESS`); a parent started from
+  the shell inherits its handles and hides bugs like the miniterm crash. `typekeys.py`-style `WriteConsoleInputW` can type into another
+  program's console window.
+- Check a board's port is free before a script opens it (open and close it with pyserial, or `tasklist` for a running mpexplorer).
+- `workflow_dispatch` works on a branch once the workflow has run there; `gh run view --log` works with gh here.
 
 ## CircuitPython and libraries (2026-11-01, later session on the Pi)
 Plan and what was seen on real boards: `docs/CIRCUITPYTHON_PLAN.md`. Hand checks done by the owner 2026-11-01 (`docs/HAND_CHECKS.md`, with the three problems they found, all fixed). All of it is on `main` (CI green at
