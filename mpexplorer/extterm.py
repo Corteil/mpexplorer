@@ -93,10 +93,15 @@ def command_for(template, port, baud=BAUD, title="", platform=None, which=shutil
 
 
 def launch(argv, new_console=False, popen=subprocess.Popen):
-    """Start the program, without a shell. A missing program is a TerminalError that names it."""
-    kwargs = {"stdin": subprocess.DEVNULL}
+    """Start the program, without a shell. A missing program is a TerminalError that names it.
+
+    With a console of its own nothing is redirected: on Windows, redirecting any one stream makes the child take the
+    other two from the parent, and the windowed mpexplorer.exe has none, so miniterm died at once (exit code 1) when it
+    first wrote. Seen with the Windows build on 2026-11-06, reproduced from a parent started without std handles."""
     if new_console:
-        kwargs["creationflags"] = getattr(subprocess, "CREATE_NEW_CONSOLE", 0)
+        kwargs = {"creationflags": getattr(subprocess, "CREATE_NEW_CONSOLE", 0)}
+    else:
+        kwargs = {"stdin": subprocess.DEVNULL}
     try:
         return popen(argv, **kwargs)
     except FileNotFoundError:

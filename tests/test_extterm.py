@@ -74,6 +74,11 @@ def test_launch_never_uses_a_shell_and_names_a_missing_program():
         return P(poll=lambda: None)
     extterm.launch(["putty", "-serial", "COM1"], True, popen=fake_popen)
     assert seen["argv"] == ["putty", "-serial", "COM1"] and "shell" not in seen
+    # its own console: nothing redirected, or Windows hands it the windowed parent's missing stdout and it dies
+    assert "stdin" not in seen and "stdout" not in seen and "stderr" not in seen
+    seen.clear()
+    extterm.launch(["x-terminal-emulator", "-e", "miniterm"], False, popen=fake_popen)
+    assert seen["stdin"] == subprocess.DEVNULL and "creationflags" not in seen
 
     def missing(argv, **kw):
         raise FileNotFoundError(argv[0])
@@ -170,6 +175,26 @@ def test_miniterm_option_starts_pyserials_miniterm(monkeypatch):
     monkeypatch.setattr(sys, "argv", ["mpexplorer", "--miniterm", "--dtr", "1", "COM5", "115200"])
     entry.main()
     assert called == [["miniterm", "--dtr", "1", "COM5", "115200"]]
+
+
+def test_miniterm_failing_keeps_its_exit_code(monkeypatch):
+    import sys
+
+    from mpexplorer import __main__ as entry
+    from serial.tools import miniterm
+
+    def fails():
+        sys.stderr.write("could not open port 'COM99'\n")
+        sys.exit(1)
+    monkeypatch.setattr(miniterm, "main", fails)
+    monkeypatch.setattr(sys, "argv", ["mpexplorer", "--miniterm", "COM99"])
+    monkeypatch.setattr(sys, "stdin", None)                     # no console to wait on: it must not block
+    with pytest.raises(SystemExit) as stop:
+        entry.main()
+    assert stop.value.code == 1
+    monkeypatch.setattr(miniterm, "main", lambda: None)
+    monkeypatch.setattr(sys, "argv", ["mpexplorer", "--miniterm", "COM99"])
+    entry.main()                                                # a normal quit (Ctrl+]) is not an error
 
 
 @pytest.mark.timeout(30)

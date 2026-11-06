@@ -54,6 +54,11 @@ Status (2026-11-06): **steps 1 to 4 done in code and tests**, and the Windows bu
   - Not done: the window has **not been looked at on Windows** (no screenshot, no hand use), no high-DPI check, no board on a Windows
     PC, unsigned (SmartScreen warns; README says what to click), not attached to releases yet, no installer. Python 3.14 in MSYS2 is
     newer than the 3.11-3.13 the package is tested on elsewhere.
+- First hand test (owner, 2026-11-06, the CI build on their Windows PC with a Tildagon on COM8): **auto-reconnect worked; the external
+  terminal crashed.** Cause, reproduced by script: `extterm.launch` redirected stdin, and on Windows redirecting one stream makes the child
+  take the other two from the parent; the windowed `mpexplorer.exe` has none, so miniterm exited with code 1 on its first write. Fixed:
+  nothing is redirected when the program gets its own console, and the bundled miniterm keeps its window open after an error. Checked by
+  script on the real Tildagon from a parent with no std handles (miniterm stayed up and answered `print(3*7)`); **not yet re-tried by hand**.
 
 Where this plan came from: section 1 from reading the code on `main` (`02e9bc7`, v0.1.1); sections 2 to 4 also use the PuTTY and Tera Term
 manuals, quoted where it matters. Anything marked *unverified* is from memory and must be checked on a real Windows machine before it is relied on.

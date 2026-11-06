@@ -10,7 +10,16 @@ def main():
     if sys.argv[1:2] == ["--miniterm"]:     # the frozen build's own miniterm, for "Open in external terminal"
         from serial.tools import miniterm
         sys.argv = ["miniterm"] + sys.argv[2:]
-        miniterm.main()
+        try:
+            miniterm.main()
+        except (Exception, SystemExit) as e:   # keep the window open so the reason (port busy, ...) can be read
+            if isinstance(e, SystemExit) and not e.code:
+                return
+            if not isinstance(e, SystemExit):
+                print("\nminiterm stopped: %s: %s" % (type(e).__name__, e))
+            if sys.stdin and sys.stdin.isatty():
+                input("\nPress Enter to close this window.")
+            raise SystemExit(e.code if isinstance(e, SystemExit) else 1)
         return
     if sys.argv[1:2] == ["--esptool"]:      # the frozen build's bundled esptool, for the firmware tools
         import esptool
