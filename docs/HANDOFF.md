@@ -4,6 +4,10 @@ Written so a new Claude session can take over with no other context. Update it a
 `main` = `7555f6e` plus this docs update; CI green (Python 3.11/3.12/3.13, real MicroPython
 v1.26.0 and v1.28.0, and the `gui` job: GTK windows under xvfb). Older sections below are history and may be out of date.
 
+## Windows build (planned 2026-11-06)
+Plan: `docs/WINDOWS_PLAN.md` (what blocks Windows today, GTK 3 on MSYS2, one REPL plus an external-terminal button, PuTTY / Tera Term / miniterm
+launch commands from their manuals, the hardware tests needed). Not started; the owner has not confirmed GTK 3 vs GTK 4 or the reconnect default.
+
 ## CircuitPython and libraries (2026-11-01, later session on the Pi)
 Plan and what was seen on real boards: `docs/CIRCUITPYTHON_PLAN.md`. Hand checks done by the owner 2026-11-01 (`docs/HAND_CHECKS.md`, with the three problems they found, all fixed). All of it is on `main` (CI green at
 `6b7d5fd`; `ac9ca59` added the firmware choice). New modules: `libraries.py` (micropython-lib: fetch on the host, upload to `/lib`; install/remove/skip-identical),

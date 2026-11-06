@@ -120,6 +120,15 @@ label if one is missing on another theme.
 - [ ] A CircuitPython mode.
 - [ ] Download and install libraries on the boards, for both CircuitPython and MicroPython. (Plan written 2026-11-01; owner decisions recorded in it.)
 
+## 2h. Windows build and the external terminal (plan: `docs/WINDOWS_PLAN.md`)
+Decided: on Windows the console is the emulated REPL plus an "Open in external terminal..." button (no Mode radios). Proposed: GTK 3 via MSYS2.
+- [ ] Portability fixes in the core (disk space, drive roots, config/cache folders, drive letters for CIRCUITPY/UF2, Open with, Windows file names).
+- [ ] Windows CI job (`windows-latest`) running the portable tests.
+- [ ] External terminal: `extterm.py`, the button (all platforms), Preferences (`terminal.external_command`, `terminal.reconnect`); miniterm default.
+- [ ] MSYS2 + PyInstaller packaging spike as a CI artifact; terminal fallback is the external button.
+- [ ] Hardware tests on a Windows PC: miniterm / PuTTY / Tera Term against a Tildagon, a Pico and a CircuitPython Pico (does opening the port reset the board?).
+- [ ] Installer, signing decision, README Windows section.
+
 ## 3. Release and housekeeping
 - [x] Release prep (2026-11-04, branch `release-0.1.0-prep`): CHANGELOG, package metadata, `--version`, release workflow checks the tag against the version and runs lint, tests and `twine check`; the stray flash backup `Backups/unicorn.md` removed from the tree and `Backups/`, `*.uf2`, `*.bin` ignored.
 - [ ] Merge that branch (owner says so), then tag `v0.1.0` to exercise `release.yml` and check the GitHub release. 
