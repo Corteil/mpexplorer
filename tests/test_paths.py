@@ -126,11 +126,11 @@ def test_local_backend_free_space_and_parent(tmp_path):
 
 def test_local_backend_refuses_windows_names_only_on_windows(tmp_path, monkeypatch):
     be = LocalBackend()
-    monkeypatch.setattr("mpexplorer.winnames.is_windows", lambda platform=None: True)
+    be.windows = True
     with pytest.raises(BackendError, match="reserved"):
         be.mkdir(str(tmp_path / "NUL"))
     with pytest.raises(BackendError, match="not allow"):
         be.open_write(str(tmp_path / "a."))
     be.mkdir(str(tmp_path / "fine"))
-    monkeypatch.setattr("mpexplorer.winnames.is_windows", lambda platform=None: False)
+    be.windows = False
     be.open_write(str(tmp_path / "ok.txt")).close()

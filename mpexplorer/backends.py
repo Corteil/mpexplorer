@@ -2,6 +2,7 @@
 import binascii
 import hashlib
 import json
+import ntpath
 import os
 import posixpath
 import shutil
@@ -49,7 +50,7 @@ class LocalBackend:
         r"""The folder above p. On Windows the parent of a drive root (C:\) is the list of drives, DRIVES."""
         if self.windows and p == DRIVES:
             return DRIVES
-        up = winnames.parent_path(p)
+        up = winnames.parent_path(p, ntpath if self.windows else None)
         return DRIVES if self.windows and up == p else up
 
     def _long(self, p):
