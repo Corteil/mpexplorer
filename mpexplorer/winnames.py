@@ -51,7 +51,7 @@ def long_path(path):
     260 character limit. Short paths are returned as they are."""
     if path.startswith(LONG_PREFIX) or len(path) < MAX_PATH - 12:
         return path
-    full = ntpath.abspath(path)
+    full = ntpath.abspath(path).replace("/", "\\")     # the prefix turns off / as a separator
     if full.startswith("\\\\"):
         return LONG_PREFIX + "UNC\\" + full[2:]
     return LONG_PREFIX + full
@@ -63,8 +63,8 @@ def parent_path(p, pathmod=None):
     pm = pathmod or os.path
     drive, rest = pm.splitdrive(p)
     stripped = rest.rstrip(pm.sep + (pm.altsep or ""))
-    if not stripped:
-        return drive + pm.sep
+    if not stripped:                # a root is its own parent, spelt as it came (MSYS2's Python uses / as its sep)
+        return p if rest else drive + pm.sep
     return pm.dirname(drive + stripped) or drive + pm.sep
 
 

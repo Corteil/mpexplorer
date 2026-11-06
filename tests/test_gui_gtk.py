@@ -101,6 +101,7 @@ def test_missing_host_folder_falls_back_to_home(make_app, tmp_path):
     assert app.left.cwd == app.local.root
 
 
+@pytest.mark.skipif(os.name == "nt", reason="the window size there depends on the screen and the frame")
 def test_remember_switches_turn_restoring_off(make_app, tmp_path):
     (tmp_path / "w").mkdir()
     app = make_app(folders__host=str(tmp_path / "w"), general__remember_folders=False, window__width=900,
@@ -108,6 +109,7 @@ def test_remember_switches_turn_restoring_off(make_app, tmp_path):
     assert app.left.cwd == app.local.root and tuple(app.get_size()) == (width_for(app, 1180), 680)
 
 
+@pytest.mark.skipif(os.name == "nt", reason="the window size there depends on the screen and the frame")
 def test_changes_are_saved_when_the_window_closes(make_app, cfg, tmp_path):
     (tmp_path / "proj").mkdir()
     app = make_app()
@@ -939,6 +941,7 @@ def test_run_script_can_be_interrupted_by_cancel(make_app, monkeypatch):
     app.right.backend = None
 
 
+@pytest.mark.skipif(os.name == "nt", reason="the fake board's paths are host paths")
 def test_open_with_external_editor_uploads_saves_and_cleans_up(make_app, tmp_path, monkeypatch):
     dialogs = []
     monkeypatch.setattr("mpexplorer.gtkui.app.error", lambda parent, title, text: dialogs.append((title, text)))
@@ -1131,6 +1134,7 @@ def test_auto_upload_preference_starts_uploads_held(make_app):
     assert not app.edits.paused and not app.pause_btn.get_active() and app.pause_btn.get_label() == "Pause"
 
 
+@pytest.mark.skipif(os.name == "nt", reason="xdg-open and the executable bit are POSIX")
 def test_system_default_asks_first_for_executable_looking_files(make_app, tmp_path, monkeypatch):
     (tmp_path / "run.sh").write_text("echo hi\n")
     (tmp_path / "notes.txt").write_text("y\n")
