@@ -351,7 +351,8 @@ def read_esp_chip(port, tool=None):
 
 def _esptool_version(argv):
     try:
-        out = subprocess.run(argv + ["version"], capture_output=True, text=True, timeout=30).stdout
+        out = subprocess.run(argv + ["version"], capture_output=True, text=True, timeout=30,
+                             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)).stdout
     except (OSError, subprocess.SubprocessError):
         return None
     m = re.search(r"\bv?(\d+)\.\d+", out)
@@ -362,8 +363,9 @@ def find_esptool():
     """The command to run esptool: this Python's module, else a program (pipx puts it in ~/.local/bin, which a
     desktop launcher's PATH may leave out). Only one major version: its commands were renamed between 4 and 5."""
     candidates = []
-    if importlib.util.find_spec("esptool"):
-        candidates.append([sys.executable, "-m", "esptool"])
+    if importlib.util.find_spec("esptool"):         # a frozen build has no "-m": it runs its own copy (see __main__)
+        candidates.append([paths.helper_executable(), "--esptool"] if getattr(sys, "frozen", False) else
+                          [sys.executable, "-m", "esptool"])
     for program in (shutil.which("esptool"), os.path.expanduser("~/.local/bin/esptool")):
         if program and os.path.exists(program):
             candidates.append([program])
@@ -409,7 +411,8 @@ def _run_esptool(argv, on_progress, on_stage, cancelled, stall):
     log_path = esptool_log_path()
     os.makedirs(os.path.dirname(log_path), exist_ok=True)
     try:
-        proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,      # no console flashing up
+                                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     except OSError as e:
         raise FirmwareError("Cannot run esptool: %s" % e)
     lines, partial, last, shown = [], b"", time.monotonic(), None

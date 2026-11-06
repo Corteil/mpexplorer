@@ -1244,9 +1244,45 @@ class App(Gtk.Window):
         if self._popup and self._popup.job is watched:
             self._popup.update()
 
-def run():
+def run(self_test=False):
     GLib.set_prgname("mpexplorer")              # becomes the Wayland app_id: the taskbar finds mpexplorer.desktop
     GLib.set_application_name("MicroPython Explorer")
     Gtk.Window.set_default_icon_name("mpexplorer")
+    if self_test:
+        return _self_test()
     App()
     Gtk.main()
+
+
+def _self_test(seconds=2.0):
+    """`mpexplorer --self-test`: open the real window with settings in memory only, check what a packaged build can
+    lose (GTK's version, the PNG loader, the icon theme, a listing in the host pane), print one line per check and
+    quit. Exit code 0 when every check passed. Used by the Windows build in CI (docs/WINDOWS_PLAN.md step 4)."""
+    results = []
+
+    def check(name, fn):
+        try:
+            ok, detail = fn()
+        except Exception as e:          # noqa: BLE001 - a self-test reports everything
+            ok, detail = False, "%s: %s" % (type(e).__name__, e)
+        results.append(ok)
+        print("%s  %s: %s" % ("ok  " if ok else "FAIL", name, detail), flush=True)
+
+    check("gtk", lambda: (Gtk.get_major_version() == 3, "%d.%d.%d" % (
+        Gtk.get_major_version(), Gtk.get_minor_version(), Gtk.get_micro_version())))
+    check("png loader", lambda: (GdkPixbuf.Pixbuf.new_from_file(str(ICON)).get_width() > 0, str(ICON)))
+    theme = Gtk.IconTheme.get_default()
+    check("icon theme", lambda: (theme.has_icon("folder") and theme.has_icon("document-save"),
+                                 "folder and document-save found" if theme.has_icon("folder") else "icons missing"))
+    app = App(settings=Settings(None))
+
+    def finish():
+        check("window", lambda: (app.get_window() is not None and app.get_mapped(), "shown"))
+        check("host pane", lambda: (app.left.backend is app.local and len(app.left.store) >= 0,
+                                    "%s (%d rows)" % (app.left.cwd, len(app.left.store))))
+        app.destroy()                   # its destroy handler ends Gtk.main()
+        return False
+    GLib.timeout_add(int(seconds * 1000), finish)
+    Gtk.main()
+    print("self-test %s" % ("passed" if all(results) else "FAILED"), flush=True)
+    return 0 if all(results) else 1

@@ -10,7 +10,7 @@ try:
     import gi  # noqa: F401
 except ImportError:
     unavailable("PyGObject (python3-gi) is not installed")
-if not os.environ.get("DISPLAY") and not os.environ.get("WAYLAND_DISPLAY"):
+if os.name != "nt" and not os.environ.get("DISPLAY") and not os.environ.get("WAYLAND_DISPLAY"):
     unavailable("no display (run under xvfb-run)")
 try:
     from mpexplorer.gtkui import common, libraries as dialog

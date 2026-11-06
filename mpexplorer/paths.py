@@ -91,3 +91,15 @@ def settings_file(platform=None, env=None, home=None, exe_folder="default"):
     if explicit:
         return explicit
     return os.path.join(config_dir(platform, env, home, exe_folder), "settings.json")
+
+
+CONSOLE_EXE = "mpexplorer-console.exe"
+
+
+def helper_executable():
+    """What runs our own helpers (--miniterm, --esptool): this Python from source; in the frozen Windows build the
+    console twin beside the exe, because the windowed exe has no stdout and cannot own a console window."""
+    if not getattr(sys, "frozen", False):
+        return sys.executable
+    twin = os.path.join(exe_dir(), CONSOLE_EXE)
+    return twin if os.path.isfile(twin) else sys.executable

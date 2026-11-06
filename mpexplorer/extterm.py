@@ -52,7 +52,8 @@ def port_number(port):
 def miniterm_argv(port, baud=BAUD, frozen=None, executable=None):
     """pyserial's miniterm with DTR on and RTS off, as the Tildagon needs (DTR off corrupts long replies, RTS can reset
     an ESP32-S3). A frozen build has no separate Python: it runs itself with --miniterm (see __main__)."""
-    exe = executable or sys.executable
+    from .paths import helper_executable
+    exe = executable or helper_executable()
     frozen = getattr(sys, "frozen", False) if frozen is None else frozen
     head = [exe, "--miniterm"] if frozen else [exe, "-m", "serial.tools.miniterm"]
     return head + ["--dtr", "1", "--rts", "0", port, str(baud)]
