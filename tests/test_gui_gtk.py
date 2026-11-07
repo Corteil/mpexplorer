@@ -1791,8 +1791,13 @@ class _WindowsApp:
         return self.app_id
 
 
-def _windows_gio(monkeypatch, apps):
-    monkeypatch.setattr(common, "Gio", types.SimpleNamespace(AppInfo=types.SimpleNamespace(get_all=lambda: apps)))
+def _windows_gio(monkeypatch, apps, for_type=()):
+    """A Gio like Windows': no DesktopAppInfo; `for_type` apps are listed for .py files only (a Store Python)."""
+    info = types.SimpleNamespace(get_all=lambda: list(apps),
+                                 get_recommended_for_type=lambda ctype: list(for_type) if ctype == "py" else [],
+                                 get_all_for_type=lambda ctype: [])
+    guess = lambda name, data: ("py" if name.endswith(".py") else "other", False)       # noqa: E731
+    monkeypatch.setattr(common, "Gio", types.SimpleNamespace(AppInfo=info, content_type_guess=guess))
 
 
 def test_preferences_open_with_a_saved_windows_app(make_app, monkeypatch):
@@ -1816,3 +1821,31 @@ def test_opening_with_a_saved_windows_app_runs_its_command(make_app, tmp_path, m
     (tmp_path / "a.py").write_text("print(1)\n")
     app.open_with(app.left, str(tmp_path / "a.py"), 9, "app:" + py)
     assert launched == ["%s {file}" % py]          # no spaces in the path, so no quotes are needed
+
+
+def test_a_store_python_listed_only_for_its_file_type_is_found(make_app, tmp_path, monkeypatch):
+    py = r"C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12\python3.12.exe"
+    app = make_app(open_with__by_extension={".py": "app:" + py})
+    _windows_gio(monkeypatch, [], for_type=[_WindowsApp(py, "Python 3.12", '"%s" "%%1"' % py)])
+    monkeypatch.setattr("mpexplorer.gtkui.app.app_template", lambda line: openwith.app_template(line, "win32"))
+    launched = []
+    monkeypatch.setattr(app, "open_external", lambda pane, path, template: launched.append(template))
+    (tmp_path / "test_script.py").write_text("print(1)\n")
+    app.open_with(app.left, str(tmp_path / "test_script.py"), 9, "app:" + py)
+    assert launched == ['"%s" {file}' % py]
+    dlg = PreferencesDialog(app)
+    assert {row[0]: row[1] for row in dlg.types}[".py"] == "Python 3.12"
+    dlg.destroy()
+
+
+def test_an_unlisted_windows_program_path_is_run_directly(make_app, tmp_path, monkeypatch):
+    py = r"C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12\python3.12.exe"
+    app = make_app()
+    _windows_gio(monkeypatch, [])                                       # GTK lists it nowhere now
+    monkeypatch.setattr("mpexplorer.gtkui.app.app_template", lambda line: openwith.app_template(line, "win32"))
+    monkeypatch.setattr("mpexplorer.gtkui.app.program_path", lambda v: openwith.program_path(v, "win32"))
+    launched = []
+    monkeypatch.setattr(app, "open_external", lambda pane, path, template: launched.append(template))
+    (tmp_path / "a.py").write_text("print(1)\n")
+    app.open_with(app.left, str(tmp_path / "a.py"), 9, "app:" + py)
+    assert launched == ['"%s"' % py]                                    # expand_command appends the file

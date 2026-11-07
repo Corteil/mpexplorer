@@ -485,6 +485,13 @@ def test_app_template_for_windows_programs():
         openwith.app_template('"%1"', "win32")
 
 
+def test_program_path():
+    assert openwith.program_path(r"C:\Program Files\WindowsApps\Python\python3.12.exe", "win32")
+    assert openwith.program_path(r"D:\tools\run.BAT", "win32")
+    assert not openwith.program_path("org.geany.Geany.desktop", "win32")
+    assert not openwith.program_path(r"C:\Python312\python.exe", "linux")      # Linux ids are desktop files
+
+
 def test_app_template_turns_desktop_commands_into_templates():
     assert openwith.app_template("geany %F", "linux") == "geany {file}"
     assert openwith.app_template("gimp-2.10 %U", "linux") == "gimp-2.10 {file}"

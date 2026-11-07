@@ -99,6 +99,14 @@ def app_template(commandline, platform=None):
     return " ".join(shlex.quote(a) if a != "{file}" else a for a in out)
 
 
+def program_path(app_id, platform=None):
+    """True for a Windows app id that is a program's own path (C:\\...\\python3.12.exe): it can be run directly even
+    when GTK no longer lists the app. A Microsoft Store program's path cannot be stat'ed, so only the form is
+    checked."""
+    return ((platform or sys.platform).startswith("win")
+            and bool(re.fullmatch(r"[A-Za-z]:\\.+\.(exe|com|bat|cmd)", app_id or "", re.I)))
+
+
 def _windows_app_template(commandline):
     out, has_file = [], False
     # an unquoted program path with spaces (what get_executable() can give): everything up to its .exe is one word
