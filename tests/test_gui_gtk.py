@@ -1815,4 +1815,4 @@ def test_opening_with_a_saved_windows_app_runs_its_command(make_app, tmp_path, m
     monkeypatch.setattr(app, "open_external", lambda pane, path, template: launched.append(template))
     (tmp_path / "a.py").write_text("print(1)\n")
     app.open_with(app.left, str(tmp_path / "a.py"), 9, "app:" + py)
-    assert launched == ['"%s" {file}' % py]
+    assert launched == ["%s {file}" % py]          # no spaces in the path, so no quotes are needed
