@@ -132,6 +132,12 @@ GTK 3 via MSYS2; reconnect automatically after the external terminal closes; Win
 - [ ] Hardware tests on a Windows PC: miniterm / PuTTY / Tera Term against a Tildagon, a Pico and a CircuitPython Pico (does opening the port reset the board?).
 - [ ] Portable zip as a CI artifact and release asset, README Windows section; `portable.txt` mode; signing only once the owner has a certificate (waiting); installer later.
 
+## 2i. File selectors for local files (plan: `docs/FILE_CHOOSER_PLAN.md`, asked for by the owner 2026-11-07)
+- [ ] One chooser helper (`Gtk.FileChooserNative`: Explorer on Windows) with remembered folders; firmware and backup moved to it.
+- [ ] Open with / File types / Terminal: Browse... for the program (`openwith.program_template`).
+- [ ] Install libraries: Install from this computer... (files, folder or .zip, via `local_source.py`).
+- [ ] Hand check on Windows and the Pi.
+
 ## 3. Release and housekeeping
 - [x] Release prep (2026-11-04, branch `release-0.1.0-prep`): CHANGELOG, package metadata, `--version`, release workflow checks the tag against the version and runs lint, tests and `twine check`; the stray flash backup `Backups/unicorn.md` removed from the tree and `Backups/`, `*.uf2`, `*.bin` ignored.
 - [ ] Merge that branch (owner says so), then tag `v0.1.0` to exercise `release.yml` and check the GitHub release. 
