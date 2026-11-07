@@ -130,6 +130,11 @@ GTK 3 via MSYS2; reconnect automatically after the external terminal closes; Win
 - [ ] Try it by hand: miniterm on the Pi with a Pico, then on Windows; reconnect after a soft reset that moves the port.
 - [x] MSYS2 + PyInstaller packaging as a CI artifact (2026-11-06, workflow `windows-build.yml`; the built exe passes its self-test on the runner). Not looked at by hand yet.
 - [ ] Hardware tests on a Windows PC: miniterm / PuTTY / Tera Term against a Tildagon, a Pico and a CircuitPython Pico (does opening the port reset the board?).
+- [x] Preferences and Open with on Windows, by hand with the CI build (owner, 2026-11-07): Preferences opens; `boot.py` on the Tildagon
+      opens in Notepad++ (fixes: `find_app`, Windows app commands, no ':' in the cache folder).
+- [ ] Flaky GUI test: `tests/test_gui_gtk.py::test_closing_one_board_leaves_the_other` failed once in CI's `gui` job (2026-11-07, run
+      42421933955) with "unexpected folder error box ... Expecting value: line 1 column 1" left by `test_paste_between_two_connected...`;
+      passed on the re-run. Find the race (a JSON reply read while the other fake board was closing?).
 - [ ] Portable zip as a CI artifact and release asset, README Windows section; `portable.txt` mode; signing only once the owner has a certificate (waiting); installer later.
 
 ## 2i. File selectors for local files (plan: `docs/FILE_CHOOSER_PLAN.md`, asked for by the owner 2026-11-07)

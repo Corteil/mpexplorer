@@ -67,6 +67,14 @@ Status (2026-11-06): **steps 1 to 4 done in code and tests**, and the Windows bu
   name lookup no longer stops Preferences, and `openwith.app_template` reads Windows commands (`"C:\...\app.exe" "%1"`, an unquoted
   exe path with spaces). Tests: `test_app_template_for_windows_programs`, two GUI tests with a Windows-like Gio.
   Lesson: to see why the window does nothing, run `mpexplorer-console.exe` with stderr to a file.
+- Third and fourth finds (owner, 2026-11-07): opening a `.py` file with the saved Microsoft Store Python said "not installed any
+  more" (GTK lists that Python for the file type but not in `Gio.AppInfo.get_all()`; `find_app` now looks there first, and a saved
+  exe path is run as it is). Then opening `boot.py` **on the badge** did nothing: the local copy goes to `open/<board key>/...` and the
+  key is `chip:...`, but Windows refuses ':' in a folder name (WinError 267); the reason went only to the status line. Fixed: on
+  Windows the board folder has '_' for ':' (`openwith.cache_path`, `test_cache_path_on_windows_has_no_colon_in_the_board_folder`).
+  **Confirmed by the owner by hand with the CI build (2026-11-07): Preferences opens, and boot.py on the Tildagon opens in Notepad++
+  through Open with.** (Python as the program for `.py` runs the file, so a script that imports Pi or badge modules flashes a window
+  and exits; that is Python, not a fault.)
 
 Where this plan came from: section 1 from reading the code on `main` (`02e9bc7`, v0.1.1); sections 2 to 4 also use the PuTTY and Tera Term
 manuals, quoted where it matters. Anything marked *unverified* is from memory and must be checked on a real Windows machine before it is relied on.
