@@ -41,7 +41,11 @@ Status (2026-11-07): **plan only**, asked for by the owner after trying the Wind
 4. Hand check on Windows and on the Pi (the native dialog differs per desktop; the portal may be missing on the Pi, where GTK's dialog
    is the fallback).
 
+## Decided (owner, 2026-11-07)
+- **The same on Linux and Windows**: every Browse... button, the remembered folders and Install from this computer... go into the
+  shared GTK code, so the Pi gets them too. `Gtk.FileChooserNative` shows each system's own dialog (Explorer on Windows, the
+  desktop's on Linux, GTK's dialog where there is no portal, as on the Pi), and the tests cover both.
+
 ## Questions for the owner
-- Native Explorer dialog on Windows (proposed), or keep GTK's own dialog everywhere so both systems look the same?
 - Libraries: install straight from a file/folder without saving a source (proposed), or always save it as a source?
 - Anything else that should get a Browse... button (the host pane's path box, Sync's folders)?
