@@ -26,6 +26,7 @@ except (ImportError, ValueError) as e:                       # GTK 3 typelib mis
 
 import fakedisplay
 from fakedevice import FakeSerial
+from mpexplorer import openwith
 from mpexplorer.backends import DeviceBackend
 from mpexplorer.errors import Cancelled as common_cancelled
 from mpexplorer.settings import Settings, segment
@@ -1770,3 +1771,48 @@ def test_external_terminal_with_a_missing_program_stays_connected(make_app, tmp_
     app.open_external_terminal(app.conns[app.right])
     pump()
     assert said and "no-such-terminal was not found" in said[0] and app.right in app.conns
+
+
+# -- Windows: there is no Gio.DesktopAppInfo; apps are found by id in Gio.AppInfo.get_all() -----------------
+class _WindowsApp:
+    def __init__(self, app_id, name, commandline):
+        self.app_id, self.name, self.commandline = app_id, name, commandline
+
+    def get_id(self):
+        return self.app_id
+
+    def get_display_name(self):
+        return self.name
+
+    def get_commandline(self):
+        return self.commandline
+
+    def get_executable(self):
+        return self.app_id
+
+
+def _windows_gio(monkeypatch, apps):
+    monkeypatch.setattr(common, "Gio", types.SimpleNamespace(AppInfo=types.SimpleNamespace(get_all=lambda: apps)))
+
+
+def test_preferences_open_with_a_saved_windows_app(make_app, monkeypatch):
+    py = r"C:\Python312\python.exe"
+    app = make_app(open_with__by_extension={".py": "app:" + py, ".txt": r"app:C:\gone\gone.exe"})
+    _windows_gio(monkeypatch, [_WindowsApp(py, "Python 3.12", '"%s" "%%1"' % py)])
+    dlg = PreferencesDialog(app)            # it used to raise AttributeError (no DesktopAppInfo) and never appear
+    pump()
+    rows = {row[0]: row[1] for row in dlg.types}
+    assert "Python 3.12" in rows[".py"] and "gone.exe" in rows[".txt"]         # an app no longer there shows its id
+    dlg.destroy()
+
+
+def test_opening_with_a_saved_windows_app_runs_its_command(make_app, tmp_path, monkeypatch):
+    py = r"C:\Python312\python.exe"
+    app = make_app()
+    _windows_gio(monkeypatch, [_WindowsApp(py, "Python 3.12", '"%s" "%%1"' % py)])
+    monkeypatch.setattr("mpexplorer.gtkui.app.app_template", lambda line: openwith.app_template(line, "win32"))
+    launched = []
+    monkeypatch.setattr(app, "open_external", lambda pane, path, template: launched.append(template))
+    (tmp_path / "a.py").write_text("print(1)\n")
+    app.open_with(app.left, str(tmp_path / "a.py"), 9, "app:" + py)
+    assert launched == ['"%s" {file}' % py]

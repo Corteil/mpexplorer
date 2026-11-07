@@ -1,7 +1,7 @@
 """Preferences window: changes apply and are saved as soon as they are made."""
 from .. import extterm
 from ..openwith import describe_handler, forget_handler, normalize_extension, remember_handler
-from .common import Gio, Gtk, ask_yes_no, error, info, prompt, scrolled
+from .common import Gtk, ask_yes_no, error, find_app, info, prompt, scrolled
 from .dialogs import ask_open_with
 from .sources import SourcesPage
 
@@ -111,8 +111,13 @@ class PreferencesDialog(Gtk.Dialog):
 
     @staticmethod
     def _app_name(desktop_id):
-        app = Gio.DesktopAppInfo.new(desktop_id)
-        return app.get_display_name() if app else None
+        """The app's name, else None (the id is shown): a lookup that fails must not stop Preferences opening, as
+        Gio.DesktopAppInfo missing on Windows did (2026-11-07)."""
+        try:
+            app = find_app(desktop_id)
+            return app.get_display_name() if app else None
+        except Exception:        # noqa: BLE001
+            return None
 
     def _fill_types(self, select=None):
         self.types.clear()

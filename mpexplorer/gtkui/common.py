@@ -35,6 +35,18 @@ def error(parent, title, text):
     _message(parent, Gtk.MessageType.ERROR, title, text)
 
 
+def find_app(app_id):
+    """The installed application with this id, or None. Linux ids are desktop files (DesktopAppInfo); Windows has no
+    DesktopAppInfo, and its ids (an exe path) are found among Gio.AppInfo.get_all()."""
+    desktop = getattr(Gio, "DesktopAppInfo", None)
+    if desktop is not None:
+        try:
+            return desktop.new(app_id)
+        except TypeError:
+            return None
+    return next((a for a in Gio.AppInfo.get_all() if a.get_id() == app_id), None)
+
+
 def ask_yes_no(parent, title, text):
     return _message(parent, Gtk.MessageType.QUESTION, title, text, Gtk.ButtonsType.YES_NO) == Gtk.ResponseType.YES
 
