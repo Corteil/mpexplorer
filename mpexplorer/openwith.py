@@ -204,12 +204,14 @@ def describe_handler(settings, handler, app_name=None):
 
 
 # -- the private cache copy -----------------------------------------------
-def cache_path(root, board, devpath):
-    """<root>/<board>/<device path>, for a device file. ValueError if the path could climb out of the cache."""
+def cache_path(root, board, devpath, platform=None):
+    """<root>/<board>/<device path>, for a device file. ValueError if the path could climb out of the cache.
+    The board key ('chip:7cdf...') keeps its ':' on Linux; Windows does not allow ':' in a folder name."""
     parts = [p for p in devpath.split("/") if p]
     if not parts or any(p in (".", "..") or "\0" in p for p in parts):
         raise ValueError("not a file path inside the board: %r" % devpath)
-    return os.path.join(root, re.sub(r"[^A-Za-z0-9_:-]", "_", board or "") or "board", *parts)
+    keep = r"[^A-Za-z0-9_-]" if (platform or sys.platform).startswith("win") else r"[^A-Za-z0-9_:-]"
+    return os.path.join(root, re.sub(keep, "_", board or "") or "board", *parts)
 
 
 def keep_both_name(remote):

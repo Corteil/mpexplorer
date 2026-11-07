@@ -86,12 +86,21 @@ def test_corrupt_settings_fall_back_to_defaults(tmp_path):
 # -- the cache --------------------------------------------------------------
 def test_cache_path_stays_inside_the_cache(tmp_path):
     root = str(tmp_path)
-    got = openwith.cache_path(root, "2e8a:0005:AB12", "/lib/m.py")
+    got = openwith.cache_path(root, "2e8a:0005:AB12", "/lib/m.py", "linux")
     assert got == os.path.join(root, "2e8a:0005:AB12", "lib", "m.py")
-    assert openwith.cache_path(root, "a/b c", "x.py") == os.path.join(root, "a_b_c", "x.py")
+    assert openwith.cache_path(root, "a/b c", "x.py", "linux") == os.path.join(root, "a_b_c", "x.py")
     for bad in ("/", "", "/lib/../../etc/passwd", "/a/./b/..", "/x\0y"):
         with pytest.raises(ValueError):
             openwith.cache_path(root, "b", bad)
+
+
+def test_cache_path_on_windows_has_no_colon_in_the_board_folder(tmp_path):
+    # the owner's Tildagon on Windows: 'chip:...' as a folder name failed with WinError 267, so the file never opened
+    got = openwith.cache_path(str(tmp_path), "chip:7cdfa1e2b3c4", "/boot.py", "win32")
+    assert got == os.path.join(str(tmp_path), "chip_7cdfa1e2b3c4", "boot.py")
+    assert openwith.cache_path(str(tmp_path), "2e8a:0005:AB12", "/lib/m.py", "win32") == \
+        os.path.join(str(tmp_path), "2e8a_0005_AB12", "lib", "m.py")
+    os.makedirs(os.path.dirname(got))                   # a folder this computer can make
 
 
 def test_keep_both_name():
