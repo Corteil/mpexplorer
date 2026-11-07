@@ -1074,6 +1074,61 @@ def test_open_with_dialog_lists_apps_and_returns_the_choice(make_app):
     assert dialogs.ask_open_with(app, "a.py", True) == ("editor", None, False)      # the first row is preselected
 
 
+class _ListedApp:
+    def __init__(self, app_id, name):
+        self.app_id, self.name = app_id, name
+
+    def get_id(self):
+        return self.app_id
+
+    def get_display_name(self):
+        return self.name
+
+    def get_icon(self):
+        return None
+
+    def should_show(self):
+        return True
+
+    def supports_files(self):
+        return True
+
+
+def test_open_with_dialog_names_the_system_default_and_shortens_program_paths(make_app, monkeypatch):
+    # the owner's Windows PC (2026-11-07): Notepad++ is the default; the Store Python was listed by its whole path
+    from mpexplorer.gtkui import dialogs
+    app = make_app()
+    py = r"C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5\python3.12.exe"
+    monkeypatch.setattr("mpexplorer.gtkui.dialogs.app_label", lambda n: openwith.app_label(n, "win32"))
+    info = types.SimpleNamespace(get_recommended_for_type=lambda ctype: [_ListedApp(py, py)],
+                                 get_all_for_type=lambda ctype: [],
+                                 get_default_for_type=lambda ctype, must_support_uris: _ListedApp("npp", "Notepad++"))
+    monkeypatch.setattr(dialogs, "Gio", types.SimpleNamespace(AppInfo=info, content_type_guess=lambda n, d: ("py", 0)))
+    seen = []
+
+    def look():
+        for w in dialogs.Gtk.Window.list_toplevels():
+            if isinstance(w, dialogs.Gtk.Dialog) and w.get_title() == "Open with":
+                lst = [c for c in _all_children(w) if isinstance(c, dialogs.Gtk.ListBox)][0]
+                for row in lst.get_children():
+                    labels = [c.get_text() for c in _all_children(row) if isinstance(c, dialogs.Gtk.Label)]
+                    seen.append((labels[0] if labels else "", row.get_tooltip_text()))
+                w.response(dialogs.Gtk.ResponseType.CANCEL)
+        return False
+    dialogs.GLib.timeout_add(200, look)
+    assert dialogs.ask_open_with(app, "a.py", True) is None
+    assert ("System default application (Notepad++)", None) in seen                    # one row, named
+    assert ("Python 3.12", py) in seen                                                  # the path is the hover tip
+
+
+def _all_children(widget):
+    out = []
+    for c in widget.get_children() if hasattr(widget, "get_children") else []:
+        out.append(c)
+        out += _all_children(c)
+    return out
+
+
 def test_file_types_page_lists_adds_changes_and_removes(make_app, cfg, monkeypatch):
     app = make_app(open_with__by_extension={".py": "custom:geany", ".bin": "hex"},
                    open_with__custom={"geany": "geany {file}"})
@@ -1828,7 +1883,7 @@ def test_preferences_open_with_a_saved_windows_app(make_app, monkeypatch):
     dlg = PreferencesDialog(app)            # it used to raise AttributeError (no DesktopAppInfo) and never appear
     pump()
     rows = {row[0]: row[1] for row in dlg.types}
-    assert "Python 3.12" in rows[".py"] and "gone.exe" in rows[".txt"]         # an app no longer there shows its id
+    assert "Python 3.12" in rows[".py"] and "gone" in rows[".txt"]       # an app no longer there: its program's name
     dlg.destroy()
 
 

@@ -5,7 +5,7 @@ from collections import Counter
 
 from ..backends import human, human_duration
 from ..errors import Cancelled
-from ..openwith import expand_command
+from ..openwith import app_label, expand_command
 from ..sync import apply_plan, build_plan
 from ..transport import DeviceError
 from .common import Gdk, Gio, GLib, Gtk, error, monospace_view, scrolled
@@ -62,7 +62,17 @@ def installed_apps(name):
     return out
 
 
-def ask_open_with(parent, name, can_run):
+def default_app_name(name):
+    """The name of the program the system opens this file name with, else None."""
+    try:
+        ctype, _uncertain = Gio.content_type_guess(name, None)
+        app = Gio.AppInfo.get_default_for_type(ctype, False)
+        return app_label(app.get_display_name()) if app else None
+    except Exception:        # noqa: BLE001 - a missing name must not stop the dialog
+        return None
+
+
+def ask_open_with(parent, name, can_run, heading=None):
     """Choose the program for a file. Returns (handler, custom, remember) or None if cancelled.
 
     handler is 'editor' | 'run' | 'app:<desktop id>' | 'custom:<name>'; custom is (name, command) for a typed command
@@ -75,16 +85,25 @@ def ask_open_with(parent, name, can_run):
     box = dlg.get_content_area()
     box.set_border_width(12)
     box.set_spacing(8)
-    box.pack_start(Gtk.Label(label="Open '%s' with:" % name, xalign=0), False, False, 0)
+    box.pack_start(Gtk.Label(label=heading or "Open '%s' with:" % name, xalign=0), False, False, 0)
     choices = [("Built-in editor", "editor", None)]
     if can_run:
         choices.append(("Run on the board", "run", None))
+    default = default_app_name(name)
     choices += [("Hex viewer", "hex", None), ("Image viewer", "image", None),
-                ("System default application", "system", None)]
-    choices += [(n, "app:" + ident, icon) for n, ident, icon in installed_apps(name)]
+                ("System default application (%s)" % default if default else "System default application", "system",
+                 None)]
+    full_names = {}
+    for n, ident, icon in installed_apps(name):
+        short = app_label(n)
+        if short != n:
+            full_names[len(choices)] = n                # the program path, as the row's hover tip
+        choices.append((short, "app:" + ident, icon))
     lst = Gtk.ListBox(selection_mode=Gtk.SelectionMode.SINGLE)
-    for label, _h, icon in choices:
+    for i, (label, _h, icon) in enumerate(choices):
         row = Gtk.ListBoxRow()
+        if i in full_names:
+            row.set_tooltip_text(full_names[i])
         line = Gtk.Box(spacing=8, margin=4)
         if icon:
             line.pack_start(Gtk.Image.new_from_gicon(icon, Gtk.IconSize.LARGE_TOOLBAR), False, False, 0)

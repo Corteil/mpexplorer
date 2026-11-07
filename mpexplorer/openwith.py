@@ -107,6 +107,18 @@ def program_path(app_id, platform=None):
             and bool(re.fullmatch(r"[A-Za-z]:\\.+\.(exe|com|bat|cmd)", app_id or "", re.I)))
 
 
+def app_label(name, platform=None):
+    """A short name for an app in a list. GTK on Windows names an app it has no name for (the Microsoft Store Python)
+    by its program path; show 'Python 3.12' (a Store package's name) or 'notepad' (the file name) instead."""
+    text = (name or "").strip()
+    if not program_path(text, platform):
+        return text
+    m = re.search(r"\\WindowsApps\\[^\\._]+\.([^\\_]+)_", text, re.I)    # Publisher.Name.1.2_version_arch__id
+    if m:
+        return re.sub(r"\.(?=\d)", " ", m.group(1), count=1)
+    return re.sub(r"\.(exe|com|bat|cmd)$", "", text.replace("/", "\\").rsplit("\\", 1)[-1], flags=re.I)
+
+
 def _windows_app_template(commandline):
     out, has_file = [], False
     # an unquoted program path with spaces (what get_executable() can give): everything up to its .exe is one word

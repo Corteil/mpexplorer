@@ -1,8 +1,6 @@
 """Preferences window: changes apply and are saved as soon as they are made."""
-import ntpath
-
 from .. import extterm
-from ..openwith import describe_handler, forget_handler, normalize_extension, program_path, remember_handler
+from ..openwith import app_label, describe_handler, forget_handler, normalize_extension, program_path, remember_handler
 from .common import Gtk, ask_yes_no, error, find_app, info, prompt, scrolled
 from .dialogs import ask_open_with
 from .sources import SourcesPage
@@ -118,10 +116,10 @@ class PreferencesDialog(Gtk.Dialog):
         try:
             app = find_app(desktop_id, file_name)
             if app:
-                return app.get_display_name()
+                return app_label(app.get_display_name())
         except Exception:        # noqa: BLE001
             pass
-        return ntpath.basename(desktop_id) if program_path(desktop_id) else None
+        return app_label(desktop_id) if program_path(desktop_id) else None
 
     def _fill_types(self, select=None):
         self.types.clear()
@@ -143,7 +141,7 @@ class PreferencesDialog(Gtk.Dialog):
         return model[it][0] if it else None
 
     def _pick_program(self, ext):
-        picked = ask_open_with(self, "x" + ext, ext == ".py")
+        picked = ask_open_with(self, "x" + ext, ext == ".py", heading="Open %s files with:" % ext)
         if picked is None:
             return
         handler, custom, _remember = picked                             # on this page the choice is always saved

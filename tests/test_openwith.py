@@ -494,6 +494,17 @@ def test_app_template_for_windows_programs():
         openwith.app_template('"%1"', "win32")
 
 
+def test_app_label_shortens_a_windows_program_path():
+    # GTK on Windows names the Store Python by its path; the owner saw that whole path in Open with (2026-11-07)
+    store = (r"C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0"
+             r"\python3.12.exe")
+    assert openwith.app_label(store, "win32") == "Python 3.12"
+    assert openwith.app_label(r"C:\Program Files\Notepad++\notepad++.exe", "win32") == "notepad++"
+    assert openwith.app_label("Notepad++", "win32") == "Notepad++"                # a real name stays
+    assert openwith.app_label(store, "linux") == store                            # Linux names are never paths
+    assert openwith.app_label(None) == ""
+
+
 def test_program_path():
     assert openwith.program_path(r"C:\Program Files\WindowsApps\Python\python3.12.exe", "win32")
     assert openwith.program_path(r"D:\tools\run.BAT", "win32")
