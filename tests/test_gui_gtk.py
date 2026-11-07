@@ -1135,7 +1135,7 @@ def test_file_types_page_lists_adds_changes_and_removes(make_app, cfg, monkeypat
     dlg = PreferencesDialog(app)
     assert [tuple(r) for r in dlg.types] == [(".bin", "Hex viewer"), (".py", "Custom: geany {file}")]
     picks = iter([("image", None, False), ("editor", None, True)])
-    monkeypatch.setattr("mpexplorer.gtkui.prefs.ask_open_with", lambda *a: next(picks))
+    monkeypatch.setattr("mpexplorer.gtkui.prefs.ask_open_with", lambda *a, **kw: next(picks))
     monkeypatch.setattr("mpexplorer.gtkui.prefs.prompt", lambda *a: " PNG")
     dlg._add_type()                                                     # normalised to .png, saved at once
     assert app.settings.get("open_with.by_extension")[".png"] == "image"
