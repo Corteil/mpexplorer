@@ -25,7 +25,8 @@ Python >= 3.11, line length 120, ruff rules E/F/W only, no type-annotation churn
   (Local + Device over snippets), `ops.py` (copy/move/delete/conflicts), `sync.py`, `jobs.py` (one worker thread owns
   the serial line), `console.py` (emulated REPL), `terminal.py` (real-REPL terminal), `badgescreen.py` (status page on a badge's screen), `clipboard.py`, `firmware.py` + `firmware_catalog.py` (install firmware), `connection.py` (one connected board's state),
   `paths.py` (settings/cache folders per OS, `portable.txt`), `winnames.py` (Windows names, drives), `extterm.py` (the board's REPL in an external terminal).
-- Windows build: `packaging/windows/` (launcher, PyInstaller spec), `.github/workflows/windows-build.yml` (artifact `mpexplorer-windows`;
+- Windows build: `packaging/windows/` (launcher, PyInstaller spec; `build-local.ps1` builds on the owner's PC with MSYS2 in
+  `D:\msys64`, output in `D:\mpexplorer-build`, GUI tests on a hidden desktop: see CONTRIBUTING.md), `.github/workflows/windows-build.yml` (artifact `mpexplorer-windows`;
   `mpexplorer-console.exe --self-test` checks a build). Windows-only code takes the platform as an argument or a `windows` flag so Linux tests cover it.
 - GUI, default (`mpexplorer/gtkui/`, GTK 3.24 via `python3-gi`, Wayland-native): `app.py`, `pane.py`, `editor.py`,
   `console.py`, `terminal.py` (VTE, optional), `dialogs.py`, `firmware.py`, `common.py` (import GTK only through it: it pins the versions).
