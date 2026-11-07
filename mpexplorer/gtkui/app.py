@@ -16,7 +16,7 @@ from ..jobs import JobRunner
 from .. import circuitpython, extterm, paths
 from ..badgescreen import BadgeScreen
 from ..openwith import (SYSTEM_OPEN, EditManager, app_template, handler_for, looks_executable, parse_handler,
-                        remember_handler)
+                        program_path, remember_handler)
 from ..ops import ConflictPolicy, copy_tree, delete_items, is_within, move_item, total_size, unique_name
 from .. import boardinfo, meminfo
 from ..ports import board_id, device_of, list_boards, short_model
@@ -967,10 +967,13 @@ class App(Gtk.Window):
         try:
             kind, value = parse_handler(self.settings, handler)
             if kind == "app":
-                desktop = find_app(value)
-                if desktop is None:
+                desktop = find_app(value, os.path.basename(path))
+                if desktop is not None:
+                    kind, value = "command", app_template(desktop.get_commandline() or desktop.get_executable() or "")
+                elif program_path(value):           # Windows: the id is the program itself, so run it
+                    kind, value = "command", app_template(value)
+                else:
                     raise ValueError("the application %s is not installed any more" % value)
-                kind, value = "command", app_template(desktop.get_commandline() or desktop.get_executable() or "")
         except ValueError as e:
             error(self, "Cannot open file", str(e))
             return

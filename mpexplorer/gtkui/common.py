@@ -35,16 +35,23 @@ def error(parent, title, text):
     _message(parent, Gtk.MessageType.ERROR, title, text)
 
 
-def find_app(app_id):
-    """The installed application with this id, or None. Linux ids are desktop files (DesktopAppInfo); Windows has no
-    DesktopAppInfo, and its ids (an exe path) are found among Gio.AppInfo.get_all()."""
+def find_app(app_id, file_name=None):
+    """The installed application with this id, or None. Linux ids are desktop files (DesktopAppInfo). Windows has no
+    DesktopAppInfo and its ids are exe paths: they are looked up where the Open with... list found them, among the apps
+    for this file's type (a Microsoft Store Python is listed there but not in get_all()), then among all apps."""
     desktop = getattr(Gio, "DesktopAppInfo", None)
     if desktop is not None:
         try:
             return desktop.new(app_id)
         except TypeError:
             return None
-    return next((a for a in Gio.AppInfo.get_all() if a.get_id() == app_id), None)
+    apps = []
+    if file_name:
+        ctype, _uncertain = Gio.content_type_guess(file_name, None)
+        apps += Gio.AppInfo.get_recommended_for_type(ctype) + Gio.AppInfo.get_all_for_type(ctype)
+    apps += Gio.AppInfo.get_all()
+    wanted = app_id.lower()                 # Windows paths: the case can differ between lists
+    return next((a for a in apps if (a.get_id() or "").lower() == wanted), None)
 
 
 def ask_yes_no(parent, title, text):

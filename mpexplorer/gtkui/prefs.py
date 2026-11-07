@@ -1,6 +1,8 @@
 """Preferences window: changes apply and are saved as soon as they are made."""
+import ntpath
+
 from .. import extterm
-from ..openwith import describe_handler, forget_handler, normalize_extension, remember_handler
+from ..openwith import describe_handler, forget_handler, normalize_extension, program_path, remember_handler
 from .common import Gtk, ask_yes_no, error, find_app, info, prompt, scrolled
 from .dialogs import ask_open_with
 from .sources import SourcesPage
@@ -110,20 +112,23 @@ class PreferencesDialog(Gtk.Dialog):
         return page
 
     @staticmethod
-    def _app_name(desktop_id):
-        """The app's name, else None (the id is shown): a lookup that fails must not stop Preferences opening, as
-        Gio.DesktopAppInfo missing on Windows did (2026-11-07)."""
+    def _app_name(desktop_id, file_name=None):
+        """The app's name, else the program's file name (a Windows exe path), else None (the id is shown). A lookup
+        that fails must not stop Preferences opening, as Gio.DesktopAppInfo missing on Windows did (2026-11-07)."""
         try:
-            app = find_app(desktop_id)
-            return app.get_display_name() if app else None
+            app = find_app(desktop_id, file_name)
+            if app:
+                return app.get_display_name()
         except Exception:        # noqa: BLE001
-            return None
+            pass
+        return ntpath.basename(desktop_id) if program_path(desktop_id) else None
 
     def _fill_types(self, select=None):
         self.types.clear()
         table = self.settings.get("open_with.by_extension")
         for key in sorted(table):
-            it = self.types.append([key, describe_handler(self.settings, table[key], self._app_name)])
+            name_of = lambda app_id, ext=key: self._app_name(app_id, "file" + ext)      # noqa: E731
+            it = self.types.append([key, describe_handler(self.settings, table[key], name_of)])
             if key == select:
                 self.types_view.get_selection().select_iter(it)
         self._types_selection(self.types_view.get_selection())
