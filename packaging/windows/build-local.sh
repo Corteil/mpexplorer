@@ -33,8 +33,9 @@ echo "== checking the built program"
 cd "$OUT/dist/mpexplorer"
 ./mpexplorer-console.exe --version
 "$PY" "$HIDDEN" "$(cygpath -w "$PWD/mpexplorer-console.exe")" --self-test
-./mpexplorer-console.exe --esptool version | head -1
-./mpexplorer-console.exe --miniterm --help | head -1
+# whole output captured, then its first line: `| head -1` closes the pipe early, and esptool's next write then fails
+out=$(./mpexplorer-console.exe --esptool version); echo "${out%%$'\n'*}"
+out=$(./mpexplorer-console.exe --miniterm --help); echo "${out%%$'\n'*}"
 
 if [ "${MPX_ZIP:-0}" != "0" ]; then
     cd "$OUT/dist"
