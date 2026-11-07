@@ -473,15 +473,28 @@ def test_polling_an_unchanged_file_does_not_restart_the_wait(tmp_path):
     assert w.ready()                        # 1.5 s since the save: it settled although it was polled throughout
 
 
-def test_app_template_turns_desktop_commands_into_templates():
-    assert openwith.app_template("geany %F") == "geany {file}"
-    assert openwith.app_template("gimp-2.10 %U") == "gimp-2.10 {file}"
-    assert openwith.app_template("viewer --icon %i -c %c %f") == "viewer --icon -c {file}"
-    assert openwith.app_template("sh -c 'echo 100%%' %f") == "sh -c 'echo 100%' {file}"
-    assert openwith.app_template("thonny") == "thonny"                                  # path appended later
-    assert openwith.expand_command(openwith.app_template('"my app" %f'), "/a b.py") == ["my app", "/a b.py"]
+def test_app_template_for_windows_programs():
+    py = "C:\\Program Files\\WindowsApps\\Python.3.12\\python3.12.exe"
+    assert openwith.app_template('"%s" "%%1"' % py, "win32") == '"%s" {file}' % py
+    assert openwith.app_template('"%s" "%%1" %%*' % py, "win32") == '"%s" {file}' % py      # one file only
+    assert openwith.app_template("C:\\Windows\\notepad.exe %1", "win32") == "C:\\Windows\\notepad.exe {file}"
+    assert openwith.app_template(py, "win32") == '"%s"' % py                               # path appended later
+    argv = openwith.expand_command(openwith.app_template('"%s" "%%1"' % py, "win32"), "D:\\my files\\a.py", "win32")
+    assert argv == [py, "D:\\my files\\a.py"]
     with pytest.raises(ValueError):
-        openwith.app_template("")
+        openwith.app_template('"%1"', "win32")
+
+
+def test_app_template_turns_desktop_commands_into_templates():
+    assert openwith.app_template("geany %F", "linux") == "geany {file}"
+    assert openwith.app_template("gimp-2.10 %U", "linux") == "gimp-2.10 {file}"
+    assert openwith.app_template("viewer --icon %i -c %c %f", "linux") == "viewer --icon -c {file}"
+    assert openwith.app_template("sh -c 'echo 100%%' %f", "linux") == "sh -c 'echo 100%' {file}"
+    assert openwith.app_template("thonny", "linux") == "thonny"                                  # path appended later
+    template = openwith.app_template('"my app" %f', "linux")
+    assert openwith.expand_command(template, "/a b.py", "linux") == ["my app", "/a b.py"]
+    with pytest.raises(ValueError):
+        openwith.app_template("", "linux")
 
 
 def test_remember_handler_by_extension_and_custom(settings):

@@ -25,8 +25,8 @@ from ..remember import (chip_key, device_start, host_start, move_folder_to_chip,
 from ..settings import Settings, segment
 from ..transport import RawREPL
 from ..watchdog import Watchdog
-from .common import (ICON, Gdk, GdkPixbuf, Gio, GLib, Gtk, ask_yes_no, button, error, fmt_time, icon_button, info,
-                     prompt, set_icon)
+from .common import (ICON, Gdk, GdkPixbuf, GLib, Gtk, ask_yes_no, button, error, find_app, fmt_time, icon_button,
+                     info, prompt, set_icon)
 from .console import ConsoleWindow
 from .dialogs import (OutputWindow, SyncDialog, TransferPopup, ask_conflict, ask_edit_conflict, ask_open_with,
                       ask_sync_target)
@@ -967,10 +967,10 @@ class App(Gtk.Window):
         try:
             kind, value = parse_handler(self.settings, handler)
             if kind == "app":
-                desktop = Gio.DesktopAppInfo.new(value)
+                desktop = find_app(value)
                 if desktop is None:
                     raise ValueError("the application %s is not installed any more" % value)
-                kind, value = "command", app_template(desktop.get_commandline())
+                kind, value = "command", app_template(desktop.get_commandline() or desktop.get_executable() or "")
         except ValueError as e:
             error(self, "Cannot open file", str(e))
             return

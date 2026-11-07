@@ -77,11 +77,15 @@ def parse_handler(settings, handler):
     raise ValueError("unknown way of opening a file: %r" % handler)
 
 
-def app_template(commandline):
-    """An installed app's desktop-file command ('geany %F') -> a template for expand_command ('geany {file}').
+def app_template(commandline, platform=None):
+    """An installed app's command ('geany %F') -> a template for expand_command ('geany {file}').
 
-    The %f/%F/%u/%U field codes become {file}; the other codes (%i, %c, %k and the like) are dropped, and %% is a
-    literal percent. A command without a file code gets the path appended by expand_command."""
+    Linux desktop files: the %f/%F/%u/%U field codes become {file}; the other codes (%i, %c, %k and the like) are
+    dropped, and %% is a literal percent. Windows (a registered program such as "C:\\...\\app.exe" "%1"): split
+    without POSIX escapes, and %1 / %L / %l / %* / %V become {file}. A command without a file code gets the path
+    appended by expand_command."""
+    if (platform or sys.platform).startswith("win"):
+        return _windows_app_template(commandline)
     out = []
     for arg in shlex.split(commandline):
         if arg in ("%f", "%F", "%u", "%U"):
@@ -93,6 +97,25 @@ def app_template(commandline):
     if not out:
         raise ValueError("the application has no command")
     return " ".join(shlex.quote(a) if a != "{file}" else a for a in out)
+
+
+def _windows_app_template(commandline):
+    out, has_file = [], False
+    # an unquoted program path with spaces (what get_executable() can give): everything up to its .exe is one word
+    m = re.match(r'\s*([A-Za-z]:\\[^"]*?\.(?:exe|com|bat|cmd))(?=\s|$)', commandline, re.I)
+    words = ([m.group(1)] + split_command(commandline[m.end():], "win32")) if m else split_command(commandline, "win32")
+    for arg in words:
+        if arg.upper() in ("%1", "%L", "%*", "%V"):
+            if not has_file:                    # one file only: the template opens one path
+                out.append("{file}")
+                has_file = True
+            continue
+        arg = re.sub(r"%[0-9*a-zA-Z]", "", arg)
+        if arg:
+            out.append(arg)
+    if not out or out[0] == "{file}":
+        raise ValueError("the application has no command")
+    return " ".join(a if a == "{file}" or not re.search(r'[\s"]', a) else '"%s"' % a for a in out)
 
 
 def remember_handler(settings, name, handler, custom=None):

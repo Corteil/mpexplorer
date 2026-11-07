@@ -60,6 +60,13 @@ Status (2026-11-06): **steps 1 to 4 done in code and tests**, and the Windows bu
   nothing is redirected when the program gets its own console, and the bundled miniterm keeps its window open after an error. Checked by
   script on the real Tildagon from a parent with no std handles (miniterm stayed up and answered `print(3*7)`), then **confirmed by the
   owner by hand with the fixed CI build (2026-11-06): the external terminal works and reconnects** (Tildagon, COM8, miniterm).
+- Second hand-test find (owner, 2026-11-07): **Edit > Preferences did nothing on Windows.** The File types page looked up a saved
+  `app:` handler (the owner had picked Python for `.py` in Open with...) with `Gio.DesktopAppInfo`, which GTK has only on Linux; the
+  AttributeError stopped the dialog before it showed (traceback read from the console twin's stderr). The same call broke opening a
+  file with that app. Fixed: `gtkui.common.find_app` (DesktopAppInfo where it exists, else the id in `Gio.AppInfo.get_all()`), a failed
+  name lookup no longer stops Preferences, and `openwith.app_template` reads Windows commands (`"C:\...\app.exe" "%1"`, an unquoted
+  exe path with spaces). Tests: `test_app_template_for_windows_programs`, two GUI tests with a Windows-like Gio.
+  Lesson: to see why the window does nothing, run `mpexplorer-console.exe` with stderr to a file.
 
 Where this plan came from: section 1 from reading the code on `main` (`02e9bc7`, v0.1.1); sections 2 to 4 also use the PuTTY and Tera Term
 manuals, quoted where it matters. Anything marked *unverified* is from memory and must be checked on a real Windows machine before it is relied on.
