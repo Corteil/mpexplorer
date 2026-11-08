@@ -3,8 +3,9 @@
 Every function takes the platform, environment, home folder and exe folder as arguments, so Linux tests can exercise the
 Windows branches. Called with no arguments they use this machine.
 
-Linux: $XDG_CONFIG_HOME or ~/.config, and $XDG_CACHE_HOME or ~/.cache, each with an `mpexplorer` folder below.
-Windows: %APPDATA%\\mpexplorer for settings and %LOCALAPPDATA%\\mpexplorer for caches.
+Linux: $XDG_CONFIG_HOME or ~/.config, $XDG_CACHE_HOME or ~/.cache, and $XDG_DATA_HOME or ~/.local/share (kept data:
+the app store), each with an `mpexplorer` folder below.
+Windows: %APPDATA%\\mpexplorer for settings and %LOCALAPPDATA%\\mpexplorer for caches and kept data.
 Portable: if a file named portable.txt sits next to the frozen exe, both live in a `data` folder beside it
 (settings in data, caches in data\\cache); if that folder cannot be written the usual places are used and
 `portable_problem()` says why.
@@ -81,6 +82,21 @@ def cache_dir(platform=None, env=None, home=None, exe_folder="default"):
         base = env.get("LOCALAPPDATA") or os.path.join(_home(home), "AppData", "Local")
     else:
         base = env.get("XDG_CACHE_HOME") or os.path.join(_home(home), ".cache")
+    return os.path.join(base, APP)
+
+
+def data_dir(platform=None, env=None, home=None, exe_folder="default"):
+    """The folder for data kept on purpose (the badge app store's local copy), not a cache that may be cleared:
+    $XDG_DATA_HOME or ~/.local/share on Linux, %LOCALAPPDATA% on Windows, each with an `mpexplorer` folder below;
+    portable mode keeps it in the `data` folder itself."""
+    env = os.environ if env is None else env
+    data = portable_dir(exe_folder)
+    if data:
+        return data
+    if is_windows(platform):
+        base = env.get("LOCALAPPDATA") or os.path.join(_home(home), "AppData", "Local")
+    else:
+        base = env.get("XDG_DATA_HOME") or os.path.join(_home(home), ".local", "share")
     return os.path.join(base, APP)
 
 
