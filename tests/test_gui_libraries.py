@@ -126,6 +126,62 @@ def test_circuitpython_needs_install_anyway_but_micropython_does_not(tmp_path, m
         app.destroy()
 
 
+def test_install_files_from_this_computer_without_saving_a_source(tmp_path, monkeypatch):
+    # docs/FILE_CHOOSER_PLAN.md step 4: the owner's own files, chosen with the system's file dialog (stubbed here)
+    app, dlg, asked = open_dialog(tmp_path, monkeypatch)
+    mine = tmp_path / "mine"
+    mine.mkdir()
+    (mine / "blink.py").write_text("print('blink')\n")
+    (mine / "tone.mpy").write_bytes(b"M\x06")
+    picks = []
+    monkeypatch.setattr(common, "choose_file", lambda parent, title, action="open", filters=(), start=None,
+                        save_name=None, multiple=False: picks.append((title, action, multiple, start))
+                        or [str(mine / "blink.py"), str(mine / "tone.mpy")])
+    try:
+        dlg.firmware = "circuitpython"                  # the owner's own files suit any board: no "Install anyway"
+        dlg.choose_local_libraries("files")
+        assert picks[0][:3] == ("Choose library files", "open", True)
+        wait_until(lambda: [r[1] for r in dlg.store] == ["blink", "tone"])
+        assert dlg.source_box.get_active_text() == "This computer: 2 files from mine"
+        assert not dlg.keep.get_visible()               # loose files cannot be kept as a source
+        dlg.store[0][0] = True
+        dlg._sensitive()
+        assert dlg.install_btn.get_sensitive() and not dlg.force.get_visible()
+        dlg.install(dlg.ticked())
+        wait_until(lambda: not dlg.busy and "Done" in dlg.note.get_text())
+        assert "From This computer: 2 files from mine" in asked[0]
+        assert (tmp_path / "board" / "lib" / "blink.py").read_text() == "print('blink')\n"
+        assert app.settings.get("sources.libraries") == []                             # nothing saved
+        assert app.settings.get("general.last_dirs")["libraries"] == str(mine)         # the next look starts here
+    finally:
+        dlg.destroy()
+        app.destroy()
+
+
+def test_a_chosen_folder_can_be_kept_as_a_library_source(tmp_path, monkeypatch):
+    app, dlg, asked = open_dialog(tmp_path, monkeypatch)
+    folder = tmp_path / "my-libs"
+    (folder / "pkg").mkdir(parents=True)
+    (folder / "pkg" / "__init__.py").write_text("x = 1\n")
+    (folder / "solo.py").write_text("y = 2\n")
+    monkeypatch.setattr(common, "choose_file", lambda parent, title, action="open", *a, **kw:
+                        str(folder) if action == "folder" else None)
+    try:
+        dlg.choose_local_libraries("folder")
+        wait_until(lambda: [r[1] for r in dlg.store] == ["pkg", "solo"])
+        assert dlg.keep.get_visible() and dlg.source_box.get_active_text() == "This computer: my-libs"
+        dlg.keep.set_active(True)
+        saved = app.settings.get("sources.libraries")
+        assert saved == [{"name": "my-libs", "kind": "folder", "path": str(folder), "for": "micropython"}]
+        assert dlg.source == "custom:my-libs" and dlg.source_box.get_active_text() == "my-libs (MicroPython)"
+        assert [r[1] for r in dlg.store] == ["pkg", "solo"] and not dlg.keep.get_visible()
+        dlg.choose_local_libraries("zip")               # the chooser was cancelled: nothing changes
+        assert dlg.source == "custom:my-libs"
+    finally:
+        dlg.destroy()
+        app.destroy()
+
+
 def test_remove_asks_then_deletes(tmp_path, monkeypatch):
     app, dlg, asked = open_dialog(tmp_path, monkeypatch)
     try:

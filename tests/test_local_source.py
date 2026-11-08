@@ -9,7 +9,7 @@ from mpexplorer import libraries
 from mpexplorer import sources as S
 from mpexplorer.backends import LocalBackend
 from mpexplorer.libraries import LibraryError
-from mpexplorer.local_source import LocalFolder
+from mpexplorer.local_source import LocalFiles, LocalFolder, from_chosen
 from mpexplorer.settings import Settings
 
 
@@ -52,6 +52,45 @@ def test_install_compare_and_remove_work_like_any_other_source(tmp_path):
     (src / "mything" / "__init__.py").write_text("x = 2\n")                              # the owner edited their copy
     assert libraries.compare(cat, LocalBackend(), ["mything"], None, dest) == {"mything": "differs"}
     assert libraries.remove(cat, LocalBackend(), ["blink"], None, dest) == 1
+
+
+def test_chosen_files_are_one_library_each_and_install_like_a_folder(tmp_path):
+    # Tools > Install libraries > From this computer > Files: loose files, no source saved (docs/FILE_CHOOSER_PLAN.md)
+    src = tmp_path / "src"
+    src.mkdir()
+    make_tree(src)
+    (src / "blink.mpy").write_bytes(b"M\x06")
+    chosen = [str(src / "blink.py"), str(src / "blink.mpy"), str(src / "tone.mpy"), str(src / "notes.txt")]
+    cat = from_chosen(chosen)
+    assert isinstance(cat, LocalFiles) and cat.title == "3 files from src"           # notes.txt is not a library
+    libs, saved = cat.libraries()
+    assert saved is None and [(lib.name, lib.description) for lib in libs] == [("blink", "blink.mpy, blink.py"),
+                                                                               ("tone", "tone.mpy")]
+    plan = cat.resolve(["blink"])
+    assert plan == [("blink", "", "py", [("blink.mpy", "blink.mpy"), ("blink.py", "blink.py")])]
+    dest = str(tmp_path / "lib")
+    assert libraries.install(cat, LocalBackend(), plan, dest) == (2, 0)
+    assert (tmp_path / "lib" / "blink.py").read_bytes() == (src / "blink.py").read_bytes()
+    assert libraries.compare(cat, LocalBackend(), ["blink"], None, dest) == {"blink": "current"}
+    with pytest.raises(LibraryError, match="not among"):
+        cat.resolve(["mything"])
+    with pytest.raises(LibraryError, match="was not chosen"):
+        cat.fetch("../secret.py")
+    with pytest.raises(LibraryError, match="none of the chosen files"):
+        from_chosen([str(src / "notes.txt")])
+    with pytest.raises(LibraryError, match="Nothing"):
+        from_chosen([])
+
+
+def test_one_chosen_folder_or_zip_is_read_as_a_folder(tmp_path):
+    make_tree(tmp_path)
+    folder = from_chosen(str(tmp_path))
+    assert isinstance(folder, LocalFolder) and folder.title == tmp_path.name
+    assert [lib.name for lib in folder.libraries()[0]] == ["blink", "mything", "tone"]
+    z = tmp_path / "mine.zip"
+    with zipfile.ZipFile(z, "w") as f:
+        f.writestr("hello.py", "print(1)\n")
+    assert isinstance(from_chosen([str(z)]), LocalFolder) and from_chosen([str(z)]).title == "mine.zip"
 
 
 def test_a_zip_is_read_the_same_and_a_single_wrapper_folder_is_looked_through(tmp_path):

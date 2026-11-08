@@ -1,8 +1,9 @@
 """Preferences window: changes apply and are saved as soon as they are made."""
 from .. import extterm
-from ..openwith import app_label, describe_handler, forget_handler, normalize_extension, program_path, remember_handler
+from ..openwith import (app_label, describe_handler, forget_handler, normalize_extension, program_path,
+                        program_template, remember_handler)
 from .common import Gtk, ask_yes_no, error, find_app, info, prompt, scrolled
-from .dialogs import ask_open_with
+from .dialogs import ask_open_with, choose_program
 from .sources import SourcesPage
 
 GENERAL = [
@@ -70,7 +71,13 @@ class PreferencesDialog(Gtk.Dialog):
         self.term_cmd.get_child().set_placeholder_text("miniterm (the default)")
         self.term_cmd.connect("changed", lambda c: self.settings.set("terminal.external_command",
                                                                      c.get_child().get_text().strip()))
-        page.pack_start(self.term_cmd, False, False, 0)
+        row = Gtk.Box(spacing=6)
+        row.pack_start(self.term_cmd, True, True, 0)
+        self.term_browse = Gtk.Button(label="Browse...")
+        self.term_browse.set_tooltip_text("Choose the terminal program; add its options after {port}")
+        self.term_browse.connect("clicked", lambda _b: self._browse_terminal())
+        row.pack_start(self.term_browse, False, False, 0)
+        page.pack_start(row, False, False, 0)
         page.pack_start(Gtk.Label(label="When the terminal closes:", xalign=0), False, False, 6)
         self.reconnect = {}
         group = None
@@ -83,6 +90,11 @@ class PreferencesDialog(Gtk.Dialog):
             self.reconnect[value] = rb
             page.pack_start(rb, False, False, 0)
         return page
+
+    def _browse_terminal(self):
+        path = choose_program(self, self.settings, "Choose the terminal program")
+        if path:
+            self.term_cmd.get_child().set_text(program_template(path, "{port}"))      # "changed" saves it
 
     # -- File types: the default program for each extension (Open with...) ------
     def _file_types_page(self):

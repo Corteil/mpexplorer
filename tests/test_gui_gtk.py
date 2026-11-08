@@ -1182,6 +1182,46 @@ def _all_children(widget):
     return out
 
 
+def _stub_chooser(monkeypatch, path, seen=None):
+    monkeypatch.setattr(common, "choose_file", lambda parent, title, action="open", filters=(), start=None,
+                        save_name=None, multiple=False: (seen.append((title, start)) if seen is not None else None)
+                        or path)
+
+
+def test_browse_fills_in_the_program_for_open_with_and_the_terminal(make_app, monkeypatch, tmp_path):
+    # docs/FILE_CHOOSER_PLAN.md step 2: pick the program instead of typing its path with quotes
+    from mpexplorer.gtkui import dialogs
+    app = make_app()
+    prog = sys.executable                               # a real program on either system
+    seen = []
+    _stub_chooser(monkeypatch, prog, seen)
+    entry = dialogs.Gtk.Entry()
+    dialogs._browse_program(None, entry, app.settings)
+    assert entry.get_text() == openwith.program_template(prog)
+    assert openwith.expand_command(entry.get_text(), "x.py")[0] == prog                 # it runs that program
+    assert seen[0][0] == "Choose a program"
+    assert app.settings.get("general.last_dirs")["program"] == os.path.dirname(prog)    # the next look starts there
+    dlg = PreferencesDialog(app)
+    dlg._browse_terminal()
+    assert app.settings.get("terminal.external_command") == openwith.program_template(prog, "{port}")
+    assert seen[-1] == ("Choose the terminal program", os.path.dirname(prog))
+    dlg.destroy()
+
+
+@pytest.mark.skipif(sys.platform.startswith("win"), reason="Windows has no executable bit")
+def test_browse_refuses_a_file_that_is_not_a_program(make_app, monkeypatch, tmp_path):
+    from mpexplorer.gtkui import dialogs
+    app = make_app()
+    text = tmp_path / "notes.txt"
+    text.write_text("hello")
+    _stub_chooser(monkeypatch, str(text))
+    said = []
+    monkeypatch.setattr(dialogs, "error", lambda parent, title, msg: said.append(msg))
+    entry = dialogs.Gtk.Entry()
+    dialogs._browse_program(None, entry, app.settings)
+    assert entry.get_text() == "" and "is not a program" in said[0]
+
+
 def test_file_types_page_lists_adds_changes_and_removes(make_app, cfg, monkeypatch):
     app = make_app(open_with__by_extension={".py": "custom:geany", ".bin": "hex"},
                    open_with__custom={"geany": "geany {file}"})

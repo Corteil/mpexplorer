@@ -4,10 +4,10 @@ are fetched here on the host and uploaded, nothing runs on the board."""
 import threading
 import time
 
-from .. import cpbundle, custom_libraries
+from .. import cpbundle, custom_libraries, local_source
 from .. import libraries as lib
 from ..errors import Cancelled
-from .common import GLib, Gtk, ask_yes_no, error, scrolled
+from .common import GLib, Gtk, ask_yes_no, choose_local, error, scrolled
 from .sources import SourcesDialog
 
 
@@ -26,6 +26,7 @@ class LibrariesDialog(Gtk.Dialog):
         self.make_bundle = bundles or (lambda key: cpbundle.Catalog(key))
         self.stock_catalog = catalog
         self.makers, self.titles = {}, {}
+        self.local = {}                 # "local:<n>" -> a catalog chosen with From this computer (not saved)
         self.catalogs, self.source, self.load_id = {}, "micropython", 0
         self.fill_source_table()
         self.libs, self.have, self.mpy, self.closed, self.busy, self.job = [], set(), None, False, False, None
@@ -42,7 +43,20 @@ class LibrariesDialog(Gtk.Dialog):
         self.source_box.connect("changed", lambda _c: self._source_changed())
         top.pack_start(self.source_box, False, False, 0)
         top.pack_start(Gtk.Label(label="for %s" % (label or "the board"), xalign=0), False, False, 0)
+        self.local_btn = Gtk.MenuButton(label="From this computer...")
+        self.local_btn.set_tooltip_text("Install .py or .mpy files, a folder of libraries or a .zip from this computer")
+        local_menu = Gtk.Menu()
+        for text, what in (("Files (.py, .mpy)...", "files"), ("A folder...", "folder"), ("A .zip file...", "zip")):
+            item = Gtk.MenuItem(label=text)
+            item.connect("activate", lambda _i, w=what: self.choose_local_libraries(w))
+            local_menu.append(item)
+        local_menu.show_all()
+        self.local_btn.set_popup(local_menu)
+        top.pack_end(self.local_btn, False, False, 0)
         box.pack_start(top, False, False, 0)
+        self.keep = Gtk.CheckButton(label="Keep this as a library source (in Manage sources...)", no_show_all=True)
+        self.keep.connect("toggled", lambda _c: self._keep_toggled())
+        box.pack_start(self.keep, False, False, 0)
         self.search = Gtk.SearchEntry(placeholder_text="Search")
         self.search.connect("search-changed", lambda _e: self._refilter())
         box.pack_start(self.search, False, False, 0)
@@ -111,6 +125,72 @@ class LibrariesDialog(Gtk.Dialog):
             key = "custom:" + src["name"]
             self.makers[key] = lambda src=src: custom_libraries.make_catalog(src)
             self.titles[key] = ("%s (%s)" % (src["name"], NAMES[src["for"]]), src["for"])
+        for key, catalog in self.local.items():                 # the owner's own files: for whatever the board runs
+            self.makers[key] = lambda catalog=catalog: catalog
+            self.titles[key] = ("This computer: %s" % catalog.title, None)
+
+    # -- From this computer: files, a folder or a .zip, installed without saving a source ------------------------
+    def choose_local_libraries(self, what):
+        if self.busy:
+            return
+        settings = self.app.settings
+        if what == "files":
+            chosen = choose_local(self, settings, "libraries", "Choose library files", multiple=True,
+                                  filters=[("MicroPython files (*.py, *.mpy)", ["*.py", "*.mpy"])])
+        elif what == "folder":
+            chosen = choose_local(self, settings, "libraries", "Choose a folder of libraries", "folder")
+        else:
+            chosen = choose_local(self, settings, "libraries", "Choose a .zip file of libraries",
+                                  filters=[("Zip files", ["*.zip"])])
+        if chosen:
+            self.add_local(chosen)
+
+    def add_local(self, chosen):
+        """Show what was chosen as a list of its own, picked in the source box."""
+        try:
+            catalog = local_source.from_chosen(chosen)
+        except lib.LibraryError as e:
+            error(self, "Install libraries", str(e))
+            return
+        key = "local:%d" % (len(self.local) + 1)
+        self.local[key] = catalog
+        self.fill_source_table()
+        self.fill_source_box()
+        self.source_box.set_active_id(key)          # loads the list (_source_changed)
+
+    def local_folder(self):
+        """The folder or .zip of the chosen local list, if it can be kept as a source; else None."""
+        catalog = self.local.get(self.source)
+        return catalog.path if isinstance(catalog, local_source.LocalFolder) else None
+
+    def _keep_toggled(self):
+        """Save the chosen folder or .zip as a custom library source, then show it as one."""
+        path = self.local_folder()
+        if not self.keep.get_active() or not path:
+            return
+        table = self.app.settings.get("sources.libraries")
+        names = {s.get("name") for s in table}
+        name, n = self.local[self.source].title, 2
+        while name in names:
+            name, n = "%s (%d)" % (self.local[self.source].title, n), n + 1
+        try:
+            src = custom_libraries.validate_library_source(
+                {"name": name, "kind": "folder", "path": path, "for": self.firmware or "micropython"})
+        except Exception as e:      # noqa: BLE001 - a folder that has gone since: say so, keep the list as it is
+            self.keep.set_active(False)
+            error(self, "Keep as a library source", str(e))
+            return
+        self.app.settings.set("sources.libraries", table + [src])
+        self.app.settings.save()
+        catalog = self.local.pop(self.source)
+        self.catalogs.pop(self.source, None)
+        key = "custom:" + name
+        self.fill_source_table()
+        self.catalogs[key] = catalog                # already read: no need to read the folder again
+        self.source = key                           # stay on this list without loading it again
+        self.fill_source_box()
+        self.keep.set_visible(False)
+        self.note.set_text("Saved as the library source \"%s\"." % name)
 
     def fill_source_box(self):
         self.source_box.remove_all()
@@ -153,6 +233,8 @@ class LibrariesDialog(Gtk.Dialog):
             return
         self.chose = True
         self.source = key
+        self.keep.set_active(False)
+        self.keep.set_visible(self.local_folder() is not None)
         self.store.clear()
         self._update_count()
         self.select_installed.set_active(False)
@@ -181,8 +263,9 @@ class LibrariesDialog(Gtk.Dialog):
         return self.titles[self.source][1]
 
     def mismatch(self):
-        """True when this list is for the other firmware than the board runs: needs 'Install anyway'."""
-        return bool(self.firmware) and self.firmware != self.libs_for()
+        """True when this list is for the other firmware than the board runs: needs 'Install anyway'. The owner's
+        own files (From this computer) are for whatever the board runs."""
+        return bool(self.firmware) and self.libs_for() is not None and self.firmware != self.libs_for()
 
     def _mismatch_note(self):
         self.force.set_visible(self.mismatch())
@@ -194,7 +277,7 @@ class LibrariesDialog(Gtk.Dialog):
     def resolve_arg(self):
         """What `catalog.resolve` needs to pick the right files: micropython-lib wants the board's .mpy format number,
         the bundles want its CircuitPython major version. Libraries for the other firmware always get source files."""
-        if self.mismatch() or not self.firmware:
+        if self.mismatch() or not self.firmware or self.libs_for() is None:
             return None
         if self.libs_for() == "micropython":
             return self.mpy
@@ -296,6 +379,8 @@ class LibrariesDialog(Gtk.Dialog):
         self.show_box.set_sensitive(not on)
         self.source_box.set_sensitive(not on)
         self.sources_btn.set_sensitive(not on)
+        self.local_btn.set_sensitive(not on)
+        self.keep.set_sensitive(not on)
         self.bar.set_visible(on)
         self.close_btn.set_label("Cancel" if on else "Close")
         self._sensitive()
@@ -391,7 +476,8 @@ class LibrariesDialog(Gtk.Dialog):
         external = getattr(self.catalog, "external", [])
         extra = ("\n\nThese also need libraries this app does not install (from PyPI): %s." % ", ".join(external)
                  if external else "")
-        origin = "\n\nFrom %s." % self.titles[self.source][0] if self.source.startswith("custom:") else ""
+        origin = ("\n\nFrom %s." % self.titles[self.source][0]
+                  if self.source.startswith(("custom:", "local:")) else "")
         if not ask_yes_no(self, "Install libraries", "Write %d file(s) to /lib on %s?\n\n%s%s%s\n\n"
                           "Identical files are skipped; changed files are overwritten."
                           % (files, self.label or "the board", "\n".join(lines), extra, origin)):

@@ -1,6 +1,14 @@
 # Plan: choose local files with a file selector (libraries, firmware, Open with)
 
-Status (2026-11-07): **plan only**, asked for by the owner after trying the Windows build. Nothing built.
+Status (2026-11-08): **built** (steps 1 to 3 below), on Linux and Windows alike. Tested with the chooser stubbed (GUI tests
+on Linux CI and on Windows GTK); the real dialogs (Explorer on Windows, the Pi's GTK dialog) are **not tried by hand yet**
+(step 4). The open questions were settled with the proposals: install from files without saving a source (a folder or
+.zip can be kept with a tick), and no other Browse... buttons for now.
+
+Where it is: `filechoice.py` (start folders, `general.last_dirs`), `gtkui/common.py` (`choose_file` on
+`Gtk.FileChooserNative`, `choose_local`, `PathChooser`), `openwith.program_template`, `local_source.LocalFiles` /
+`from_chosen`, and the dialogs: firmware, backup, sources, Open with, Preferences > Terminal, Install libraries >
+From this computer.
 
 ## What there is today
 | Place | Today | Problem |

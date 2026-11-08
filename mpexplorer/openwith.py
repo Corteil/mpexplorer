@@ -107,6 +107,15 @@ def program_path(app_id, platform=None):
             and bool(re.fullmatch(r"[A-Za-z]:\\.+\.(exe|com|bat|cmd)", app_id or "", re.I)))
 
 
+def program_template(path, placeholder="{file}", platform=None):
+    """A command template for a program chosen with Browse...: on Windows '"<path>" {file}' when the path has spaces
+    (a Windows path cannot hold a double quote), else '<path> {file}'; on Linux the path quoted the POSIX way, which
+    is how split_command reads it there. Terminal templates pass '{port}'."""
+    if (platform or sys.platform).startswith("win"):
+        return "%s %s" % ('"%s"' % path if any(c in path for c in " \t&()^;,") else path, placeholder)
+    return "%s %s" % (shlex.quote(path), placeholder)
+
+
 def app_label(name, platform=None):
     """A short name for an app in a list. GTK on Windows names an app it has no name for (the Microsoft Store Python)
     by its program path; show 'Python 3.12' (a Store package's name) or 'notepad' (the file name) instead."""

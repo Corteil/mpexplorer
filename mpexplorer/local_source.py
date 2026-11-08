@@ -108,3 +108,58 @@ class LocalFolder:
                 return f.read()
         except (OSError, KeyError, zipfile.BadZipFile) as e:
             raise LibraryError("Cannot read %s: %s" % (key, e))
+
+
+class LocalFiles:
+    """Single .py / .mpy files chosen on this computer (Tools > Install libraries > From this computer > Files):
+    each file is one library, named after the file; a.py and a.mpy together are one library with both files."""
+
+    def __init__(self, paths, title=None):
+        self.paths = {os.path.basename(p): p for p in paths if p.endswith(KEEP)}
+        if not self.paths:
+            raise LibraryError("Choose .py or .mpy files: none of the chosen files is one.")
+        folders = {os.path.basename(os.path.dirname(p)) or p for p in self.paths.values()}
+        self.title = self.name = title or "%d file%s from %s" % (
+            len(self.paths), "" if len(self.paths) == 1 else "s", ", ".join(sorted(folders)))
+        self.external = []
+        self.is_zip = False
+
+    def _by_name(self):
+        out = {}
+        for base in sorted(self.paths):
+            out.setdefault(os.path.splitext(base)[0], []).append(base)
+        return out
+
+    def libraries(self):
+        return [Library(name, "", ", ".join(files)) for name, files in self._by_name().items()], None
+
+    def resolve(self, names, mpy=None):
+        have = self._by_name()
+        missing = [n for n in names if n not in have]
+        if missing:
+            raise LibraryError("%s is not among the chosen files." % missing[0])
+        return [(n, "", "py", [(base, base) for base in have[n]]) for n in names]
+
+    def fetch(self, key):
+        path = self.paths.get(key)
+        if path is None:
+            raise LibraryError("%s was not chosen." % key)
+        try:
+            if os.path.getsize(path) > MAX_FILE:
+                raise LibraryError("%s is larger than %d MB." % (key, MAX_FILE >> 20))
+            with open(path, "rb") as f:
+                return f.read()
+        except OSError as e:
+            raise LibraryError("Cannot read %s: %s" % (key, e))
+
+
+def from_chosen(chosen):
+    """The catalog for what was chosen in a file chooser: one folder or .zip file is a LocalFolder (named after it),
+    anything else a list of LocalFiles. LibraryError when nothing usable was chosen."""
+    chosen = [chosen] if isinstance(chosen, str) else list(chosen or [])
+    if not chosen:
+        raise LibraryError("Nothing was chosen.")
+    if len(chosen) == 1 and (os.path.isdir(chosen[0]) or chosen[0].lower().endswith(".zip")):
+        path = chosen[0].rstrip("/\\") or chosen[0]
+        return LocalFolder({"name": os.path.basename(path) or path, "path": path})
+    return LocalFiles(chosen)

@@ -269,6 +269,46 @@ def test_no_list_says_why_and_a_file_can_still_be_used(setup, monkeypatch):
     assert d.install_btn.get_sensitive()
 
 
+def test_a_firmware_file_is_typed_or_browsed_and_its_folder_remembered(setup, monkeypatch):
+    # docs/FILE_CHOOSER_PLAN.md step 1: a path box plus Browse..., the system's own dialog (stubbed: none opens here)
+    make, _, _, _, tmp = setup
+    image = uf2(tmp / "good.uf2")
+    seen = []
+    monkeypatch.setattr(common_module(), "choose_file",
+                        lambda parent, title, action="open", filters=(), start=None, save_name=None, multiple=False:
+                        seen.append((title, action, [p for _n, ps in filters for p in ps])) or image)
+    d = make()
+    d.use_file.set_active(True)
+    assert d.chooser.get_filename() is None and not d.install_btn.get_sensitive()
+    d.chooser.browse()
+    assert seen == [("Choose a firmware file", "open", ["*.uf2", "*.UF2", "*.bin"])]
+    assert d.chooser.get_filename() == image and d.install_btn.get_sensitive()      # Install follows the box
+    assert d.app.settings.get("general.last_dirs")["firmware"] == str(tmp)
+    d.chooser.set_filename("")
+    assert not d.install_btn.get_sensitive()
+    d.chooser.entry.set_text('"%s"' % image)          # pasted with quotes, as Explorer's Copy as path gives it
+    assert d.chooser.get_filename() == image and d.install_btn.get_sensitive()
+
+
+def test_backup_and_restore_use_the_system_file_dialog(setup, monkeypatch):
+    make, drives, *_ = setup
+    drives[0] = RUNNING
+    calls = []
+    monkeypatch.setattr(common_module(), "choose_file", lambda parent, title, action="open", filters=(), start=None,
+                        save_name=None, multiple=False: calls.append((title, action, save_name)) or None)
+    d = make(cls=dialog.BackupDialog)
+    assert d._ask_backup_path(RUNNING) is None and d._ask_restore_path() is None       # cancelled: nothing chosen
+    (save_title, save_action, name), (open_title, open_action, _) = calls
+    assert (save_title, save_action) == ("Save the flash backup as", "save")
+    assert name.startswith("flash-backup-") and name.endswith(".uf2")                 # a running board: a .uf2
+    assert (open_title, open_action) == ("Choose a flash backup", "open")
+
+
+def common_module():
+    from mpexplorer.gtkui import common
+    return common
+
+
 def test_an_offline_list_says_so(setup, monkeypatch):
     make, *_ = setup
     monkeypatch.setattr(FakeCatalog, "saved", 1000000000.0)

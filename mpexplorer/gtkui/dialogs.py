@@ -1,4 +1,5 @@
 """Conflict prompt, sync dialogs and script output windows."""
+import os
 import platform
 import posixpath
 import sys
@@ -8,10 +9,10 @@ from collections import Counter
 from ..backends import human, human_duration
 from ..buildinfo import build_info, version_text
 from ..errors import Cancelled
-from ..openwith import app_label, expand_command
+from ..openwith import app_label, expand_command, program_template
 from ..sync import apply_plan, build_plan
 from ..transport import DeviceError
-from .common import ICON, Gdk, GdkPixbuf, Gio, GLib, Gtk, error, monospace_view, scrolled
+from .common import ICON, Gdk, GdkPixbuf, Gio, GLib, Gtk, choose_local, error, monospace_view, scrolled
 
 WEBSITE = "https://github.com/Corteil/mpexplorer"
 
@@ -128,6 +129,25 @@ def default_app_name(name):
         return None
 
 
+PROGRAM_FILES = [("Programs", ["*.exe", "*.bat", "*.cmd"])] if sys.platform.startswith("win") else []
+
+
+def choose_program(parent, settings, title="Choose a program"):
+    """A program chosen with Browse... (Windows: .exe/.bat/.cmd first). On Linux it must be executable."""
+    path = choose_local(parent, settings, "program", title, filters=PROGRAM_FILES)
+    if path and not sys.platform.startswith("win") and not os.access(path, os.X_OK):
+        error(parent, title, "%s is not a program (it cannot be run)." % path)
+        return None
+    return path
+
+
+def _browse_program(dlg, entry, settings, placeholder="{file}"):
+    path = choose_program(dlg, settings)
+    if path:
+        entry.set_text(program_template(path, placeholder))
+        entry.grab_focus()
+
+
 def ask_open_with(parent, name, can_run, heading=None):
     """Choose the program for a file. Returns (handler, custom, remember) or None if cancelled.
 
@@ -172,6 +192,10 @@ def ask_open_with(parent, name, can_run, heading=None):
     cmd = Gtk.Entry(hexpand=True, placeholder_text="geany {file}")
     cmd.set_activates_default(True)
     line.pack_start(cmd, True, True, 0)
+    browse = Gtk.Button(label="Browse...")
+    browse.set_tooltip_text("Choose the program; its command is filled in")
+    browse.connect("clicked", lambda _b: _browse_program(dlg, cmd, getattr(parent, "settings", None)))
+    line.pack_start(browse, False, False, 0)
     custom_row.add(line)
     lst.add(custom_row)
     lst.select_row(lst.get_row_at_index(0))

@@ -12,7 +12,7 @@ from ..cp_firmware import CircuitPythonCatalog
 from ..custom_firmware import make_catalog as make_custom_catalog
 from ..firmware_catalog import NUKE_FILE, Build, Catalog, default_build, saved_text
 from ..ports import board_id
-from .common import GLib, Gtk, ask_yes_no, error
+from .common import GLib, Gtk, PathChooser, ask_yes_no, choose_local, error
 from .sources import SourcesDialog
 
 STEPS = ("To put a board in its bootloader:\n"
@@ -446,9 +446,9 @@ class FirmwareDialog(DeviceDialog):
         self.site_rows.attach(self.all_builds, 1, 3, 1, 1)
         grid.attach(self.site_rows, 0, 1, 1, 1)
         grid.attach(self.use_file, 0, 2, 1, 1)
-        self.chooser = Gtk.FileChooserButton(title="Choose a firmware file", action=Gtk.FileChooserAction.OPEN)
-        firmware_filter(self.chooser)
-        self.chooser.connect("file-set", lambda _c: self._check())
+        self.chooser = PathChooser(lambda: self, self.app.settings, "firmware", "Choose a firmware file",
+                                   FIRMWARE_FILES, on_change=self._check,
+                                   placeholder="A .uf2 or .bin file: type or paste a path, or Browse...")
         grid.attach(self.chooser, 0, 3, 1, 1)
         box.pack_start(grid, False, False, 0)
         self.erase = Gtk.CheckButton(label="Erase the whole flash first. This removes all files. The usual advice the "
@@ -772,16 +772,8 @@ class FirmwareDialog(DeviceDialog):
         app.connect_device(pane)
 
 
-def firmware_filter(chooser):
-    files = Gtk.FileFilter()
-    files.set_name("Firmware (*.uf2, *.bin)")
-    for pattern in ("*.uf2", "*.UF2", "*.bin"):
-        files.add_pattern(pattern)
-    chooser.add_filter(files)
-    everything = Gtk.FileFilter()                       # a backup saved as unicorn.md must stay choosable
-    everything.set_name("All files")
-    everything.add_pattern("*")
-    chooser.add_filter(everything)
+# choose_file adds "All files" after these, so a backup saved as unicorn.md stays choosable
+FIRMWARE_FILES = [("Firmware (*.uf2, *.bin)", ["*.uf2", "*.UF2", "*.bin"])]
 
 
 class BackupDialog(DeviceDialog):
@@ -831,24 +823,11 @@ class BackupDialog(DeviceDialog):
             self.note.set_text("")
 
     def _ask_backup_path(self, drive):
-        dlg = Gtk.FileChooserDialog(title="Save the flash backup as", transient_for=self,
-                                    action=Gtk.FileChooserAction.SAVE)
-        dlg.add_buttons("Cancel", Gtk.ResponseType.CANCEL, "Save", Gtk.ResponseType.OK)
-        dlg.set_do_overwrite_confirmation(True)
-        dlg.set_current_name("flash-backup-%s.%s" % (time.strftime("%Y%m%d-%H%M"),
-                                                     "uf2" if drive.method == "repl" else "bin"))
-        path = dlg.get_filename() if dlg.run() == Gtk.ResponseType.OK else None
-        dlg.destroy()
-        return path
+        name = "flash-backup-%s.%s" % (time.strftime("%Y%m%d-%H%M"), "uf2" if drive.method == "repl" else "bin")
+        return choose_local(self, self.app.settings, "backup", "Save the flash backup as", "save", save_name=name)
 
     def _ask_restore_path(self):
-        dlg = Gtk.FileChooserDialog(title="Choose a flash backup", transient_for=self,
-                                    action=Gtk.FileChooserAction.OPEN)
-        dlg.add_buttons("Cancel", Gtk.ResponseType.CANCEL, "Open", Gtk.ResponseType.OK)
-        firmware_filter(dlg)
-        path = dlg.get_filename() if dlg.run() == Gtk.ResponseType.OK else None
-        dlg.destroy()
-        return path
+        return choose_local(self, self.app.settings, "backup", "Choose a flash backup", filters=FIRMWARE_FILES)
 
     def backup(self):
         drive = self.drive()

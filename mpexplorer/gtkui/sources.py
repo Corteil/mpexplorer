@@ -5,7 +5,8 @@ buttons (one section). The logic is in ..sources, ..custom_firmware and ..custom
 import threading
 
 from .. import custom_firmware, custom_libraries, sources
-from .common import GLib, Gtk, ask_yes_no, info, scrolled
+from ..filechoice import example_path
+from .common import GLib, Gtk, ask_yes_no, choose_local, info, scrolled
 
 
 def _firmware_newest(src):
@@ -190,17 +191,11 @@ class AddLibrarySourceDialog(AddSourceDialog):
         grid.attach(self.firmware, 1, 8, 1, 1)
 
     def _browse(self, folder):
-        action = Gtk.FileChooserAction.SELECT_FOLDER if folder else Gtk.FileChooserAction.OPEN
-        dlg = Gtk.FileChooserDialog(title="Choose a folder" if folder else "Choose a .zip file", transient_for=self,
-                                    action=action)
-        dlg.add_buttons("Cancel", Gtk.ResponseType.CANCEL, "Choose", Gtk.ResponseType.OK)
-        if not folder:
-            zips = Gtk.FileFilter()
-            zips.set_name("Zip files")
-            zips.add_pattern("*.zip")
-            dlg.add_filter(zips)
-        path = dlg.get_filename() if dlg.run() == Gtk.ResponseType.OK else None
-        dlg.destroy()
+        settings = self.settings
+        if folder:
+            path = choose_local(self, settings, "libraries", "Choose a folder of libraries", "folder")
+        else:
+            path = choose_local(self, settings, "libraries", "Choose a .zip file", filters=[("Zip files", ["*.zip"])])
         if path:
             self.address.set_text(path)
 
@@ -209,7 +204,8 @@ class AddLibrarySourceDialog(AddSourceDialog):
         index = self.is_index.get_active()
         self.address_label.set_text("Folder or .zip" if folder else "Index address" if index else
                                     "Repository" if bundle else "Repository or address")
-        self.address.set_placeholder_text("/home/pi/my-libs or /home/pi/my-libs.zip" if folder else
+        self.address.set_placeholder_text("%s or %s.zip" % (example_path("my-libs"), example_path("my-libs"))
+                                          if folder else
                                           "https://example.com/pi/v2 (the folder with index.json)" if index else
                                           "owner/name, e.g. sparkfun/qwiic_py" if bundle else
                                           "owner/name (add @branch), or https://.../package.json")

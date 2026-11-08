@@ -124,6 +124,7 @@ SPEC = {
     "general.reset_on_disconnect": (False, boolean),   # soft-reset the board when disconnecting or quitting
     "general.set_board_clock": (False, boolean),    # set the board's clock (UTC) to the host's time at every connect
     "general.device_mtimes": (False, boolean),      # device pane: fetch modified times (one slow stat per file)
+    "general.last_dirs": ({}, str_dict),            # file chooser kind -> the folder it last chose from (filechoice.py)
     "general.sort.host": (["name", False], sort_order),
     "general.sort.device": (["name", False], sort_order),
     "window.width": (1180, integer(300, 10000)),

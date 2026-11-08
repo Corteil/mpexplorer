@@ -1,4 +1,5 @@
 """GTK 3 helpers shared by the windows (GTK 3.24 via PyGObject; nothing else needs installing)."""
+import os
 import time
 from pathlib import Path
 
@@ -8,6 +9,8 @@ gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
 gi.require_version("GdkPixbuf", "2.0")
 from gi.repository import Gdk, GdkPixbuf, Gio, GLib, Gtk  # noqa: E402,F401  (re-exported: import GTK only through here)
+
+from .. import filechoice  # noqa: E402
 
 ICON = Path(__file__).resolve().parent.parent / "icon.png"
 
@@ -108,6 +111,77 @@ def set_icon(b, icon, tooltip, label):
         b.set_image(None)
         b.set_label(label)
     b.set_tooltip_text(tooltip)
+
+
+ACTIONS = {"open": Gtk.FileChooserAction.OPEN, "save": Gtk.FileChooserAction.SAVE,
+           "folder": Gtk.FileChooserAction.SELECT_FOLDER}
+
+
+def choose_file(parent, title, action="open", filters=(), start=None, save_name=None, multiple=False):
+    """Every file chooser goes through here (docs/FILE_CHOOSER_PLAN.md). Gtk.FileChooserNative shows the system's own
+    dialog: Explorer on Windows, the desktop's (portal) dialog on Linux, GTK's where there is no portal.
+    filters: [(name, [patterns])]; "All files" is added after them. Returns a path, a list for multiple, or None.
+    Tests replace this function, so no real dialog opens under xvfb or on the Windows runner."""
+    accept = {"open": "Open", "save": "Save", "folder": "Choose"}[action]
+    dlg = Gtk.FileChooserNative.new(title, parent, ACTIONS[action], accept, "Cancel")
+    if start:
+        dlg.set_current_folder(start)
+    if action == "save":
+        dlg.set_do_overwrite_confirmation(True)
+        if save_name:
+            dlg.set_current_name(save_name)
+    if multiple:
+        dlg.set_select_multiple(True)
+    if filters and action != "folder":
+        for name, patterns in list(filters) + [("All files", ["*"])]:
+            f = Gtk.FileFilter()
+            f.set_name(name)
+            for p in patterns:
+                f.add_pattern(p)
+            dlg.add_filter(f)
+    try:
+        if dlg.run() != Gtk.ResponseType.ACCEPT:
+            return None
+        return list(dlg.get_filenames()) if multiple else dlg.get_filename()
+    finally:
+        dlg.destroy()
+
+
+def choose_local(parent, settings, kind, title, action="open", filters=(), save_name=None, multiple=False):
+    """choose_file starting where the last choice of this kind was made, remembering where this one was."""
+    start = filechoice.start_folder(settings, kind) if settings is not None else None
+    chosen = choose_file(parent, title, action, filters, start, save_name, multiple)
+    if chosen and settings is not None:
+        filechoice.remember(settings, kind, chosen)
+    return chosen
+
+
+class PathChooser(Gtk.Box):
+    """A path box with a Browse... button: typing or pasting a path works too. on_change() after either."""
+
+    def __init__(self, parent_of, settings, kind, title, filters=(), placeholder="", on_change=None):
+        super().__init__(spacing=6)
+        self._parent_of, self.settings, self.kind, self.title, self.filters = parent_of, settings, kind, title, filters
+        self.entry = Gtk.Entry(hexpand=True, placeholder_text=placeholder)
+        self.button = Gtk.Button(label="Browse...")
+        self.button.connect("clicked", lambda _b: self.browse())
+        self.pack_start(self.entry, True, True, 0)
+        self.pack_start(self.button, False, False, 0)
+        if on_change:
+            self.entry.connect("changed", lambda _e: on_change())
+
+    def browse(self):
+        path = choose_local(self._parent_of(), self.settings, self.kind, self.title, filters=self.filters)
+        if path:
+            self.entry.set_text(path)
+
+    def get_filename(self):
+        """The path typed or chosen (~ expanded), or None when the box is empty."""
+        text = self.entry.get_text().strip().strip('"')
+        return os.path.expanduser(text) if text else None
+
+    def set_filename(self, path):
+        self.entry.set_text(path or "")
 
 
 def icon_button(icon, tooltip, callback, label):
