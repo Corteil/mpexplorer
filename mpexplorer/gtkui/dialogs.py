@@ -1,14 +1,54 @@
 """Conflict prompt, sync dialogs and script output windows."""
+import platform
 import posixpath
+import sys
 import time
 from collections import Counter
 
 from ..backends import human, human_duration
+from ..buildinfo import build_info, version_text
 from ..errors import Cancelled
 from ..openwith import app_label, expand_command
 from ..sync import apply_plan, build_plan
 from ..transport import DeviceError
-from .common import Gdk, Gio, GLib, Gtk, error, monospace_view, scrolled
+from .common import ICON, Gdk, GdkPixbuf, Gio, GLib, Gtk, error, monospace_view, scrolled
+
+WEBSITE = "https://github.com/Corteil/mpexplorer"
+
+
+def about_details(info):
+    """The lines under the description in Help > About: which build, on what. Worth pasting into a bug report."""
+    lines = []
+    if info.get("commit"):
+        line = "Built from commit %s" % info["commit"] + (" of %s" % info["date"] if info.get("date") else "")
+        lines.append(line + (" (%s)" % info["source"] if info.get("source") else ""))
+        if info.get("changed"):
+            lines.append("with local changes not yet committed")
+    lines.append("Python %s, GTK %d.%d.%d, %s" % (platform.python_version(), Gtk.get_major_version(),
+                                                  Gtk.get_minor_version(), Gtk.get_micro_version(),
+                                                  platform.platform(terse=True)))
+    if getattr(sys, "frozen", False):
+        lines.append("Windows build (portable)")
+    return "\n".join(lines)
+
+
+def about_dialog(parent, info=None):
+    """Help > About: the version with its build, what the program is, and where it lives. The caller runs it."""
+    info = info or build_info()
+    dlg = Gtk.AboutDialog(transient_for=parent, modal=True)
+    dlg.set_program_name("MicroPython Explorer")
+    dlg.set_version(version_text(info))
+    dlg.set_comments("A dual-pane file explorer, REPL console and terminal for MicroPython boards: the Raspberry "
+                     "Pi Pico and the EMF Camp badges. Nothing is installed on the board.\n\n" + about_details(info))
+    dlg.set_website(WEBSITE)
+    dlg.set_website_label("github.com/Corteil/mpexplorer")
+    dlg.set_authors(["Brian Corteil"])
+    dlg.set_license_type(Gtk.License.MIT_X11)
+    try:
+        dlg.set_logo(GdkPixbuf.Pixbuf.new_from_file_at_size(str(ICON), 96, 96))
+    except Exception:        # noqa: BLE001 - no logo is better than no About box
+        pass
+    return dlg
 
 LABELS = {"mkdir": "Create folder", "copy": "Copy", "delete": "Delete", "delete-group": "Delete"}
 

@@ -22,4 +22,5 @@ def test_version_flag_needs_no_gtk():
     out = subprocess.run([sys.executable, "-m", "mpexplorer", "--version"], cwd=ROOT,
                          capture_output=True, text=True, timeout=30)
     assert out.returncode == 0
-    assert out.stdout.strip() == "mpexplorer %s" % mpexplorer.__version__
+    # "mpexplorer 0.1.1", plus "(build abc1234, 2026-11-08...)" when run from a git checkout
+    assert re.fullmatch(r"mpexplorer %s( \(build \w+.*\))?" % re.escape(mpexplorer.__version__), out.stdout.strip())

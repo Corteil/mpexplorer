@@ -28,8 +28,8 @@ from ..watchdog import Watchdog
 from .common import (ICON, Gdk, GdkPixbuf, GLib, Gtk, ask_yes_no, button, error, find_app, fmt_time, icon_button,
                      info, prompt, set_icon)
 from .console import ConsoleWindow
-from .dialogs import (OutputWindow, SyncDialog, TransferPopup, ask_conflict, ask_edit_conflict, ask_open_with,
-                      ask_sync_target)
+from .dialogs import (OutputWindow, SyncDialog, TransferPopup, about_dialog, ask_conflict, ask_edit_conflict,
+                      ask_open_with, ask_sync_target)
 from .editor import Editor
 from .firmware import BackupDialog, EraseDialog, FirmwareDialog
 from .libraries import LibrariesDialog
@@ -173,7 +173,14 @@ class App(Gtk.Window):
         add(t, "Erase flash...", lambda: EraseDialog(self))
         w = menu("Window")
         w.connect("show", lambda m: self._fill_window_menu(m))
+        h = menu("Help")
+        add(h, "About MicroPython Explorer", self.about)
         return bar
+
+    def about(self):
+        dlg = about_dialog(self)
+        dlg.run()
+        dlg.destroy()
 
     def _set_hidden(self, on):
         self.settings.set("general.show_hidden", on)        # _setting_changed does the rest

@@ -279,6 +279,29 @@ def test_icon_button_falls_back_to_text_when_the_theme_lacks_the_icon():
     assert b.get_label() == "Thing" and b.get_tooltip_text() == "Do the thing"
 
 
+def test_help_menu_has_about_with_the_build_version(make_app, monkeypatch):
+    from mpexplorer.gtkui import dialogs
+    app = make_app()
+    bar = [c for c in app.get_children()[0].get_children() if isinstance(c, common.Gtk.MenuBar)][0]
+    menus = {item.get_label(): item.get_submenu() for item in bar.get_children()}
+    assert list(menus)[-1] == "Help"
+    assert [i.get_label() for i in menus["Help"].get_children()] == ["About MicroPython Explorer"]
+    info = {"version": "0.1.1", "commit": "d39b18e", "date": "2026-11-08", "changed": True, "source": "CI run 57"}
+    dlg = dialogs.about_dialog(app, info)
+    assert dlg.get_version() == "0.1.1 (build d39b18e, 2026-11-08, changed locally)"
+    comments = dlg.get_comments()
+    assert "Built from commit d39b18e of 2026-11-08 (CI run 57)" in comments and "GTK 3." in comments
+    assert dlg.get_website() == "https://github.com/Corteil/mpexplorer"
+    dlg.destroy()
+    dlg = dialogs.about_dialog(app, {"version": "0.1.1", "commit": "", "date": "", "changed": False, "source": ""})
+    assert dlg.get_version() == "0.1.1" and "Built from" not in dlg.get_comments()   # an installed copy: no build
+    dlg.destroy()
+    shown = []                                          # the menu item opens it and it closes again
+    monkeypatch.setattr(dialogs.Gtk.AboutDialog, "run", lambda self: shown.append(self.get_version()))
+    menus["Help"].get_children()[0].activate()
+    assert shown and shown[0].startswith(dialogs.version_text(dialogs.build_info()).split()[0])
+
+
 def test_one_colour_icons_come_first(monkeypatch):
     # the Adwaita bundled on Windows: folder-new only as -symbolic (it showed the word), the bin in colour too
     have = {"folder-new-symbolic", "user-trash", "user-trash-symbolic", "edit-delete-symbolic", "go-up"}

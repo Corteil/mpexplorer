@@ -10,3 +10,4 @@ build/
 Backups/
 *.uf2
 *.bin
+mpexplorer/_build.json

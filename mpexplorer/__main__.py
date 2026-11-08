@@ -1,11 +1,10 @@
 import sys
 
-from . import __version__
-
 
 def main():
     if "--version" in sys.argv[1:] or "-V" in sys.argv[1:]:      # before GTK is imported: works without PyGObject
-        print("mpexplorer %s" % __version__)
+        from .buildinfo import build_info, version_text
+        print("mpexplorer %s" % version_text(build_info()))
         return
     if sys.argv[1:2] == ["--miniterm"]:     # the frozen build's own miniterm, for "Open in external terminal"
         from serial.tools import miniterm

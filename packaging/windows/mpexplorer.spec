@@ -12,6 +12,15 @@ ROOT = os.path.abspath(os.path.join(SPECPATH, "..", ".."))       # noqa: F821  (
 ICON = os.path.join(ROOT, "mpexplorer", "icon.png")             # converted to .ico by PyInstaller (needs Pillow)
 
 datas = collect_data_files("mpexplorer")
+
+# the commit being built, for Help > About and --version: the exe has no .git folder to ask (mpexplorer/buildinfo.py)
+import sys                                                      # noqa: E402
+import tempfile                                                 # noqa: E402
+sys.path.insert(0, ROOT)
+from mpexplorer import buildinfo                                # noqa: E402
+_build_dir = tempfile.mkdtemp(prefix="mpexplorer-build-")
+print("build info:", buildinfo.write_build_file(os.path.join(_build_dir, buildinfo.BUILD_FILE), ROOT))
+datas.append((os.path.join(_build_dir, buildinfo.BUILD_FILE), "mpexplorer"))
 hidden = collect_submodules("mpexplorer") + collect_submodules("serial.tools")
 try:                                                            # optional: the firmware tools' esptool
     hidden += collect_submodules("esptool") + collect_submodules("espefuse") + collect_submodules("espsecure")
