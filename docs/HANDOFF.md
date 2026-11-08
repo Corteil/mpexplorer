@@ -44,16 +44,19 @@ only this system's presets (no picocom on Windows, no Tera Term on Linux), and g
 
 **State at hand-over (2026-11-08, moving to a faster Windows PC):** all of it is on branch **`fix-putty-tildagon`** (pushed, not
 merged into `main`). ruff and the whole suite pass on the owner's PC (774 passed, GUI tests on the hidden desktop); a local build
-started fine. **Not yet tried by hand:** the PuTTY warning and its three buttons, the "press reset" message, the greyed-out list.
-To do next: (1) the owner tries those with the Tildagon, (2) merge on "merge it into main", then check CI, (3) step 5 below.
-The boards (Tildagon COM8, Pico, Pico 2) are on the original PC: copy a build there to try it (CONTRIBUTING.md, step 7).
+started fine.
+**Later on 2026-11-08, on the faster PC** (clone `D:\Code\mpexplorer`, MSYS2 `D:\msys64`, build `D:\mpexplorer-build`): the same
+774 passed / 38 skipped, build and self-test OK. **Tried by hand by the owner with a Tildagon on COM13, all working:** the PuTTY
+warning and its three buttons, the "press reset" message, the greyed-out terminal list.
+To do next: (1) merge on "merge it into main", then check CI, (2) step 5 below. A Tildagon is on this PC now (COM13);
+the Pico and Pico 2 may still be on the original PC (copy a build there: CONTRIBUTING.md, step 7).
 
 **Next (step 5 and loose ends):**
 1. The hardware table in `docs/WINDOWS_PLAN.md` section 3: miniterm / PuTTY / Tera Term against a Tildagon, a Pico and a CircuitPython Pico
    on the Windows PC (does opening the port reset the board? REPL keys? reconnect after a port rename?). Then fill `docs/HARDWARE.md`.
 2. A hand pass over the window on Windows: drives view, hidden files, transfers, editor, Open with, firmware tools (UF2 drive, esptool),
    high-DPI look. None of it has been looked at there beyond the terminal.
-3. Attach the zip to releases (`release.yml` builds only the wheel), the README Windows section is in place.
+3. Done in 0.2.0: `release.yml` calls `windows-build.yml` and attaches `mpexplorer-<version>-windows.zip` to the release.
 4. Signing waits for the owner's certificate (decided). Installer later.
 5. Earlier open items still stand: the Pi hand checks in `docs/TODO.md`, round 6 of `docs/HAND_CHECKS.md`.
 

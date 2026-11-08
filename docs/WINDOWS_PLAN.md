@@ -212,7 +212,8 @@ So opening with RTS on is harmless; closing while RTS is on hangs the firmware (
 bootloader). PuTTY asserts RTS with any `-sercfg` flow setting and cannot turn it off, so it cannot be fixed with a different
 preset. mpexplorer now warns before PuTTY (or plink) opens a Tildagon and offers miniterm for that run
 (`extterm.close_hang_warning`), and a connect that fails with error 31 says to press the board's reset button
-(`extterm.board_hung`). Not tried: PuTTY on Linux, PuTTY with a Pico or the 2022 badge (which needs RTS on to talk at all), Tera Term.
+(`extterm.board_hung`). Both tried by hand by the owner on 2026-11-08 (Tildagon on COM13, a second Windows 11 PC): the warning and its
+three buttons, the press-reset message, and the Preferences > Terminal list greying out programs not installed, all working. Not tried: PuTTY on Linux, PuTTY with a Pico or the 2022 badge (which needs RTS on to talk at all), Tera Term.
 
 ## 4. Implementation order
 1. **Portability fixes in the core** (section 1) behind small helpers that take the platform as an argument, so Linux tests can
