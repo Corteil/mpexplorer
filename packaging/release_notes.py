@@ -16,7 +16,8 @@ def changelog_section(version, text):
 
 
 def notes(tag):
-    install = (ROOT / "packaging" / "release_install.md").read_text().replace("{tag}", tag).strip()
+    install = (ROOT / "packaging" / "release_install.md").read_text().replace("{tag}", tag)
+    install = install.replace("{version}", tag.removeprefix("v")).strip()
     changes = changelog_section(tag.removeprefix("v"), (ROOT / "CHANGELOG.md").read_text())
     return changes + "\n\n" + install + "\n"
 

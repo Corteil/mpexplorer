@@ -92,5 +92,8 @@ def test_release_notes_have_changelog_and_install_for_the_tag():
     assert text.startswith("First release.") and "### Known limits" in text
     assert "git+https://github.com/Corteil/mpexplorer@v0.1.0\n" in text and "{tag}" not in text
     assert "## [0.1.0]" not in text and "## [Unreleased]" not in text
+    windows = release_notes.notes("v0.2.0")                     # the first release with the Windows build attached
+    assert "## Install (Windows 10 and 11)" in windows and "`mpexplorer-0.2.0-windows.zip`" in windows
+    assert "{version}" not in windows and "{tag}" not in windows and windows.startswith("### Added")
     with pytest.raises(SystemExit):
         release_notes.notes("v9.9.9")

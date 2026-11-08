@@ -3,6 +3,7 @@ name: Windows build
 # checked by running the built exe, uploaded as an artifact (a zip of the folder). Unsigned until the certificate arrives.
 on:
   workflow_dispatch:
+  workflow_call:          # the release workflow builds the zip it attaches with this same job
   push:                   # any branch where something that ends up in the exe changes, so main always has a current zip
     paths: ["mpexplorer/**", "packaging/windows/**", ".github/workflows/windows-build.yml", "pyproject.toml"]
 

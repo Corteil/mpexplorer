@@ -7,7 +7,11 @@ permissions:
   contents: write
 
 jobs:
+  windows:                # the portable Windows build, made and checked exactly as on every push (windows-build.yml)
+    uses: ./.github/workflows/windows-build.yml
+
   build:
+    needs: windows        # no release without its Windows zip
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -18,9 +22,19 @@ jobs:
         run: |
           v=$(python -c "import re; print(re.search(r'^version = \"([^\"]+)\"', open('pyproject.toml').read(), re.M).group(1))")
           test "${GITHUB_REF_NAME}" = "v${v}" || { echo "tag ${GITHUB_REF_NAME} does not match pyproject version ${v}"; exit 1; }
+          echo "VERSION=${v}" >> "$GITHUB_ENV"
       - run: pip install -e '.[dev]' build twine
       - run: ruff check . && pytest -q
       - run: python -m build && twine check dist/*
+      - uses: actions/download-artifact@v4
+        with:
+          name: mpexplorer-windows
+          path: windows
+      - name: The Windows zip, named for the release
+        run: |
+          mv windows/mpexplorer-windows.zip "dist/mpexplorer-${VERSION}-windows.zip"
+          unzip -l "dist/mpexplorer-${VERSION}-windows.zip" | grep -q "mpexplorer/mpexplorer.exe"
+          ls -l dist
       - name: Release notes (CHANGELOG section and install instructions)
         run: python packaging/release_notes.py "${GITHUB_REF_NAME}" > release-notes.md
       - uses: softprops/action-gh-release@v2

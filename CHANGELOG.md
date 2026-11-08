@@ -2,13 +2,34 @@
 
 All notable changes to mpexplorer. The format follows [Keep a Changelog](https://keepachangelog.com/).
 
-## [Unreleased]
+## [0.2.0] - 2026-11-08
 
 ### Added
+- Windows 10 and 11: a portable build (`mpexplorer-0.2.0-windows.zip`, GTK 3 from MSYS2, frozen with PyInstaller), with
+  pyserial, miniterm and esptool inside. Not signed yet. Tried by hand with a Tildagon; see `docs/WINDOWS_PLAN.md`.
+- Open in external terminal (Device menu and the console): the board's real REPL in miniterm, PuTTY, Tera Term or a
+  command of your own, reconnecting when it closes (Preferences > Terminal).
 - Help menu: About shows the version with the build it came from (commit and date; `--version` prints the same), and
   Check for updates asks GitHub, only when chosen, whether a newer release or newer changes on main are out.
-- Windows: a portable build (GTK 3 from MSYS2, PyInstaller), an external terminal for the board's REPL, and
-  `packaging/windows/build-local.ps1` to build it on a PC.
+- File selectors for files on this computer, the system's own dialog on Linux and Windows, each opening where the last
+  one of its kind chose from: the firmware file (a path box plus Browse...), flash backups, library folders and zips,
+  and the program for Open with, Preferences > File types and Preferences > Terminal.
+- Install libraries > From this computer: install `.py`/`.mpy` files, a folder or a `.zip` without saving a source
+  first; a folder or zip can be kept as a library source with a tick.
+- The sources lists (Preferences > Sources, Manage sources...) show the built-in sources above your own.
+- `packaging/windows/build-local.ps1` builds and tests the Windows version on a PC, the GUI tests on a hidden desktop
+  and on every core.
+
+### Changed
+- Open with names the system default program ("System default application (Notepad++)") and shows a short name for an
+  app GTK only knows by its path.
+- Toolbar icons: the one-colour (symbolic) icons first, so the buttons match and New folder and Rename have icons on
+  Windows; the Connect button shows two arrows once connected.
+
+### Fixed
+- Windows: Preferences did not open, a saved Microsoft Store app "was not installed any more", a file on the board could
+  not be opened with another program (no ':' in its cache folder), and the external terminal crashed from the window.
+- Closing the window while a folder was still loading no longer opens a "Cannot open folder" box afterwards.
 
 ## [0.1.1] - 2026-11-04
 
