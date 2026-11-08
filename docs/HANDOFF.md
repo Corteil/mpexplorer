@@ -5,7 +5,21 @@ Written so a new Claude session can take over with no other context. Update it a
 v1.28.0, the `gui` job running every `tests/test_gui_*.py` under xvfb) and the Windows build green. Older sections below are
 history and may be out of date.
 
-## START HERE (2026-11-06): the Windows build, done from the owner's Windows 11 PC
+## START HERE (2026-11-08, late): releases 0.2.1 and 0.2.2, then the badge app store
+Work is on the second Windows PC (clone `D:\Code\mpexplorer`, MSYS2 `D:\msys64`, build `D:\mpexplorer-build`; boards
+here: Tildagon COM23 and COM13, Picos, the 2022 badge; the owner also tests on the Pi).
+- **0.2.1** (PuTTY warning, reboop badge screen, Windows port names) and **0.2.2** (external terminal fixes found on the
+  Pi: port lock and reconnect wait, RTS on in miniterm for the 2022 badge, `--filter direct`, RTS off on every close) are
+  released, with the Windows zip.
+- **Badge app store** (`docs/APP_STORE_PLAN.md`): phases 1 and 2 (core `appstore.py`, dialog `gtkui/appstore.py`, Tools >
+  Badge apps..., favourites) built on branch `app-store-core` and merged into `main` after round 8 passed on Windows and
+  the Pi; in CHANGELOG *Unreleased*. Left: a store folder copied to another computer, a 2024 badge on Tildagon OS 1.x,
+  pruning old releases from the store (needs knowing which release a badge has), and optionally
+  `--mirror-app-store <folder>` for a headless Pi.
+- Branch CI: pushing a branch runs only the Windows build; run the full CI with `gh workflow run ci.yml --ref <branch>`
+  (a plain Windows Python joins paths with '\', MSYS2's with '/': a test that passed locally failed there once).
+
+## (2026-11-06): the Windows build, done from the owner's Windows 11 PC
 That day's session ran on the owner's **Windows PC** (not the Pi), in the clone at `D:\OneDrive\Documents\Code\EMF_Camp\mpexplorer`.
 Plan and full progress: `docs/WINDOWS_PLAN.md` ("Progress"). All of it is merged on `main`.
 

@@ -24,6 +24,12 @@ board over USB serial. **Nothing is installed on the board** in normal use: it w
   Show filter and *Select installed* act on the result. **Custom sources** (Preferences > Sources, or *Manage sources...* in the dialog)
   add a maker's bundle repo (SparkFun Qwiic), a `package.json` repo (Pimoroni `phew`), a micropython-lib style index, or a folder or
   .zip of your own libraries
+- **Badge apps** (Tools menu): the EMF badge app store for Tildagon OS badges (2024 and 2026). Browse and search its apps by
+  category, see what is on the badge and what has an update, and install, update or remove them over USB (the badge needs no
+  Wi-Fi), or install one by its code. *Download for offline* keeps the whole store (about 12 MB) in a folder on this computer,
+  so apps can be installed with no internet at all; *Store folder...* puts that folder anywhere, such as a USB stick to copy
+  to another computer. Star your **favourites** and *Install all favourites* puts every one of them on a badge, which makes
+  setting up several badges the same way quick. *Restart the badge* lets its menu see the new apps
 - **Custom firmware sources** (Tools > Install firmware > *Manage sources...*): a maker's GitHub releases (presets for Pimoroni MicroPython,
   RP2350 and Pico LiPo) or a direct HTTPS link. A source is checked before it is saved, a site that is not GitHub is trusted only after
   you say so, and the chip check still refuses a wrong image before anything is written

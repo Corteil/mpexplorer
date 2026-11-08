@@ -1,6 +1,6 @@
 # Hand checks (CircuitPython, libraries, badges, custom sources)
 
-Rounds 1 to 5 were done by the owner in the real window on 2026-11-01 and passed; round 7 (Windows) on 2026-11-08, passed; round 6 is waiting. Each first passed by script or under a fake display.
+Rounds 1 to 5 were done by the owner in the real window on 2026-11-01 and passed; rounds 7 (Windows) and 8 (Badge apps) on 2026-11-08, passed; round 6 is waiting. Each first passed by script or under a fake display.
 To repeat them, start the app from `main` after closing any old window. Tell Claude what you see; screenshots help.
 Round 7 is for the Windows build: use the desktop shortcut *mpexplorer (test build)* (`D:\mpexplorer-build\dist\mpexplorer\mpexplorer.exe`).
 
@@ -13,6 +13,7 @@ Round 7 is for the Windows build: use the desktop shortcut *mpexplorer (test bui
 | 5 | Custom library sources | OK |
 | 6 | Phase 5: folder and index library sources, exact revision, LiPo preset, board memory | not yet tried |
 | 7 | The window on Windows: drives, hidden files, copies and Windows names, editor and Open with, firmware tools, badge screen, port names, high DPI | OK (owner, Windows 11, 2026-11-08) |
+| 8 | Badge apps: browse, offline store, favourites, install, update, remove, by code, restart | OK on Windows 11 and the Pi (owner, 2026-11-08); a copied store folder and a badge on OS 1.x not tried |
 
 Bench boards: a Pico 2 with CircuitPython (`CIRCUITPY` drive), a Pico 2 with MicroPython, a Pico W with MicroPython 1.29.0.
 
@@ -161,6 +162,20 @@ Pico W CircuitPython 10.3.1 COM17 (`CIRCUITPY` drive G:). Port numbers can diffe
 2. Help > About MicroPython Explorer: **expect** the version and the commit it was built from.
 3. Optional: put an empty `portable.txt` next to `mpexplorer.exe`, restart: **expect** settings in a `data` folder there instead.
    Delete it again to go back.
+
+---
+
+## Round 8: Badge apps (docs/APP_STORE_PLAN.md; passed on Windows 11 and the Pi, owner, 2026-11-08)
+1. **No badge connected:** Tools > Badge apps... **Expect** the list (about 263 apps), "No badge connected", and working search,
+   Category and Show filters. Click a star: the app shows under Show > Favourites, and stays a favourite after reopening.
+2. **Download for offline:** about 12 MB the first time; the Offline column empties and the top line says how many are kept.
+3. **With a Tildagon connected:** the badge line names its Tildagon OS, how many apps are on it and the free space; On the badge
+   shows versions, "(update)" where the store is newer, and Show > Updates available lists only those.
+4. **Install, Update, Remove:** each asks first; the note says what was done; **Restart the badge** disconnects, the badge
+   restarts and its menu shows the change.
+5. **Install by code** with an app's 8-digit code, and **Install all favourites** (only missing or older favourites go on).
+6. **Offline:** with no network, reopen the dialog: "offline: the saved list", and a kept app still installs.
+7. Not tried yet: a store folder copied to another computer (Store folder... on it, offline), and a 2024 badge on Tildagon OS 1.x.
 
 ---
 

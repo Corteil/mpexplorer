@@ -17,8 +17,9 @@ a star column for favourites; details with requirements met or not; Install / Up
 code, Install all favourites, Restart the badge (disconnect with a soft reset); Refresh, Download for offline, Store
 folder...; it browses and downloads with no badge, and says so for a board not running Tildagon OS. **Tried by the owner
 in the real window on Windows with the Tildagon (OS v2.2.0): all working** (2026-11-08). Phase 3 came with it (the saved
-list offline, *not downloaded* rows, Store folder...); still to try: a store folder copied to another computer, and the
-Pi. Phase 4 left: a 2024 badge on OS 1.x, README, HAND_CHECKS round 8, HARDWARE.md. Not built: removing old releases from the store (`Store.prune` exists, but the badge does not record
+list offline, *not downloaded* rows, Store folder...). **Tried by the owner on the Raspberry Pi too: working**
+(2026-11-08, branch installed with pipx from GitHub; full CI green on the branch at `ad55a15`). Still to try: a store
+folder copied to another computer. Phase 4 left: a 2024 badge on OS 1.x, README, HAND_CHECKS round 8, HARDWARE.md. Not built: removing old releases from the store (`Store.prune` exists, but the badge does not record
 which release it has, so what an installed app still needs is unknown); left until it matters.
 Asked for by the owner: the badge
 app store in mpexplorer: download its catalogue, browse it, and keep a **local store** on this computer so apps can be

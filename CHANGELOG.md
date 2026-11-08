@@ -4,6 +4,19 @@ All notable changes to mpexplorer. The format follows [Keep a Changelog](https:/
 
 ## [Unreleased]
 
+### Added
+- **Tools > Badge apps...**: the EMF badge app store for Tildagon OS badges (the 2024 and 2026 badges). Browse its apps
+  (search, Category, and Show: All, Favourites, On the badge, Updates available, Not on the badge), see what each needs, and
+  install, update or remove apps on the connected badge over USB, or install one by its 8-digit code. Apps go where the
+  badge's own App Store puts them (`/apps`, `/backgrounds` or `/pattern`, with its `tildagon.json` and `metadata.json`), and an
+  install checks the badge has room first. *Restart the badge* disconnects with a soft reset so its menu sees new apps.
+- An offline app store: *Download for offline* keeps every app (about 12 MB) in a store folder, by default in mpexplorer's
+  data folder (`~/.local/share/mpexplorer/appstore`, `%LOCALAPPDATA%\mpexplorer\appstore`); *Store folder...* moves it, for
+  example to a USB stick, and a copied folder works on another computer. With no internet the saved list and kept apps
+  are used.
+- **Favourites** in the app store, kept in the store folder: a Favourites filter, and *Install all favourites* puts every
+  favourite the badge lacks, or has an older version of, on it in one go.
+
 ## [0.2.2] - 2026-11-08
 
 ### Fixed
