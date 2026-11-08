@@ -4,11 +4,31 @@ All notable changes to mpexplorer. The format follows [Keep a Changelog](https:/
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-11-08
+
 ### Fixed
 - PuTTY with a Tildagon: closing the port while RTS is on hangs the badge until its reset button is pressed, and PuTTY always
   keeps RTS on, so mpexplorer could not reconnect after it. Open in external terminal now warns first and offers miniterm for
   that run (Preferences keep PuTTY). A connection that fails because a board stopped answering on USB (Windows error 31) now
   says to press its reset button.
+- Windows port list: every board was called "USB Serial Device (COMn)", so two boards were easy to mix up. Boards are now named
+  by their USB id ("Tildagon", "Pico / Pico 2", "EMF 2022 badge") or by their firmware ("CircuitPython board"), as on Linux.
+- An ESP32-S3 in its ROM bootloader (USB id `303a:1001`, which is also where a hung Tildagon showed up) is listed as
+  "ESP32-S3 bootloader: no REPL, press reboop", and Connect on it says to press reboop or use Tools > Install firmware,
+  instead of only "could not enter the raw REPL".
+
+### Changed
+- Badge screen: the connection state is a coloured ring round the edge of the round screen (green idle, amber busy, red
+  disconnected) instead of a dot. After a disconnect it says "press reboop button", the Tildagon's name for its reset button.
+  Choosing PuTTY anyway leaves "press reboop / when finished" on the badge, since it will hang when PuTTY closes.
+- Preferences > Terminal lists "miniterm (the default, comes with mpexplorer)" first and only this system's presets (no
+  picocom on Windows, no Tera Term on Linux), and greys out programs that are not installed, instead of letting them fail
+  with "was not found".
+
+### Tested
+- On Windows 11 with a Tildagon, a Pico W and a Pico 2 on MicroPython 1.29.0, and a Pico 2 and a Pico W on CircuitPython
+  10.3.1: miniterm and PuTTY (opening the port resets none of them; the REPL keys work), and the whole window by hand
+  (`docs/HAND_CHECKS.md` round 7). Results in `docs/HARDWARE.md` and `docs/WINDOWS_PLAN.md`.
 
 ## [0.2.0] - 2026-11-08
 
