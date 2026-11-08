@@ -13,7 +13,7 @@ here: Tildagon COM23 and COM13, Picos, the 2022 badge; the owner also tests on t
   released, with the Windows zip.
 - **Badge app store** (`docs/APP_STORE_PLAN.md`): phases 1 and 2 (core `appstore.py`, dialog `gtkui/appstore.py`, Tools >
   Badge apps..., favourites) built on branch `app-store-core` and merged into `main` after round 8 passed on Windows and
-  the Pi; in CHANGELOG *Unreleased*. Left: a store folder copied to another computer, a 2024 badge on Tildagon OS 1.x,
+  the Pi; released in **0.3.0**. Left: a store folder copied to another computer, a 2024 badge on Tildagon OS 1.x,
   pruning old releases from the store (needs knowing which release a badge has), and optionally
   `--mirror-app-store <folder>` for a headless Pi.
 - Branch CI: pushing a branch runs only the Windows build; run the full CI with `gh workflow run ci.yml --ref <branch>`
