@@ -33,6 +33,20 @@ LIBRARY_PRESETS = (
     {"name": "SparkFun Qwiic", "kind": "bundle", "repo": "sparkfun/qwiic_py", "prefix": "qwiic-py",
      "for": "circuitpython"},
 )
+# What comes with mpexplorer, listed above the owner's own sources in the sources lists (they cannot be removed).
+# The names are the ones the install dialogs show; tests check the addresses against the catalogs that use them.
+BUILTIN = {
+    "firmware": (
+        {"name": "MicroPython", "where": "micropython.org/download"},
+        {"name": "CircuitPython", "where": "circuitpython.org/downloads"},
+        {"name": "EMF Camp badges (Tildagon, TiDAL)", "where": "emfcamp.github.io (the badge flashers)"},
+    ),
+    "libraries": (
+        {"name": "micropython-lib (MicroPython)", "where": "https://micropython.org/pi/v2"},
+        {"name": "Adafruit bundle (CircuitPython)", "where": "adafruit/Adafruit_CircuitPython_Bundle"},
+        {"name": "Community bundle (CircuitPython)", "where": "adafruit/CircuitPython_Community_Bundle"},
+    ),
+}
 Check = namedtuple("Check", "ok message trust_host")        # trust_host: a site the owner must approve before saving
 
 

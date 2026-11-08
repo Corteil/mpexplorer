@@ -6,7 +6,7 @@ import threading
 
 from .. import custom_firmware, custom_libraries, sources
 from ..filechoice import example_path
-from .common import GLib, Gtk, ask_yes_no, choose_local, info, scrolled
+from .common import GLib, Gtk, Pango, ask_yes_no, choose_local, info, scrolled
 
 
 def _firmware_newest(src):
@@ -238,10 +238,13 @@ class SourcesManager(Gtk.Box):
         self.check = check or self.cfg["check"]
         self.presets = self.cfg["presets"]
         self.pack_start(Gtk.Label(label=self.cfg["title"], xalign=0), False, False, 0)
-        self.store = Gtk.ListStore(str, str, str)                           # name, where, newest
+        self.store = Gtk.ListStore(str, str, str, bool)             # name, where, newest, built in (not removable)
         self.view = Gtk.TreeView(model=self.store)
         for i, head in enumerate(("Name", "Repository or address", "Newest")):
-            self.view.append_column(Gtk.TreeViewColumn(head, Gtk.CellRendererText(), text=i))
+            cell = Gtk.CellRendererText()
+            col = Gtk.TreeViewColumn(head, cell, text=i)
+            col.set_cell_data_func(cell, self._style_row)
+            self.view.append_column(col)
         self.view.get_selection().connect("changed", lambda _s: self._sensitive())
         self.pack_start(scrolled(self.view), True, True, 0)
 
@@ -287,11 +290,17 @@ class SourcesManager(Gtk.Box):
             self.refresh()
 
     # -- what is shown ---------------------------------------------------------------------------------------------
+    @staticmethod
+    def _style_row(_col, cell, model, it, _data):
+        cell.set_property("style", Pango.Style.ITALIC if model[it][3] else Pango.Style.NORMAL)   # built in: italic
+
     def refresh(self):
         selected = self.selected()
         self.store.clear()
+        for src in sources.BUILTIN[self.section]:                  # what comes with mpexplorer, first
+            self.store.append([src["name"], src["where"], "built in", True])
         for src in self.settings.get(self.cfg["key"]):
-            self.store.append([src["name"], where(src), ""])
+            self.store.append([src["name"], where(src), "", False])
         self.hosts.clear()
         for host in sorted(sources.trusted_hosts(self.settings)):
             self.hosts.append([host])
@@ -310,19 +319,23 @@ class SourcesManager(Gtk.Box):
         self.add_menu.show_all()
         if selected:
             for row in self.store:
-                if row[0] == selected:
+                if row[0] == selected and not row[3]:
                     self.view.get_selection().select_iter(row.iter)
         self._sensitive()
 
     def selected(self):
+        """The name of the selected custom source; '' for none or a built-in one (those cannot be removed)."""
         model, it = self.view.get_selection().get_selected()
-        return model[it][0] if it else ""
+        return model[it][0] if it and not model[it][3] else ""
+
+    def custom_count(self):
+        return sum(1 for row in self.store if not row[3])
 
     def _sensitive(self):
         one = bool(self.selected())
         self.remove_btn.set_sensitive(one)
         self.check_btn.set_sensitive(one)
-        self.check_all_btn.set_sensitive(len(self.store) > 0)
+        self.check_all_btn.set_sensitive(self.custom_count() > 0)
         self.untrust_btn.set_sensitive(self.hosts_view.get_selection().get_selected()[1] is not None)
 
     # -- the actions -----------------------------------------------------------------------------------------------
@@ -401,7 +414,8 @@ class SourcesManager(Gtk.Box):
                 self.status.set_text("Could not read the sources: %s" % exc)
                 return
             for row in self.store:
-                row[2] = res.get(row[0], "")
+                if not row[3]:
+                    row[2] = res.get(row[0], "")
             self.status.set_text("Newest versions read.")
         self._background(work, done)
 

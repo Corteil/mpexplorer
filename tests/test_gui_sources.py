@@ -38,6 +38,13 @@ def wait_until(test, ms=3000):
     assert test()
 
 
+FIRST = 3                       # the owner's sources come after the three built-in rows
+
+
+def custom(mgr):
+    return [r[0] for r in mgr.store if not r[3]]
+
+
 def make(tmp_path, monkeypatch, check_ok=True, trust=None, answer=True):
     app = App(settings=Settings.load(str(tmp_path / "cfg.json")))
     asked = []
@@ -61,7 +68,7 @@ def test_the_menu_offers_the_presets_and_custom_and_greys_the_ones_already_added
         S.add_source(app.settings, "firmware", S.validate_firmware_source(S.FIRMWARE_PRESETS[0]))
         enabled = [i.get_sensitive() for i in mgr.add_menu.get_children() if i.get_label()]
         assert enabled == [False, True, True, True]
-        assert [r[0] for r in mgr.store] == ["Pimoroni MicroPython"]
+        assert custom(mgr) == ["Pimoroni MicroPython"]
     finally:
         app.destroy()
 
@@ -72,7 +79,7 @@ def test_adding_a_preset_checks_it_first_and_a_failed_check_saves_nothing(tmp_pa
         mgr.add_preset(S.FIRMWARE_PRESETS[0])
         wait_until(lambda: app.settings.get("sources.firmware"))
         assert checks == ["Pimoroni MicroPython"] and "3 boards" in mgr.status.get_text()
-        assert [r[0] for r in mgr.store] == ["Pimoroni MicroPython"]
+        assert custom(mgr) == ["Pimoroni MicroPython"]
     finally:
         app.destroy()
     (tmp_path / "second").mkdir()
@@ -144,11 +151,11 @@ def test_remove_asks_and_a_trusted_site_in_use_cannot_be_dropped(tmp_path, monke
         mgr.hosts_view.get_selection().select_path(Gtk.TreePath("0"))
         mgr.untrust_selected()
         assert "Still in use" in asked[-1][0] and app.settings.get("sources.trusted_hosts") == ["dl.maker.example"]
-        mgr.view.get_selection().select_path(Gtk.TreePath("0"))
+        mgr.view.get_selection().select_path(Gtk.TreePath(str(FIRST)))
         mgr.remove_selected()
         assert "Remove source" in asked[-1][0] and app.settings.get("sources.firmware") == []
         assert app.settings.get("sources.trusted_hosts") == []                    # nothing uses the site any more
-        assert [r[0] for r in mgr.store] == [] and [h[0] for h in mgr.hosts] == []
+        assert custom(mgr) == [] and [h[0] for h in mgr.hosts] == []
     finally:
         app.destroy()
 
@@ -157,7 +164,7 @@ def test_check_and_check_all_report_without_a_board(tmp_path, monkeypatch):
     app, mgr, _, checks = make(tmp_path, monkeypatch)
     try:
         S.add_source(app.settings, "firmware", S.validate_firmware_source(S.FIRMWARE_PRESETS[0]))
-        mgr.view.get_selection().select_path(Gtk.TreePath("0"))
+        mgr.view.get_selection().select_path(Gtk.TreePath(str(FIRST)))
         mgr.check_selected()
         wait_until(lambda: mgr.status.get_text().startswith("OK: Pimoroni MicroPython"))
         assert checks == ["Pimoroni MicroPython"]
@@ -169,9 +176,41 @@ def test_check_and_check_all_report_without_a_board(tmp_path, monkeypatch):
         monkeypatch.setattr(ui.custom_firmware, "make_catalog", lambda src: FakeCatalog())
         mgr.check_all()
         wait_until(lambda: mgr.status.get_text() == "Newest versions read.")
-        assert mgr.store[0][2] == "v1.2 (2026-09-01)"
+        assert mgr.store[FIRST][2] == "v1.2 (2026-09-01)" and mgr.store[0][2] == "built in"
     finally:
         app.destroy()
+
+
+def test_the_built_in_sources_are_listed_first_and_cannot_be_removed(tmp_path, monkeypatch):
+    # owner, 2026-11-08: "the preinstalled sources should be displayed in the sources lists"
+    app, mgr, asked, checks = make(tmp_path, monkeypatch)
+    try:
+        assert [(r[0], r[2], r[3]) for r in mgr.store] == [
+            ("MicroPython", "built in", True), ("CircuitPython", "built in", True),
+            ("EMF Camp badges (Tildagon, TiDAL)", "built in", True)]
+        assert not mgr.check_all_btn.get_sensitive()                    # nothing of the owner's to check yet
+        mgr.view.get_selection().select_path(Gtk.TreePath("0"))
+        assert mgr.selected() == "" and not mgr.remove_btn.get_sensitive() and not mgr.check_btn.get_sensitive()
+        mgr.remove_selected()
+        mgr.check_selected()
+        assert asked == [] and checks == []
+        S.add_source(app.settings, "firmware", S.validate_firmware_source(S.FIRMWARE_PRESETS[0]))
+        assert [r[0] for r in mgr.store][:FIRST] == [s["name"] for s in S.BUILTIN["firmware"]]
+        assert custom(mgr) == ["Pimoroni MicroPython"] and mgr.check_all_btn.get_sensitive()
+        libs = ui.SourcesManager(app, app, section="libraries")
+        assert [r[0] for r in libs.store] == ["micropython-lib (MicroPython)", "Adafruit bundle (CircuitPython)",
+                                              "Community bundle (CircuitPython)"]
+    finally:
+        app.destroy()
+
+
+def test_the_built_in_library_rows_match_the_catalogs_and_the_install_dialog():
+    from mpexplorer import cpbundle
+    from mpexplorer import libraries as lib
+    rows = {r["name"]: r["where"] for r in S.BUILTIN["libraries"]}
+    assert rows["micropython-lib (MicroPython)"] == lib.INDEX
+    assert rows["Adafruit bundle (CircuitPython)"] == cpbundle.SOURCES["adafruit"][1]
+    assert rows["Community bundle (CircuitPython)"] == cpbundle.SOURCES["community"][1]
 
 
 def test_preferences_has_a_sources_page_and_the_firmware_dialog_a_manage_button(tmp_path, monkeypatch):
@@ -205,6 +244,6 @@ def test_a_folder_of_the_owners_own_libraries_is_added_without_any_site_to_trust
         wait_until(lambda: app.settings.get("sources.libraries"))
         assert app.settings.get("sources.libraries")[0]["path"] == str(mine)
         assert app.settings.get("sources.trusted_hosts") == []
-        assert [r[0] for r in mgr.store] == ["My libs"] and mgr.store[0][1] == str(mine)
+        assert custom(mgr) == ["My libs"] and mgr.store[FIRST][1] == str(mine)
     finally:
         app.destroy()
