@@ -616,7 +616,8 @@ class App(Gtk.Window):
 
     def _connect_state(self, state, pane=None):
         """The Connect button shows what a click would do: plug in, unplug, or wait."""
-        icon, tip, label = {"connect": ("network-offline", "Connect to the board", "Connect"),
+        icon, tip, label = {"connect": (("network-transmit-receive", "network-offline"), "Connect to the board",
+                                        "Connect"),
                             "connecting": ("emblem-synchronizing", "Connecting...", "Connecting..."),
                             "disconnect": ("network-wired", "Disconnect from the board", "Disconnect")}[state]
         set_icon((pane or self.right).connect_btn, icon, tip, label)
