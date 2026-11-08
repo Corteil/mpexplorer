@@ -59,7 +59,8 @@ def test_a_ci_build_is_never_changed_locally(tmp_path):
     (tmp_path / ".git").mkdir()
     out = str(tmp_path / buildinfo.BUILD_FILE)
     edited = fake_git(dict(CLEAN, status=" M mpexplorer/app.py"))
-    info = buildinfo.write_build_file(out, str(tmp_path), {"GITHUB_SHA": "d39b18e99", "GITHUB_RUN_NUMBER": "34"}, edited)
+    ci = {"GITHUB_SHA": "d39b18e99", "GITHUB_RUN_NUMBER": "34"}
+    info = buildinfo.write_build_file(out, str(tmp_path), ci, edited)
     assert (info["commit"], info["changed"]) == ("d39b18e", False)
     other = buildinfo.write_build_file(out, str(tmp_path), {"GITHUB_SHA": "abc0000"}, edited)
     assert other["changed"] is True                     # a different commit than CI asked for: say so
