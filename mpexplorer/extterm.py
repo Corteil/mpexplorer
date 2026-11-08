@@ -9,7 +9,9 @@ spaces cannot split an argument: {port} (COM5, /dev/ttyACM0), {portnum} (5 for C
 {title}. An empty template means the default for this system: pyserial's miniterm (no extra install), in a new
 console window on Windows and inside a terminal emulator on Linux.
 """
+import ntpath
 import os
+import posixpath
 import re
 import shutil
 import subprocess
@@ -50,7 +52,9 @@ def installed(text, platform=None, which=shutil.which, exists=os.path.isfile):
         program = split_command(template, platform)[0]
     except (ValueError, IndexError):
         return False
-    return exists(program) if os.path.isabs(program) else bool(which(program))
+    # the path rules of the platform asked about, not the one running: "C:\..." is not absolute to posixpath
+    isabs = ntpath.isabs if is_windows(platform) else posixpath.isabs
+    return exists(program) if isabs(program) else bool(which(program))
 
 
 def template_of(text):
