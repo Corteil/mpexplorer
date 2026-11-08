@@ -481,7 +481,9 @@ def test_board_os_version_asks_ota_and_is_none_elsewhere():
 
 # -- where the store lives ------------------------------------------------------------------------------------------
 def test_the_store_lives_in_kept_data_not_the_cache(tmp_path):
-    assert paths.data_dir("linux", {"XDG_DATA_HOME": "/x/data"}, "/home/b", exe_folder=None) == "/x/data/mpexplorer"
+    # built with os.path.join like paths.py itself (a plain Windows Python joins with '\', MSYS2's with '/')
+    assert paths.data_dir("linux", {"XDG_DATA_HOME": "/x/data"}, "/home/b", exe_folder=None) == os.path.join(
+        "/x/data", "mpexplorer")
     assert paths.data_dir("linux", {}, "/home/b", exe_folder=None) == os.path.join("/home/b", ".local", "share",
                                                                                   "mpexplorer")
     assert paths.data_dir("win32", {"LOCALAPPDATA": "C:\\L"}, "C:\\Users\\b", exe_folder=None) == os.path.join(
