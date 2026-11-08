@@ -277,7 +277,7 @@ class App(Gtk.Window):
         """Two groups that share one row when the window is wide enough and wrap onto a second row when it is not."""
         conn = Gtk.Box(spacing=4)
         conn.pack_start(icon_button("view-refresh", "Scan for serial ports", self.scan_ports, "Scan"), False, False, 0)
-        self.send_time_btn = icon_button(("appointment-soon", "appointment-new", "x-office-calendar"),
+        self.send_time_btn = icon_button(("alarm", "appointment-soon", "appointment-new", "x-office-calendar"),
                                          "Set the board's clock to this computer's time (UTC)",
                                          self.set_board_clock, "Send time")
         conn.pack_start(self.send_time_btn, False, False, 0)
