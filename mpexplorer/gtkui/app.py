@@ -26,8 +26,8 @@ from ..remember import (chip_key, device_start, host_start, move_folder_to_chip,
 from ..settings import Settings, segment
 from ..transport import RawREPL
 from ..watchdog import Watchdog
-from .common import (ICON, Gdk, GdkPixbuf, GLib, Gtk, ask_yes_no, button, error, find_app, fmt_time, icon_button,
-                     info, prompt, set_icon)
+from .common import (ICON, Gdk, GdkPixbuf, GLib, Gtk, ask_choice, ask_yes_no, button, error, find_app, fmt_time,
+                     icon_button, info, prompt, set_icon)
 from .console import ConsoleWindow
 from .dialogs import (OutputWindow, SyncDialog, TransferPopup, about_dialog, ask_conflict, ask_edit_conflict,
                       ask_open_with, ask_sync_target, update_dialog)
@@ -522,7 +522,10 @@ class App(Gtk.Window):
             if exc:
                 self._connect_state("connect", pane)
                 self.set_status("Connection failed")
-                error(self, "Connection failed", str(exc))
+                text = str(exc)
+                if extterm.board_hung(exc):
+                    text = "%s\n\n(%s)" % (extterm.HUNG_ADVICE, text)
+                error(self, "Connection failed", text)
                 return
             move_folder_to_chip(self.settings, board, res[4])
             self.connected(res[0], res[1], port, res[4], res[2], rts=res[3], usb=board, pane=pane,
@@ -1125,8 +1128,9 @@ class App(Gtk.Window):
         if self.runner.busy:
             info(self, "Busy", "Wait for the running file operation to finish first.")
             return
+        title = "mpexplorer - %s" % (conn.label or conn.port)
         ext = extterm.ExternalTerminal(conn.port, conn.usb or conn.port, self.settings.get("terminal.external_command"),
-                                       title="mpexplorer - %s" % (conn.label or conn.port))
+                                       title=title)
         try:
             ext.check()
         except (extterm.TerminalError, ValueError) as e:
@@ -1134,9 +1138,23 @@ class App(Gtk.Window):
             return
         again = {"auto": "reconnects when it closes", "ask": "asks whether to reconnect when it closes",
                  "never": "stays disconnected afterwards"}[self.settings.get("terminal.reconnect")]
-        if not ask_yes_no(self, "Open in external terminal",
-                          "mpexplorer will disconnect from %s while %s has the port, and %s." % (
-                              conn.port, os.path.basename(ext.argv[0]), again)):
+        intro = "mpexplorer will disconnect from %s while %%s has the port, and %s." % (conn.port, again)
+        warning = extterm.close_hang_warning(ext.argv, conn.usb)
+        if warning:                 # this answer is the confirmation: no second question
+            program = extterm.KEEP_RTS_ON[extterm.program_name(ext.argv)]
+            pick = ask_choice(self, "%s will hang this badge when it closes" % program,
+                              warning + "\n\n" + intro % "the terminal",
+                              [("Cancel", None), ("Use %s anyway" % program, "anyway"), ("Use miniterm", "miniterm")])
+            if pick is None:
+                return
+            if pick == "miniterm":  # this time only: Preferences > Terminal keeps the chosen program
+                ext = extterm.ExternalTerminal(conn.port, conn.usb or conn.port, "", title=title)
+                try:
+                    ext.check()
+                except (extterm.TerminalError, ValueError) as e:
+                    error(self, "Cannot open the terminal", str(e))
+                    return
+        elif not ask_yes_no(self, "Open in external terminal", intro % os.path.basename(ext.argv[0])):
             return
 
         def started(_res, exc):

@@ -192,11 +192,27 @@ is a console program, not a widget, so it cannot be embedded either. Hence:
 ### Unknowns that need a real Windows PC and boards
 | Question | miniterm | PuTTY | Tera Term |
 |---|---|---|---|
-| Does a Tildagon (ESP32-S3) reset when the program opens the port? | | | |
+| Does a Tildagon (ESP32-S3) reset when the program opens the port? | | No: connects OK (owner, 2026-11-08) | |
 | Does a Pico / Pico 2 (MicroPython) reset or misbehave? | | | |
 | Does a CircuitPython Pico work (REPL responds)? | | | |
 | Does the REPL work (tab completion, paste mode, Ctrl-C/D)? | | | |
-| Does reconnecting after the program closes work, including after a port rename? | | | |
+| Does reconnecting after the program closes work, including after a port rename? | Yes, Tildagon (owner, 2026-11-06) | **No, Tildagon: the badge hangs when PuTTY closes** (below) | |
+
+**PuTTY hangs a Tildagon when it closes (2026-11-08, Windows 11, Tildagon on COM8, `16d0:120e`).** The owner opened PuTTY from
+the console; it connected, but after it closed mpexplorer could not reconnect and the badge needed its reset button. Reproduced
+with pyserial alone (the port checked free first, mpexplorer and PuTTY closed):
+
+| Lines while open, then close | Result |
+|---|---|
+| DTR on, RTS on, closed as they are (what PuTTY does) | **Hangs:** the screen freezes, opening COM8 fails with "A device attached to the system is not functioning" (Windows error 31), only reset recovers |
+| DTR on, RTS on, then RTS off, then close | Fine: reconnects in 0.1 s |
+| DTR on, RTS on, then DTR off (RTS still on), then RTS off, close | Fine |
+
+So opening with RTS on is harmless; closing while RTS is on hangs the firmware (the screen froze, so it did not reboot into its
+bootloader). PuTTY asserts RTS with any `-sercfg` flow setting and cannot turn it off, so it cannot be fixed with a different
+preset. mpexplorer now warns before PuTTY (or plink) opens a Tildagon and offers miniterm for that run
+(`extterm.close_hang_warning`), and a connect that fails with error 31 says to press the board's reset button
+(`extterm.board_hung`). Not tried: PuTTY on Linux, PuTTY with a Pico or the 2022 badge (which needs RTS on to talk at all), Tera Term.
 
 ## 4. Implementation order
 1. **Portability fixes in the core** (section 1) behind small helpers that take the platform as an argument, so Linux tests can
@@ -214,4 +230,5 @@ Rough effort (an estimate, not a measurement): 1 about 1-2 days, 2 half a day, 3
 
 ## Still open
 - The code-signing certificate or service (the owner; we wait for it), and whether signing then runs in CI (needs a secret) or by hand.
-- The hardware test table above, and what the PuTTY and Tera Term line states at open actually are (not in their manuals).
+- The hardware test table above, and what Tera Term's line states at open actually are (not in its manual). PuTTY keeps RTS on,
+  which hangs a Tildagon on close (2026-11-08, above).

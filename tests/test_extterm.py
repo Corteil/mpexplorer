@@ -54,6 +54,36 @@ def test_putty_and_tera_term_templates_fill_in_and_keep_arguments_whole():
     assert custom == ["C:\\Program Files\\PuTTY\\putty.exe", "-serial", "COM7"]
 
 
+def test_putty_on_a_tildagon_gets_a_warning_and_other_pairs_do_not():
+    # 2026-11-08, Windows: closing a Tildagon's port with RTS on froze the badge until its reset button was pressed.
+    tildagon = "16d0:120e:7C4FAD337AC00000"
+    for argv in (["putty", "-serial", "COM8"], ["C:\\Program Files\\PuTTY\\putty.exe", "-serial", "COM8"],
+                 ["/usr/bin/PuTTY.EXE"], ["plink", "-serial", "COM8"]):
+        said = extterm.close_hang_warning(argv, tildagon)
+        assert "Tildagon" in said and "reset button" in said and "miniterm" in said, argv
+    assert "PuTTY keeps the RTS line on" in extterm.close_hang_warning(["putty"], "16D0:120E:abc")
+    assert extterm.close_hang_warning(["putty"], "2e8a:0005:E661") == ""            # a Pico
+    assert extterm.close_hang_warning(["putty"], "COM8") == ""                       # no USB id
+    assert extterm.close_hang_warning(["putty"], "") == ""
+    assert extterm.close_hang_warning(extterm.miniterm_argv("COM8", frozen=False), tildagon) == ""
+    assert extterm.close_hang_warning(["ttermpro", "/C=8"], tildagon) == ""
+    assert extterm.close_hang_warning([], tildagon) == ""
+
+
+def test_a_hung_board_is_told_apart_from_a_busy_or_missing_port():
+    # pyserial's message for a Tildagon frozen by a close with RTS on (2026-11-08)
+    hung = Exception("Cannot configure port, something went wrong. Original message: PermissionError(13, 'A device "
+                     "attached to the system is not functioning.', None, 31)")
+    assert extterm.board_hung(hung)
+    raw = OSError(13, "x")
+    raw.winerror = 31
+    assert extterm.board_hung(raw)
+    busy = Exception("could not open port 'COM8': PermissionError(13, 'Access is denied.', None, 5)")
+    assert not extterm.board_hung(busy)
+    assert not extterm.board_hung(Exception("could not open port 'COM9': FileNotFoundError(2, 'The system cannot find "
+                                            "the file specified.', None, 2)"))
+
+
 def test_a_port_with_odd_characters_stays_one_argument():
     argv = extterm.expand("picocom -b {baud} {port}", "/dev/serial/by-id/usb-My Board; rm -rf", platform="linux")
     assert argv == ["picocom", "-b", "115200", "/dev/serial/by-id/usb-My Board; rm -rf"]

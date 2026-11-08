@@ -1955,6 +1955,75 @@ def test_external_terminal_with_a_missing_program_stays_connected(make_app, tmp_
     assert said and "no-such-terminal was not found" in said[0] and app.right in app.conns
 
 
+def _putty_on_a_tildagon(make_app, tmp_path, monkeypatch, pick):
+    """PuTTY chosen in Preferences, a Tildagon connected; the warning answered with `pick`. Returns (app, launched,
+    choices asked, yes/no questions asked)."""
+    from mpexplorer import extterm
+    app = make_app()
+    app.connected(DeviceBackend(RawREPL(FakeSerial())), str(tmp_path), "/dev/ttyACM0", "chip:01",
+                  usb="16d0:120e:7C4FAD337AC00000")
+    idle(app, monkeypatch)
+    app.settings.set("terminal.external_command", extterm.PRESETS["putty"])
+    proc = types.SimpleNamespace(poll=lambda: None)
+    launched, chosen, asked = [], [], []
+    real = extterm.ExternalTerminal
+
+    def make_ext(*a, **kw):
+        kw.update(launcher=lambda argv, new_console: launched.append(argv) or proc, which=lambda n: "/usr/bin/" + n,
+                  finder=lambda key: None, platform="linux")
+        return real(*a, **kw)
+    monkeypatch.setattr(extterm, "ExternalTerminal", make_ext)
+    monkeypatch.setattr("mpexplorer.gtkui.app.ask_choice",
+                        lambda parent, title, text, choices: chosen.append((title, text, choices)) or pick)
+    monkeypatch.setattr("mpexplorer.gtkui.app.ask_yes_no", lambda *a: asked.append(a) or True)
+    app.open_external_terminal(app.conns[app.right])
+    for _ in range(40):
+        pump(50)
+        if launched or pick is None:
+            break
+    return app, launched, chosen, asked
+
+
+def test_putty_on_a_tildagon_warns_and_can_run_miniterm_instead(make_app, tmp_path, monkeypatch):
+    app, launched, chosen, asked = _putty_on_a_tildagon(make_app, tmp_path, monkeypatch, "miniterm")
+    title, text, choices = chosen[0]
+    assert "PuTTY will hang this badge" in title and "reset button" in text and "/dev/ttyACM0" in text
+    assert [v for _label, v in choices] == [None, "anyway", "miniterm"]          # miniterm is the default (last)
+    assert asked == []                                                          # the warning was the only question
+    assert launched and "--rts" in launched[0] and launched[0][launched[0].index("--rts") + 1] == "0"
+    assert app.settings.get("terminal.external_command").startswith("putty")    # Preferences keep PuTTY
+
+
+def test_putty_on_a_tildagon_can_still_be_used_or_cancelled(make_app, tmp_path, monkeypatch):
+    _app, launched, _chosen, _asked = _putty_on_a_tildagon(make_app, tmp_path, monkeypatch, "anyway")
+    assert launched and launched[0][0] == "putty"
+
+
+def test_putty_warning_cancelled_stays_connected(make_app, tmp_path, monkeypatch):
+    app, launched, chosen, _asked = _putty_on_a_tildagon(make_app, tmp_path, monkeypatch, None)
+    pump(300)
+    assert chosen and launched == [] and app.right in app.conns
+
+
+def test_a_hung_board_says_to_press_reset(make_app, monkeypatch):
+    from mpexplorer import extterm
+    app = make_app()
+    said = []
+    monkeypatch.setattr("mpexplorer.gtkui.app.error", lambda parent, title, text: said.append(text))
+
+    def hung(cls, port, rts=False, **kw):
+        raise Exception("Cannot configure port, something went wrong. Original message: PermissionError(13, 'A device "
+                        "attached to the system is not functioning.', None, 31)")
+    monkeypatch.setattr(RawREPL, "open_board", classmethod(hung))
+    app._connect_to("COM8", app.right)
+    for _ in range(40):
+        pump(50)
+        if said:
+            break
+    assert said and said[0].startswith(extterm.HUNG_ADVICE) and "not functioning" in said[0]
+    assert app.right not in app.conns
+
+
 # -- Windows: there is no Gio.DesktopAppInfo; apps are found by id in Gio.AppInfo.get_all() -----------------
 class _WindowsApp:
     def __init__(self, app_id, name, commandline):

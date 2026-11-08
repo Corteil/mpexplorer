@@ -30,6 +30,15 @@ PRESETS = {
     "picocom": "picocom -b {baud} {port}",
 }
 
+# Boards that hang when their port is closed while RTS is on: the screen freezes, the USB serial stops answering
+# (Windows: error 31, "A device attached to the system is not functioning") and only the reset button brings it back.
+# Opening with RTS on is harmless, and turning RTS off before the close avoids it. Seen on Windows with a Tildagon,
+# 2026-11-08.
+HANGS_ON_CLOSE_WITH_RTS = {"16d0:120e": "Tildagon"}
+# Programs that keep RTS on with no option to turn it off: PuTTY's serial code asserts it whatever -sercfg says (plink
+# shares that code). The name the warning uses for each.
+KEEP_RTS_ON = {"putty": "PuTTY", "plink": "plink"}
+
 # Linux terminal emulators that take a command after -e (or --), tried in this order for the default command.
 LINUX_TERMINALS = (("x-terminal-emulator", "-e"), ("lxterminal", "-e"), ("gnome-terminal", "--"),
                    ("konsole", "-e"), ("xfce4-terminal", "-x"), ("xterm", "-e"))
@@ -109,6 +118,34 @@ def launch(argv, new_console=False, popen=subprocess.Popen):
                             % os.path.basename(argv[0]))
     except OSError as e:
         raise TerminalError("Cannot start %s: %s" % (os.path.basename(argv[0]), e))
+
+
+def program_name(argv):
+    """'C:\\Program Files\\PuTTY\\putty.exe' -> 'putty'."""
+    name = re.split(r"[\\/]", argv[0])[-1].lower() if argv else ""
+    return name[:-4] if name.endswith(".exe") else name
+
+
+def close_hang_warning(argv, usb_key):
+    """The warning to show before this program opens this board, or '' when the pair is safe."""
+    board = HANGS_ON_CLOSE_WITH_RTS.get(":".join((usb_key or "").lower().split(":")[:2]))
+    program = KEEP_RTS_ON.get(program_name(argv))
+    if not board or not program:
+        return ""
+    return ("%s keeps the RTS line on, and a %s hangs when its port is closed with RTS on: when you close %s, the "
+            "badge's screen freezes and it stops answering on USB until you press its reset button, so mpexplorer "
+            "cannot reconnect.\n\nminiterm (the default terminal) keeps RTS off and does not have this problem."
+            % (program, board, program))
+
+
+def board_hung(exc):
+    """True when opening the port failed because the board stopped answering on USB, not because it is busy or gone:
+    Windows' error 31, which pyserial puts in its "Cannot configure port" message."""
+    return getattr(exc, "winerror", None) == 31 or "not functioning" in str(exc)
+
+
+HUNG_ADVICE = ("The board is plugged in but has stopped answering on USB. Press its reset button (or unplug it and "
+               "plug it in again), then press Connect.")
 
 
 def find_port(usb_key, comports=None):

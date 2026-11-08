@@ -35,6 +35,10 @@ copy); `libraries._mkdirs` splitting host paths on `/`; the upload-mode probe ti
 from the windowed exe** because `extterm.launch` redirected stdin, so Windows gave it the parent's missing stdout/stderr (now nothing is
 redirected when the program has its own console, and the bundled miniterm keeps its window open after an error).
 
+**2026-11-08:** 0.2.0 released with the Windows zip. Then the owner found that **PuTTY hangs a Tildagon when it closes** (closing
+the port with RTS on freezes the badge until reset; PuTTY always keeps RTS on). Reproduced with pyserial; mpexplorer now warns and
+offers miniterm, and says "press reset" on Windows error 31. Details: `docs/WINDOWS_PLAN.md` section 3.
+
 **Next (step 5 and loose ends):**
 1. The hardware table in `docs/WINDOWS_PLAN.md` section 3: miniterm / PuTTY / Tera Term against a Tildagon, a Pico and a CircuitPython Pico
    on the Windows PC (does opening the port reset the board? REPL keys? reconnect after a port rename?). Then fill `docs/HARDWARE.md`.

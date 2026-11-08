@@ -2,6 +2,14 @@
 
 All notable changes to mpexplorer. The format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+### Fixed
+- PuTTY with a Tildagon: closing the port while RTS is on hangs the badge until its reset button is pressed, and PuTTY always
+  keeps RTS on, so mpexplorer could not reconnect after it. Open in external terminal now warns first and offers miniterm for
+  that run (Preferences keep PuTTY). A connection that fails because a board stopped answering on USB (Windows error 31) now
+  says to press its reset button.
+
 ## [0.2.0] - 2026-11-08
 
 ### Added

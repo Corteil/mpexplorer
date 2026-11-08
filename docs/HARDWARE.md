@@ -3,6 +3,7 @@
 | Board | MicroPython | Host | Result | Who |
 |---|---|---|---|---|
 | Tildagon (2024/2026 badge, ESP32-S3, `/dev/ttyACM0` "TiLDAGON - Board CDC") | 1.28.0 (`v1.28.0-dirty on 2026-10-04`, ESP32-S3) | Raspberry Pi 5, Raspberry Pi OS, Python 3.11, Tk 8.6 | Connect, Disconnect and listing `/` work (needs DTR asserted). The REPL console opens with a visible, focused input box. Running code in it, terminal mode, transfers, editor and sync not tried. | Corteil |
+| Tildagon (COM8, `16d0:120e`) | badge firmware | Windows 11, mpexplorer 0.2.0 | External terminal: miniterm works and mpexplorer reconnects after it (2026-11-06). **PuTTY hangs the badge when it closes**: closing the port with RTS on freezes it until reset, and PuTTY always keeps RTS on. mpexplorer warns and offers miniterm. Details in `docs/WINDOWS_PLAN.md` section 3 (2026-11-08). | Corteil |
 | _add a row via pull request_ | | | | |
 
 ## Benchmarks (`python3 tools/bench.py`)

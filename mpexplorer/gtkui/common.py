@@ -62,6 +62,20 @@ def ask_yes_no(parent, title, text):
     return _message(parent, Gtk.MessageType.QUESTION, title, text, Gtk.ButtonsType.YES_NO) == Gtk.ResponseType.YES
 
 
+def ask_choice(parent, title, text, choices, kind=Gtk.MessageType.WARNING):
+    """A message with one button per (label, value), left to right; the last is the default. Returns the value of the
+    button pressed, or None when the dialog is closed."""
+    dlg = Gtk.MessageDialog(transient_for=parent, modal=True, message_type=kind, buttons=Gtk.ButtonsType.NONE,
+                            text=title)
+    dlg.format_secondary_text(text)
+    for i, (label, _value) in enumerate(choices):
+        dlg.add_button(label, i)
+    dlg.set_default_response(len(choices) - 1)
+    res = dlg.run()
+    dlg.destroy()
+    return choices[res][1] if isinstance(res, int) and 0 <= res < len(choices) else None
+
+
 def prompt(parent, title, label, initial="", allow_empty=False):
     """One-line text prompt; returns the text or None (cancelled). An empty answer is None unless allow_empty."""
     dlg = Gtk.Dialog(title=title, transient_for=parent, modal=True)
