@@ -3,6 +3,8 @@
 Nothing is installed on the device: every operation is a snippet of Python sent
 to the stock REPL (Ctrl-A raw mode) and executed there, as `mpremote` does.
 """
+import errno
+import os
 import struct
 import threading
 import time
@@ -14,10 +16,44 @@ WRITE_PAUSE = 0.005     # seconds between blocks
 PROBE_MIN = 1024        # payloads at least this big are timed to choose between raw-paste and plain sending
 PROBE_SAMPLES = 2       # timed sends per mode before one is chosen
 PLAIN_GAIN = 1.25       # plain sending must be this much faster than raw-paste to be chosen
+LOCK_PORTS = os.name != "nt"    # take the port's lock (flock) as miniterm does; Windows refuses a second open anyway
 
 
 class TransportError(BackendError):
     pass
+
+
+def port_locked(exc):
+    """True when opening a port failed because another program holds its lock (pyserial on Linux: 'Could not
+    exclusively lock port ...', errno EAGAIN / EWOULDBLOCK)."""
+    return "exclusively lock" in str(exc) or getattr(exc, "errno", None) in (errno.EAGAIN, errno.EWOULDBLOCK)
+
+
+def port_busy(port, platform=None, serial_cls=None):
+    """True while another program (a terminal) holds this port's lock. Linux only: there the terminal's own process can
+    end at once (lxterminal hands its window to one already open) while miniterm still has the port. On Windows a
+    held port cannot be opened at all, and the terminal's process is watched instead, so this says False there.
+
+    The check opens the port with the lock, DTR on and RTS off, and closes it with RTS off: safe for a Tildagon and the
+    2022 badge. While the lock is held pyserial stops before it touches the port's lines."""
+    import sys
+    if (platform or sys.platform).startswith("win"):
+        return False
+    if serial_cls is None:
+        import serial
+        serial_cls = serial.Serial
+    s = serial_cls()
+    s.port, s.baudrate, s.timeout = port, 115200, 0
+    s.dtr, s.rts, s.exclusive = True, False, True
+    try:
+        s.open()
+    except Exception as e:
+        return port_locked(e)
+    try:
+        s.rts = False
+    finally:
+        s.close()
+    return False
 
 
 class DeviceError(TransportError):
@@ -57,7 +93,18 @@ class RawREPL:
         # (The 2022 badge is the exception: it says nothing unless RTS is asserted too; see `rts` and Preferences.)
         ser.dtr = True
         ser.rts = bool(rts)
-        ser.open()
+        if LOCK_PORTS and hasattr(ser, "exclusive"):
+            # Linux lets two programs open one port; take the same lock miniterm takes, so mpexplorer can never talk to
+            # a board while a terminal has it (a Pi reconnected under miniterm and both got each other's replies,
+            # 2026-11-08). Windows refuses a second open by itself.
+            ser.exclusive = True
+        try:
+            ser.open()
+        except Exception as e:
+            if port_locked(e):
+                raise TransportError("%s is in use by another program (a terminal such as miniterm?). Close it, then "
+                                     "press Connect." % port)
+            raise
         return cls(ser, paste=paste, adaptive=adaptive)
 
     @classmethod
@@ -347,6 +394,15 @@ class RawREPL:
                     time.sleep(0.3)             # let the board take the Ctrl-D before the port closes
                 else:
                     self.ser.write(b"\x02")
+            except Exception:
+                pass
+            # Never close with RTS on: a Tildagon hangs until reboop when its port closes with RTS asserted (Windows,
+            # 2026-11-08). This covers the 2022 badge (opened with RTS on) and open_board's retry with RTS on for a
+            # silent board. Turning RTS off just before the close was tried on a 2022 badge: no reset, and it answered
+            # on the next open every time (2026-11-08).
+            try:
+                if getattr(self.ser, "rts", False):
+                    self.ser.rts = False
             except Exception:
                 pass
             self.ser.close()

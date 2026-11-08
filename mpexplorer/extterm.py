@@ -90,14 +90,21 @@ def port_number(port):
     return m.group(1) if m else ""
 
 
-def miniterm_argv(port, baud=BAUD, frozen=None, executable=None):
+def miniterm_argv(port, baud=BAUD, frozen=None, executable=None, rts=False, platform=None):
     """pyserial's miniterm with DTR on and RTS off, as the Tildagon needs (DTR off corrupts long replies, RTS can reset
-    an ESP32-S3). A frozen build has no separate Python: it runs itself with --miniterm (see __main__)."""
+    an ESP32-S3). rts=True for a board that only answers with RTS on (the 2022 badge: with RTS off it ignored every
+    keystroke in miniterm, 2026-11-08). A frozen build has no separate Python: it runs itself with --miniterm.
+
+    The REPL's escape codes go straight to the terminal (--filter direct): miniterm's own default filter swapped them
+    for symbols such as '␛', so a 2024 or 2026 badge's colours and line editing showed as text, on a Pi and on Windows
+    (2026-11-08). A Linux terminal emulator understands them, and on Windows pyserial 3.5's miniterm turns the
+    console's escape-code handling on itself (ENABLE_VIRTUAL_TERMINAL_PROCESSING, Windows 10 1511 and later).
+    platform is kept for callers; the options are the same everywhere now."""
     from .paths import helper_executable
     exe = executable or helper_executable()
     frozen = getattr(sys, "frozen", False) if frozen is None else frozen
     head = [exe, "--miniterm"] if frozen else [exe, "-m", "serial.tools.miniterm"]
-    return head + ["--dtr", "1", "--rts", "0", port, str(baud)]
+    return head + ["--dtr", "1", "--rts", "1" if rts else "0", "--filter", "direct", port, str(baud)]
 
 
 def expand(template, port, baud=BAUD, title="", platform=None):
@@ -117,12 +124,13 @@ def linux_terminal(which=shutil.which):
     return None
 
 
-def command_for(template, port, baud=BAUD, title="", platform=None, which=shutil.which, frozen=None):
-    """(argv, new_console): what to start. new_console says the program needs a console window of its own (Windows)."""
+def command_for(template, port, baud=BAUD, title="", platform=None, which=shutil.which, frozen=None, rts=False):
+    """(argv, new_console): what to start. new_console says the program needs a console window of its own (Windows).
+    rts is for the bundled miniterm; a command of your own sets its lines itself."""
     platform = platform or sys.platform
     if (template or "").strip():
         return expand(template, port, baud, title, platform), is_windows(platform)
-    argv = miniterm_argv(port, baud, frozen)
+    argv = miniterm_argv(port, baud, frozen, rts=rts, platform=platform)
     if is_windows(platform):
         return argv, True
     found = linux_terminal(which)
@@ -158,9 +166,14 @@ def program_name(argv):
     return name[:-4] if name.endswith(".exe") else name
 
 
+def hangs_on_close_with_rts(usb_key):
+    """The board's name ('Tildagon') if it hangs when its port closes with RTS on, else ''."""
+    return HANGS_ON_CLOSE_WITH_RTS.get(":".join((usb_key or "").lower().split(":")[:2]), "")
+
+
 def close_hang_warning(argv, usb_key):
     """The warning to show before this program opens this board, or '' when the pair is safe."""
-    board = HANGS_ON_CLOSE_WITH_RTS.get(":".join((usb_key or "").lower().split(":")[:2]))
+    board = hangs_on_close_with_rts(usb_key)
     program = KEEP_RTS_ON.get(program_name(argv))
     if not board or not program:
         return ""
@@ -200,8 +213,11 @@ class ExternalTerminal:
     clock and finder are for tests."""
 
     def __init__(self, port, usb_key, template="", title="", platform=None, launcher=launch, which=shutil.which,
-                 finder=find_port, clock=time.monotonic):
+                 finder=find_port, clock=time.monotonic, rts=False, busy=None):
         self.port, self.usb_key, self.title = port, usb_key, title
+        self._busy = busy
+        # miniterm with RTS on for a board that needs it, but never for one that hangs when closed that way
+        self.rts = bool(rts) and not hangs_on_close_with_rts(usb_key)
         self.template, self.platform = template, platform
         self._launch, self._which, self._find, self._clock = launcher, which, finder, clock
         self.proc = None
@@ -211,7 +227,8 @@ class ExternalTerminal:
     def check(self):
         """Before disconnecting: build the command and make sure its program exists, so a missing program leaves the
         board connected. Raises TerminalError or ValueError (a bad template)."""
-        argv, new_console = command_for(self.template, self.port, BAUD, self.title, self.platform, self._which)
+        argv, new_console = command_for(self.template, self.port, BAUD, self.title, self.platform, self._which,
+                                        rts=self.rts)
         program = argv[0]
         if not os.path.isabs(program) and not self._which(program):
             raise TerminalError("%s was not found. Install it, or choose another program in Preferences > Terminal."
@@ -242,6 +259,13 @@ class ExternalTerminal:
         if self.usb_key == self.port or ":" not in self.usb_key:
             return self.port
         return self._find(self.usb_key)
+
+    def port_busy(self, port):
+        """True while something (miniterm, after its terminal window was handed on) still holds the port: wait then."""
+        if self._busy is not None:
+            return self._busy(port)
+        from .transport import port_busy
+        return port_busy(port, self.platform)
 
     def gave_up(self):
         """True once WAIT_FOR_BOARD seconds have passed since the program ended without the board coming back."""

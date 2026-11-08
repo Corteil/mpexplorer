@@ -61,10 +61,14 @@ be on the original PC (copy a build there: CONTRIBUTING.md, step 7).
    the second PC), PuTTY on the MicroPython Pico 2.
    Also 2026-11-08: the Windows port list names boards by USB id ("Tildagon", "CircuitPython board") instead of "USB Serial
    Device", and the ESP32-S3 bootloader port (`303a:1001`) says "no REPL, press reboop", as does Connect on it.
-   **Open, decided "not now" (2026-11-08):** `transport.py` can still close a Tildagon's port with RTS on. `open_board` retries a
-   silent board with RTS on (for the 2022 badge) and closes it that way if that fails too, and `close()` never drops RTS, so a
-   Tildagon remembered with `boards.rts` on would hang on every disconnect. Fix: `ser.rts = False` just before `ser.close()`.
-   It needs trying on the 2022 badge (the one board that needs RTS on) before it goes in.
+   **Done after 0.2.1 (2026-11-08, tried by the owner on Windows and on the Pi):** `RawREPL.close()` turns RTS off before
+   every close (tried on a 2022 badge first: no reset, answers every time). Open in external terminal: miniterm gets RTS
+   on for a board remembered as needing it (`boards.rts`; never for a Tildagon, `extterm.hangs_on_close_with_rts`), and
+   `--filter direct` everywhere (its default filter printed a 2024/2026 badge's escape codes as `␛`; pyserial 3.5's
+   miniterm turns Windows' escape-code handling on itself). On Linux mpexplorer takes miniterm's port lock
+   (`transport.LOCK_PORTS`, pyserial `exclusive`) and `_watch_terminal` waits while `transport.port_busy` says the port is
+   held: lxterminal handed its window to one already open and exited at once, so mpexplorer reconnected under miniterm.
+   Released in 0.2.2.
 2. Done 2026-11-08: the hand pass over the window on Windows (`docs/HAND_CHECKS.md` round 7: port names, badge screen, drives
    view, hidden files, copies and Windows names, editor and Open with, firmware tools, high DPI), all working (owner).
    With that, step 5 is done apart from signing; a 0.2.1 release with today's changes is the natural next step.
@@ -81,6 +85,10 @@ be on the original PC (copy a build there: CONTRIBUTING.md, step 7).
 - To test the windowed exe's behaviour, start the parent **detached with no std handles** (`DETACHED_PROCESS`); a parent started from
   the shell inherits its handles and hides bugs like the miniterm crash. `typekeys.py`-style `WriteConsoleInputW` can type into another
   program's console window.
+- Pi testing from this PC: `pip wheel . --no-deps -w D:\mpexplorer-build\pi`, copy the wheel over, then on the Pi
+  `pipx install --force --system-site-packages ./mpexplorer-<version>-py3-none-any.whl`. It keeps the version number, so
+  check the installed file (`~/.local/share/pipx/venvs/mpexplorer/lib/python3*/site-packages/mpexplorer/`) to be sure.
+- The build script cannot replace `dist\mpexplorer` while the test build is open (WinError 5): close it first.
 - Check a board's port is free before a script opens it (`tasklist` for a running mpexplorer, PuTTY or miniterm). **Never test it
   with a plain `serial.Serial(port)` on a Tildagon:** that opens with RTS on, and closing it hangs the badge until reboop (it
   happened 2026-11-08). Set `s.dtr, s.rts = True, False` before `s.open()`, as `transport.RawREPL.open` does.

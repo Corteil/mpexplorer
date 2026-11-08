@@ -24,13 +24,47 @@ def test_port_number():
 
 def test_default_on_windows_is_miniterm_in_a_new_console():
     argv, new_console = extterm.command_for("", "COM5", platform="win32", frozen=False)
-    assert argv[1:] == ["-m", "serial.tools.miniterm", "--dtr", "1", "--rts", "0", "COM5", "115200"]
+    assert argv[1:] == ["-m", "serial.tools.miniterm", "--dtr", "1", "--rts", "0", "--filter", "direct", "COM5",
+                        "115200"]
     assert new_console
 
 
 def test_a_frozen_build_runs_its_own_miniterm():
-    argv = extterm.miniterm_argv("COM3", frozen=True, executable="C:\\mpx\\mpexplorer.exe")
-    assert argv == ["C:\\mpx\\mpexplorer.exe", "--miniterm", "--dtr", "1", "--rts", "0", "COM3", "115200"]
+    argv = extterm.miniterm_argv("COM3", frozen=True, executable="C:\\mpx\\mpexplorer.exe", platform="win32")
+    assert argv == ["C:\\mpx\\mpexplorer.exe", "--miniterm", "--dtr", "1", "--rts", "0", "--filter", "direct", "COM3",
+                    "115200"]
+
+
+def test_miniterm_passes_escape_codes_straight_to_the_terminal_everywhere():
+    # miniterm's default filter printed a 2024/2026 badge's escape codes as symbols, on a Pi and on Windows (2026-11-08)
+    argv, _ = extterm.command_for("", "/dev/ttyACM0", platform="linux", which=which_all, frozen=False)
+    assert argv[argv.index("--filter") + 1] == "direct" and argv[-2:] == ["/dev/ttyACM0", "115200"]
+    windows, _ = extterm.command_for("", "COM5", platform="win32", frozen=False)
+    assert windows[windows.index("--filter") + 1] == "direct" and windows[-2:] == ["COM5", "115200"]
+    frozen_pi = extterm.miniterm_argv("/dev/ttyACM0", frozen=True, executable="/opt/mpx/mpexplorer", platform="linux")
+    assert frozen_pi == ["/opt/mpx/mpexplorer", "--miniterm", "--dtr", "1", "--rts", "0", "--filter", "direct",
+                         "/dev/ttyACM0", "115200"]
+
+
+def test_miniterm_gets_rts_on_for_a_board_that_needs_it_but_never_for_a_tildagon():
+    # the 2022 badge only answers with RTS on: miniterm opened it with RTS off, and it ignored every keystroke
+    # (Pi, 2026-11-08)
+    def rts_of(argv):
+        return argv[argv.index("--rts") + 1]
+    assert rts_of(extterm.miniterm_argv("COM21", frozen=False, rts=True)) == "1"
+    assert rts_of(extterm.command_for("", "/dev/ttyACM1", platform="linux", which=which_all, frozen=False,
+                                      rts=True)[0]) == "1"
+    assert rts_of(extterm.command_for("", "COM5", platform="win32", frozen=False)[0]) == "0"        # the default
+    badge_2022 = extterm.ExternalTerminal("COM21", "16d0:1114:123456", "", platform="win32", which=which_all, rts=True)
+    assert rts_of(badge_2022.check()) == "1"
+    # a Tildagon wrongly remembered as needing RTS: still off, since closing with RTS on hangs it
+    tildagon = extterm.ExternalTerminal("COM13", "16d0:120e:7C4FAD337AC00000", "", platform="win32", which=which_all,
+                                        rts=True)
+    assert not tildagon.rts and rts_of(tildagon.check()) == "0"
+    # a command of your own is left alone: it sets its own lines
+    assert extterm.command_for("picocom -b {baud} {port}", "/dev/ttyACM1", platform="linux", rts=True)[0] == [
+        "picocom", "-b", "115200", "/dev/ttyACM1"]
+    assert extterm.hangs_on_close_with_rts("16D0:120E:x") == "Tildagon" and extterm.hangs_on_close_with_rts("") == ""
 
 
 def test_default_on_linux_runs_inside_a_terminal_emulator():
@@ -253,8 +287,10 @@ def test_miniterm_failing_keeps_its_exit_code(monkeypatch):
 def test_miniterm_with_these_options_starts_and_reports_a_missing_port():
     """The default command's options are ones this pyserial accepts (it fails on the port, not on an option)."""
     import sys
-    argv = extterm.miniterm_argv("NO_SUCH_PORT_X", frozen=False, executable=sys.executable)
-    out = subprocess.run(argv, capture_output=True, text=True, timeout=20, stdin=subprocess.DEVNULL)
-    text = out.stdout + out.stderr
-    assert "unrecognized arguments" not in text and "invalid choice" not in text
-    assert "NO_SUCH_PORT_X" in text or "could not open port" in text.lower()
+    for platform in ("win32", "linux"):                 # each system's options (Linux adds --filter direct)
+        argv = extterm.miniterm_argv("NO_SUCH_PORT_X", frozen=False, executable=sys.executable, rts=True,
+                                     platform=platform)
+        out = subprocess.run(argv, capture_output=True, text=True, timeout=20, stdin=subprocess.DEVNULL)
+        text = out.stdout + out.stderr
+        assert "unrecognized arguments" not in text and "invalid choice" not in text, (platform, text)
+        assert "NO_SUCH_PORT_X" in text or "could not open port" in text.lower(), (platform, text)

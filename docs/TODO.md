@@ -128,8 +128,10 @@ GTK 3 via MSYS2; reconnect automatically after the external terminal closes; Win
       hand-check round 7, all working (owner, 2026-11-08).
 - [x] Windows CI job (`windows-latest`, Python 3.11 and 3.13) running the portable tests (2026-11-06).
 - [x] External terminal: `extterm.py`, the button (all platforms), Preferences (`terminal.external_command`, `terminal.reconnect`); miniterm default (2026-11-06, tests only).
-- [ ] Try it by hand: miniterm on the Pi with a Pico, then on Windows; reconnect after a soft reset that moves the port.
-      Windows half done (2026-11-06 and 11-08: miniterm with a Tildagon, reconnect works; no port moved after a reset). The Pi half is open.
+- [x] Try it by hand: miniterm on the Pi with a Pico, then on Windows; reconnect after a soft reset that moves the port.
+      Windows (2026-11-06 and 11-08: miniterm with a Tildagon, reconnect works; no port moved after a reset). Pi (owner,
+      2026-11-08): it first failed three ways (2022 badge silent, 2024/2026 badge escape codes printed, mpexplorer
+      reconnecting under miniterm); all three fixed and working on the Pi and on Windows (0.2.2).
 - [x] MSYS2 + PyInstaller packaging as a CI artifact (2026-11-06, workflow `windows-build.yml`; the built exe passes its self-test on the runner).
       Used by hand on two Windows 11 PCs (owner, 2026-11-07 and 11-08).
 - [x] Hardware tests on a Windows PC (2026-11-08, `docs/WINDOWS_PLAN.md` section 3): miniterm (scripted) and PuTTY (owner) against a

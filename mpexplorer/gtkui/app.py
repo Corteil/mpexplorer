@@ -1132,8 +1132,10 @@ class App(Gtk.Window):
             info(self, "Busy", "Wait for the running file operation to finish first.")
             return
         title = "mpexplorer - %s" % (conn.label or conn.port)
+        # a board that only answers with RTS on (the 2022 badge, remembered at connect) needs it in miniterm too
+        rts = bool(self.settings.get("boards.rts").get(segment(conn.usb or conn.board)))
         ext = extterm.ExternalTerminal(conn.port, conn.usb or conn.port, self.settings.get("terminal.external_command"),
-                                       title=title)
+                                       title=title, rts=rts)
         try:
             ext.check()
         except (extterm.TerminalError, ValueError) as e:
@@ -1154,7 +1156,7 @@ class App(Gtk.Window):
             if pick == "anyway":    # the badge will hang when PuTTY closes: say on its screen what to do then
                 badge_status = REBOOP_WHEN_DONE
             if pick == "miniterm":  # this time only: Preferences > Terminal keeps the chosen program
-                ext = extterm.ExternalTerminal(conn.port, conn.usb or conn.port, "", title=title)
+                ext = extterm.ExternalTerminal(conn.port, conn.usb or conn.port, "", title=title, rts=rts)
                 try:
                     ext.check()
                 except (extterm.TerminalError, ValueError) as e:
@@ -1188,6 +1190,12 @@ class App(Gtk.Window):
                       "Plug it in again and press Connect.")
                 return False
             self.set_status("The terminal closed: waiting for the board to come back ...")
+            return True
+        if ext.port_busy(port):
+            # Linux: the terminal program can end at once (lxterminal passes its window to one already open) while
+            # miniterm still has the port; reconnecting then put both on the board (Pi, 2026-11-08)
+            self.set_status("%s is still in use by the terminal: close it (Ctrl+] in miniterm) to come back here"
+                            % port)
             return True
         mode = self.settings.get("terminal.reconnect")
         code = "" if not ext.exit_code else " (it ended with code %s)" % ext.exit_code

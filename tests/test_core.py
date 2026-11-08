@@ -299,6 +299,106 @@ def test_close_resets_the_board_only_when_asked(reset, resets):
     assert ser.closed and ser.resets == resets
 
 
+class _RTSRecordingSerial(FakeSerial):
+    """A fake line that remembers what RTS was when the port closed."""
+    rts_at_close = "never closed"
+
+    def close(self):
+        self.rts_at_close = getattr(self, "rts", None)
+        super().close()
+
+
+@pytest.mark.parametrize("reset", [False, True])
+@pytest.mark.parametrize("rts", [True, False])
+def test_the_port_never_closes_with_rts_on(rts, reset):
+    # a Tildagon hangs until reboop if its port closes with RTS on (2026-11-08); the 2022 badge is opened with RTS on
+    ser = _RTSRecordingSerial(paste="on")
+    ser.rts = rts
+    repl = RawREPL(ser)
+    repl.exec("print(1)")
+    repl.close(reset)
+    assert ser.closed and ser.rts_at_close is False
+
+
+class _LockingPort:
+    """Stands in for serial.Serial: open() fails like pyserial's flock when `held`, and records the lines at close."""
+    held = False
+
+    def __init__(self):
+        self.port = self.baudrate = self.timeout = None
+        self.dtr = self.rts = self.exclusive = None
+        self.closed_with = None
+
+    def open(self):
+        if type(self).held:
+            raise OSError(11, "Could not exclusively lock port /dev/ttyACM1: [Errno 11] Resource temporarily "
+                              "unavailable")
+        if self.port == "/dev/gone":
+            raise OSError(2, "could not open port /dev/gone: No such file or directory")
+
+    def close(self):
+        self.closed_with = (self.dtr, self.rts)
+
+
+def test_port_busy_says_whether_another_program_holds_the_port(monkeypatch):
+    from mpexplorer.transport import port_busy
+    made = []
+
+    class Port(_LockingPort):
+        def __init__(self):
+            super().__init__()
+            made.append(self)
+    Port.held = True
+    assert port_busy("/dev/ttyACM1", "linux", serial_cls=Port) is True
+    assert made[-1].exclusive is True and made[-1].rts is False             # asked for the lock, never RTS on
+    Port.held = False
+    assert port_busy("/dev/ttyACM1", "linux", serial_cls=Port) is False
+    assert made[-1].closed_with == (True, False)                            # free: opened and closed with RTS off
+    assert port_busy("/dev/gone", "linux", serial_cls=Port) is False         # gone is not busy: the caller waits for it
+    count = len(made)
+    assert port_busy("COM13", "win32", serial_cls=Port) is False and len(made) == count   # Windows: never opened
+
+
+def test_open_takes_the_port_lock_on_linux_and_explains_a_held_port(monkeypatch):
+    import serial
+
+    from mpexplorer import transport
+    opened = []
+
+    class Port(_LockingPort):
+        def __init__(self, *a, **kw):
+            super().__init__()
+            opened.append(self)
+    monkeypatch.setattr(serial, "serial_for_url", lambda port, **kw: Port())
+    monkeypatch.setattr(transport, "LOCK_PORTS", True)
+    Port.held = True
+    with pytest.raises(TransportError, match="in use by another program"):
+        RawREPL.open("/dev/ttyACM1")
+    assert opened[-1].exclusive is True
+    monkeypatch.setattr(transport, "LOCK_PORTS", False)                     # Windows: no lock asked for
+    Port.held = False
+    RawREPL.open("COM13")
+    assert opened[-1].exclusive is None
+
+
+def test_open_board_drops_rts_when_its_retry_with_rts_on_fails_too(monkeypatch):
+    # a silent board is tried again with RTS on (for the 2022 badge); if that fails as well it must not close that way
+    lines = []
+
+    def silent_open(cls, port, rts=False, **kw):
+        ser = _RTSRecordingSerial(paste="on")
+        ser.rts = rts
+        ser.write = lambda data: len(data)          # says nothing: entering the raw REPL fails
+        lines.append(ser)
+        return cls(ser)
+    monkeypatch.setattr(RawREPL, "open", classmethod(silent_open))
+    monkeypatch.setattr(RawREPL, "_read_until", lambda self, ending, timeout: (_ for _ in ()).throw(
+        TransportError("timeout")))
+    with pytest.raises(TransportError):
+        RawREPL.open_board("COM99", rts=False)
+    assert [s.rts_at_close for s in lines] == [False, False] and all(s.closed for s in lines)
+
+
 def test_fit_shortens_text_and_keeps_the_end_of_a_path():
     assert fit("short") == "short" and fit("a" * 30) == "a" * 18 + ".."
     assert fit("/apps/Corteil_tildagon_gps_clock", tail=True).startswith("..")

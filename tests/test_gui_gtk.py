@@ -1943,7 +1943,7 @@ def test_external_terminal_disconnects_runs_the_program_and_reconnects(make_app,
 
     def make_ext(*a, **kw):
         kw.update(launcher=lambda argv, new_console: launched.append(argv) or proc, which=lambda n: "/usr/bin/" + n,
-                  finder=lambda key: found[0], platform="linux")
+                  finder=lambda key: found[0], platform="linux", busy=lambda port: False)
         return real(*a, **kw)
     monkeypatch.setattr(extterm, "ExternalTerminal", make_ext)
     monkeypatch.setattr("mpexplorer.gtkui.app.ask_yes_no", lambda *a: True)
@@ -1963,6 +1963,38 @@ def test_external_terminal_disconnects_runs_the_program_and_reconnects(make_app,
     assert told == []
 
 
+def test_external_terminal_waits_while_miniterm_still_holds_the_port(make_app, tmp_path, monkeypatch):
+    # Pi, 2026-11-08: lxterminal handed its window to one already open and exited at once; mpexplorer reconnected under
+    # miniterm, and miniterm showed mpexplorer's ">>>" and "raw REPL" traffic
+    from mpexplorer import extterm
+    app = make_app()
+    app.connected(DeviceBackend(RawREPL(FakeSerial())), str(tmp_path), "/dev/ttyACM1", "chip:01",
+                  usb="303a:4001:abc")
+    told = idle(app, monkeypatch)
+    proc = types.SimpleNamespace(poll=lambda: 0)                # the terminal program ends straight away
+    launched, reconnects, held = [], [], [True]                 # ... but miniterm still has the port
+    real = extterm.ExternalTerminal
+
+    def make_ext(*a, **kw):
+        kw.update(launcher=lambda argv, new_console: launched.append(argv) or proc, which=lambda n: "/usr/bin/" + n,
+                  finder=lambda key: "/dev/ttyACM1", platform="linux", busy=lambda port: held[0])
+        return real(*a, **kw)
+    monkeypatch.setattr(extterm, "ExternalTerminal", make_ext)
+    monkeypatch.setattr("mpexplorer.gtkui.app.ask_yes_no", lambda *a: True)
+    monkeypatch.setattr(app, "connect_device", lambda pane=None: reconnects.append(pane))
+    app.open_external_terminal(app.conns[app.right])
+    for _ in range(40):
+        pump(50)
+        if launched:
+            break
+    assert launched
+    pump(1600)
+    assert reconnects == [] and "still in use by the terminal" in app.status.get_text()
+    held[0] = False                                             # miniterm quits (Ctrl+])
+    pump(1200)
+    assert reconnects == [app.right] and told == []
+
+
 def test_external_terminal_with_a_missing_program_stays_connected(make_app, tmp_path, monkeypatch):
     from mpexplorer import extterm
     app = make_app()
@@ -1976,6 +2008,32 @@ def test_external_terminal_with_a_missing_program_stays_connected(make_app, tmp_
     app.open_external_terminal(app.conns[app.right])
     pump()
     assert said and "no-such-terminal was not found" in said[0] and app.right in app.conns
+
+
+def test_miniterm_opens_the_2022_badge_with_rts_on_as_connect_learned(make_app, tmp_path, monkeypatch):
+    # Pi, 2026-11-08: miniterm opened the 2022 badge with RTS off, so it ignored every keystroke
+    from mpexplorer import extterm
+    app = make_app()
+    app.connected(DeviceBackend(RawREPL(FakeSerial())), str(tmp_path), "/dev/ttyACM1", "16d0:1114:123456",
+                  rts=True, usb="16d0:1114:123456")                   # connect needed RTS on: remembered for the board
+    idle(app, monkeypatch)
+    app.settings.set("terminal.external_command", "")                  # the bundled miniterm
+    proc = types.SimpleNamespace(poll=lambda: None)
+    launched = []
+    real = extterm.ExternalTerminal
+
+    def make_ext(*a, **kw):
+        kw.update(launcher=lambda argv, new_console: launched.append(argv) or proc, which=lambda n: "/usr/bin/" + n,
+                  finder=lambda key: None, platform="linux")
+        return real(*a, **kw)
+    monkeypatch.setattr(extterm, "ExternalTerminal", make_ext)
+    monkeypatch.setattr("mpexplorer.gtkui.app.ask_yes_no", lambda *a: True)
+    app.open_external_terminal(app.conns[app.right])
+    for _ in range(40):
+        pump(50)
+        if launched:
+            break
+    assert launched and launched[0][launched[0].index("--rts") + 1] == "1"
 
 
 def _putty_on_a_tildagon(make_app, tmp_path, monkeypatch, pick):
