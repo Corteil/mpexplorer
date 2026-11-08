@@ -192,11 +192,27 @@ is a console program, not a widget, so it cannot be embedded either. Hence:
 ### Unknowns that need a real Windows PC and boards
 | Question | miniterm | PuTTY | Tera Term |
 |---|---|---|---|
-| Does a Tildagon (ESP32-S3) reset when the program opens the port? | | No: connects OK (owner, 2026-11-08) | |
-| Does a Pico / Pico 2 (MicroPython) reset or misbehave? | | | |
-| Does a CircuitPython Pico work (REPL responds)? | | | |
-| Does the REPL work (tab completion, paste mode, Ctrl-C/D)? | | | |
-| Does reconnecting after the program closes work, including after a port rename? | Yes, Tildagon (owner, 2026-11-06) | **No, Tildagon: the badge hangs when PuTTY closes** (below) | |
+| Does a Tildagon (ESP32-S3) reset when the program opens the port? | No: no boot text, `ticks_ms` kept counting (Tildagon, 2026-11-08, scripted) | No: connects OK (owner, 2026-11-08) | |
+| Does a Pico / Pico 2 (MicroPython) reset or misbehave? | No: Pico W (COM15) and Pico 2 (COM18), both MicroPython 1.29.0; opening resets neither (2026-11-08, scripted) | Pico W, MicroPython 1.29.0: REPL works (owner, 2026-11-08) | |
+| Does a CircuitPython Pico work (REPL responds)? | Yes: Pico 2, CircuitPython 10.3.1 (COM16), and Pico W, 10.3.1 (COM17); opening resets neither (2026-11-08, scripted). Pico W on 9.1.1: see below | Yes, both on 10.3.1 (owner, 2026-11-08) | |
+| Does the REPL work (tab completion, paste mode, Ctrl-C/D)? | Yes, all four, on the Tildagon, the MicroPython Pico W and Pico 2, and both CircuitPython boards (2026-11-08, scripted) | Yes, all four, on the same four boards (owner, by hand, 2026-11-08) | |
+| Does reconnecting after the program closes work, including after a port rename? | Yes, Tildagon (owner, 2026-11-06). After a hard reset each board came back on the same port: Tildagon COM13 in 1.7 s, Pico W COM15 in 1.5 s, CircuitPython Pico 2 COM16 in 1.6 s, the same Pico 2 on MicroPython COM18 in 1.5 s, so no rename seen after a reset. Changing firmware does change the port: the Pico 2 went from COM16 (CircuitPython, `2e8a:000b`) to COM18 (MicroPython, `2e8a:0005`), since Windows gives each USB id its own COM number | **No, Tildagon: the badge hangs when PuTTY closes** (below) | |
+
+The "scripted" miniterm entries (2026-11-08, second Windows 11 PC, Tildagon on COM13, MicroPython `v1.28.0-dirty on 2026-10-04`)
+were driven with pyserial set up as miniterm opens the port (DTR on, RTS off), not by typing into miniterm. **The same script hung the
+badge once**: after the hard reset it checked the port with a plain `serial.Serial(port)`, which opens with RTS on, and closing that
+froze the badge (error 31) until reboop. Any script that opens a Tildagon's port must set `rts = False` before `open()`.
+
+**A CircuitPython 9.1.1 Pico W stopped reading USB after the first Ctrl-C (2026-11-08).** It kept sending its status-bar title
+but every write timed out, twice, each time right after a replug; only unplugging it recovered it. Its `code.py` drove 64 NeoPixels
+with `adafruit_neopxl8` (PIO and DMA, on a board whose Wi-Fi chip is on PIO too), so the likely cause is CircuitPython hanging while
+it shuts that down on Ctrl-C, not Windows or the terminal: mpexplorer's own connect starts with the same Ctrl-C. After the owner
+installed CircuitPython 10.3.1 (which replaced `code.py`) it passed everything. Not narrowed down further.
+
+**A hung Tildagon showed up as the ESP32-S3's bootloader port** (`303a:1001`, COM14, 2026-11-08), and Connect on it said only
+"could not enter the raw REPL". The port list now names that port "ESP32-S3 bootloader: no REPL, press reboop", Connect there
+says to press reboop (`ports.BOOTLOADER_ADVICE`), and on Windows, where every board is "USB Serial Device (COMn)", boards are
+named by USB id or firmware ("Tildagon", "CircuitPython board").
 
 **PuTTY hangs a Tildagon when it closes (2026-11-08, Windows 11, Tildagon on COM8, `16d0:120e`).** The owner opened PuTTY from
 the console; it connected, but after it closed mpexplorer could not reconnect and the badge needed its reset button. Reproduced

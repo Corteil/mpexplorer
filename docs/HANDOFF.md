@@ -48,12 +48,23 @@ started fine.
 **Later on 2026-11-08, on the faster PC** (clone `D:\Code\mpexplorer`, MSYS2 `D:\msys64`, build `D:\mpexplorer-build`): the same
 774 passed / 38 skipped, build and self-test OK. **Tried by hand by the owner with a Tildagon on COM13, all working:** the PuTTY
 warning and its three buttons, the "press reset" message, the greyed-out terminal list.
-To do next: (1) merge on "merge it into main", then check CI, (2) step 5 below. A Tildagon is on this PC now (COM13);
-the Pico and Pico 2 may still be on the original PC (copy a build there: CONTRIBUTING.md, step 7).
+Merged into `main` (fast-forward, `2bb98b4`); then `c11c55d` fixed a Linux-only test failure and `ba741e8` changed the badge
+screen (a ring round the edge for the state, "press reboop button", "press reboop / when finished" when PuTTY is used anyway).
+CI and the Windows build green at `ba741e8`. Now on step 5 below. A Tildagon is on this PC (COM13); the Pico and Pico 2 may still
+be on the original PC (copy a build there: CONTRIBUTING.md, step 7).
 
 **Next (step 5 and loose ends):**
 1. The hardware table in `docs/WINDOWS_PLAN.md` section 3: miniterm / PuTTY / Tera Term against a Tildagon, a Pico and a CircuitPython Pico
    on the Windows PC (does opening the port reset the board? REPL keys? reconnect after a port rename?). Then fill `docs/HARDWARE.md`.
+   Done 2026-11-08 for miniterm (scripted) and PuTTY (owner, by hand) on a Tildagon, a MicroPython Pico W and CircuitPython
+   Pico 2 and Pico W; miniterm also on the Pico 2 reflashed with MicroPython 1.29.0. Still open: Tera Term (not installed on
+   the second PC), PuTTY on the MicroPython Pico 2.
+   Also 2026-11-08: the Windows port list names boards by USB id ("Tildagon", "CircuitPython board") instead of "USB Serial
+   Device", and the ESP32-S3 bootloader port (`303a:1001`) says "no REPL, press reboop", as does Connect on it.
+   **Open, decided "not now" (2026-11-08):** `transport.py` can still close a Tildagon's port with RTS on. `open_board` retries a
+   silent board with RTS on (for the 2022 badge) and closes it that way if that fails too, and `close()` never drops RTS, so a
+   Tildagon remembered with `boards.rts` on would hang on every disconnect. Fix: `ser.rts = False` just before `ser.close()`.
+   It needs trying on the 2022 badge (the one board that needs RTS on) before it goes in.
 2. A hand pass over the window on Windows: drives view, hidden files, transfers, editor, Open with, firmware tools (UF2 drive, esptool),
    high-DPI look. None of it has been looked at there beyond the terminal.
 3. Done in 0.2.0: `release.yml` calls `windows-build.yml` and attaches `mpexplorer-<version>-windows.zip` to the release.
@@ -68,7 +79,9 @@ the Pico and Pico 2 may still be on the original PC (copy a build there: CONTRIB
 - To test the windowed exe's behaviour, start the parent **detached with no std handles** (`DETACHED_PROCESS`); a parent started from
   the shell inherits its handles and hides bugs like the miniterm crash. `typekeys.py`-style `WriteConsoleInputW` can type into another
   program's console window.
-- Check a board's port is free before a script opens it (open and close it with pyserial, or `tasklist` for a running mpexplorer).
+- Check a board's port is free before a script opens it (`tasklist` for a running mpexplorer, PuTTY or miniterm). **Never test it
+  with a plain `serial.Serial(port)` on a Tildagon:** that opens with RTS on, and closing it hangs the badge until reboop (it
+  happened 2026-11-08). Set `s.dtr, s.rts = True, False` before `s.open()`, as `transport.RawREPL.open` does.
 - `workflow_dispatch` works on a branch once the workflow has run there; `gh run view --log` works with gh here.
 
 ## CircuitPython and libraries (2026-11-01, later session on the Pi)
