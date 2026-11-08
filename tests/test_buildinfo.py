@@ -54,6 +54,18 @@ def test_a_frozen_build_reads_what_the_build_wrote(tmp_path):
     assert json.loads((pkg / buildinfo.BUILD_FILE).read_text())["source"] == "local build"
 
 
+def test_a_ci_build_is_never_changed_locally(tmp_path):
+    # the 0.2.0 release branch's CI exe said "changed locally": MSYS2's git saw the runner's checkout as edited
+    (tmp_path / ".git").mkdir()
+    out = str(tmp_path / buildinfo.BUILD_FILE)
+    edited = fake_git(dict(CLEAN, status=" M mpexplorer/app.py"))
+    info = buildinfo.write_build_file(out, str(tmp_path), {"GITHUB_SHA": "d39b18e99", "GITHUB_RUN_NUMBER": "34"}, edited)
+    assert (info["commit"], info["changed"]) == ("d39b18e", False)
+    other = buildinfo.write_build_file(out, str(tmp_path), {"GITHUB_SHA": "abc0000"}, edited)
+    assert other["changed"] is True                     # a different commit than CI asked for: say so
+    assert buildinfo.write_build_file(out, str(tmp_path), {}, edited)["changed"] is True       # a local build
+
+
 def test_a_build_without_git_uses_the_ci_commit(tmp_path):
     # MSYS2 has no git of its own: the first local build said "build unknown"
     out = str(tmp_path / buildinfo.BUILD_FILE)

@@ -47,8 +47,10 @@ def read_build_file(package_dir=PACKAGE_DIR):
 def write_build_file(path, root, env=None, run=subprocess.run):
     """For the build: record the commit being built (and the CI run, if any) at path. Returns the dict written."""
     env = os.environ if env is None else env
-    info = from_git(root, run) or {"commit": (env.get("GITHUB_SHA") or "")[:7] or "unknown", "date": "",
-                                   "changed": False}
+    sha = env.get("GITHUB_SHA") or ""
+    info = from_git(root, run) or {"commit": sha[:7] or "unknown", "date": "", "changed": False}
+    if sha and sha.startswith(info["commit"]):
+        info["changed"] = False         # CI builds exactly that commit; MSYS2's git saw its Windows checkout as changed
     run_no = env.get("GITHUB_RUN_NUMBER")
     info["source"] = "CI run %s" % run_no if run_no else "local build"
     with open(path, "w", encoding="utf-8") as f:
