@@ -94,12 +94,47 @@ def test_list_ports_labels_boards_and_skips_onboard_uarts(monkeypatch):
             self.product, self.description = product, description
 
     found = [P("/dev/ttyAMA10", None, None, None),
-             P("/dev/ttyACM0", 0x303A, 0x1001, "7AC00000", product="TiLDAGON"),
+             P("/dev/ttyACM0", 0x1234, 0x5678, "7AC00000", product="Gizmo"),        # unknown id: the product string
              P("/dev/ttyACM2", 0x2E8A, 0x0005, "15EDD94F06289842", description="Board in FS mode - Board CDC")]
     monkeypatch.setattr("serial.tools.list_ports.comports", lambda: found)
     assert ports.list_ports() == ["/dev/ttyACM2  Pico / Pico 2  #9842",
-                                  "/dev/ttyACM0  TiLDAGON  #0000"]
+                                  "/dev/ttyACM0  Gizmo  #0000"]
     assert ports.device_of(ports.list_ports()[0]) == "/dev/ttyACM2"
+
+
+class _WinPort:
+    """What pyserial gives on Windows: no product string, and "USB Serial Device (COMn)" for every board."""
+    def __init__(self, device, vid, pid, serial):
+        self.device, self.vid, self.pid, self.serial_number = device, vid, pid, serial
+        self.product, self.manufacturer, self.description = None, None, "USB Serial Device (%s)" % device
+
+
+def test_windows_port_list_names_boards_by_usb_id_not_usb_serial_device(monkeypatch):
+    # 2026-11-08: the owner picked the wrong board because every row said "USB Serial Device"
+    found = [_WinPort("COM13", 0x16D0, 0x120E, "7C4FAD337AC00000"),     # Tildagon
+             _WinPort("COM15", 0x2E8A, 0x0005, "E6614104034E1931"),     # MicroPython Pico W
+             _WinPort("COM16", 0x2E8A, 0x000B, "99122E5748243C1E"),     # CircuitPython Pico 2
+             _WinPort("COM17", 0x239A, 0x8120, "E6614C311B6F5837"),     # CircuitPython Pico W
+             _WinPort("COM20", 0x10C4, 0xEA60, "0001")]                 # a USB-serial adapter: nothing known
+    monkeypatch.setattr("serial.tools.list_ports.comports", lambda: found)
+    labels = ports.list_ports()
+    assert labels == ["COM15  Pico / Pico 2  #1931", "COM16  CircuitPython board  #3c1e",
+                      "COM13  Tildagon  #0000", "COM17  CircuitPython board  #5837", "COM20  USB serial device  #0001"]
+    assert not any("USB Serial Device" in t for t in labels)
+    assert [ports.device_of(t) for t in labels] == ["COM15", "COM16", "COM13", "COM17", "COM20"]
+
+
+def test_the_esp32s3_bootloader_port_says_no_repl_and_press_reboop(monkeypatch):
+    # a hung Tildagon showed up as 303a:1001 on Windows (2026-11-08); a model learned there earlier must not hide it
+    rom = _WinPort("COM14", 0x303A, 0x1001, "7C:4F:AD:33:7A:C0")
+    monkeypatch.setattr("serial.tools.list_ports.comports", lambda: [rom])
+    assert ports.list_ports() == ["COM14  ESP32-S3 bootloader: no REPL, press reboop  #a:c0"]
+    learned = {"303a:1001:7C:4F:AD:33:7A:C0": "TiLDAGON with ESP32S3"}
+    assert ports.list_ports(learned)[0].startswith("COM14  ESP32-S3 bootloader")
+    assert ports.in_bootloader("303a:1001:7C:4F:AD:33:7A:C0") and ports.in_bootloader("303A:1001:x")
+    assert not ports.in_bootloader("303a:4001:x") and not ports.in_bootloader("") and not ports.in_bootloader(None)
+    assert ports.generic_name("USB Serial Device (COM5)") and ports.generic_name("USB-Serial Device")
+    assert not ports.generic_name("Board in FS mode - Board CDC")
 
 
 def test_connecting_teaches_the_port_list_the_exact_model(monkeypatch, tmp_path):

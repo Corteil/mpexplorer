@@ -2060,6 +2060,28 @@ def test_a_hung_board_says_to_press_reset(make_app, monkeypatch):
     assert app.right not in app.conns
 
 
+def test_connecting_to_an_esp32s3_bootloader_port_says_press_reboop(make_app, monkeypatch):
+    # 2026-11-08, Windows: a hung Tildagon showed up as 303a:1001 (COM14), and Connect only said "could not enter
+    # the raw REPL"
+    from mpexplorer.ports import BOOTLOADER_ADVICE
+    from mpexplorer.transport import TransportError
+    app = make_app()
+    said = []
+    monkeypatch.setattr("mpexplorer.gtkui.app.error", lambda parent, title, text: said.append(text))
+    monkeypatch.setattr("mpexplorer.gtkui.app.board_id", lambda port: "303a:1001:7C:4F:AD:33:7A:C0")
+
+    def silent(cls, port, rts=False, **kw):
+        raise TransportError("could not enter the raw REPL (wrong port, or the port is busy?)")
+    monkeypatch.setattr(RawREPL, "open_board", classmethod(silent))
+    app._connect_to("COM14", app.right)
+    for _ in range(40):
+        pump(50)
+        if said:
+            break
+    assert said and said[0].startswith(BOOTLOADER_ADVICE) and "reboop" in said[0] and "raw REPL" in said[0]
+    assert app.right not in app.conns
+
+
 # -- Windows: there is no Gio.DesktopAppInfo; apps are found by id in Gio.AppInfo.get_all() -----------------
 class _WindowsApp:
     def __init__(self, app_id, name, commandline):

@@ -2,16 +2,40 @@
 import re
 from collections import namedtuple
 
-from .boardinfo import firmware_kind, nickname_before_connect, quoted
+from .boardinfo import FIRMWARE_NAMES, firmware_kind, guess_kind, nickname_before_connect, quoted
 from .settings import segment
 
+# The ESP32-S3's ROM bootloader port (docs/FIRMWARE_PLAN.md: a Tildagon or 2022 badge held in its bootloader, and a
+# Tildagon that had hung showed it on Windows, 2026-11-08). Nothing behind it runs a REPL; the firmware tools use it.
+ESP32S3_ROM_USB = (0x303A, 0x1001)
 
-# USB ids of the boards this tool targets, for a plain-English name (the OS only says "Board in FS mode - Board CDC")
+# USB ids of the boards this tool targets, for a plain-English name (the OS only says "Board in FS mode - Board CDC",
+# and Windows only "USB Serial Device (COM5)")
 KNOWN_BOARDS = {
     (0x2E8A, 0x0005): "Pico / Pico 2",
     (0x16D0, 0x08C7): "Pimoroni Pico",
+    (0x16D0, 0x120E): "Tildagon",
+    (0x16D0, 0x1114): "EMF 2022 badge",
     (0x303A, 0x4001): "EMF badge",
+    ESP32S3_ROM_USB: "ESP32-S3 bootloader: no REPL, press reboop",
 }
+
+BOOTLOADER_ADVICE = ("This is the ESP32-S3's built-in bootloader port (USB id 303a:1001), not the board's REPL: the "
+                     "chip is in its bootloader, or a badge has crashed into it, so there is nothing to connect to "
+                     "here.\n\n"
+                     "Press the badge's reboop (reset) button, press Scan, and connect to the port it comes back on. "
+                     "To install firmware on it, use Tools > Install firmware instead.")
+
+
+def in_bootloader(key):
+    """True for a board id ('303a:1001:...', as board_id gives) that is an ESP32-S3 in its ROM bootloader."""
+    return (key or "").lower().startswith("%04x:%04x:" % ESP32S3_ROM_USB)
+
+
+def generic_name(description):
+    """Windows' name for any USB serial port ('USB Serial Device (COM5)', or 'USB-Serial Device' on some builds): it
+    says nothing about the board, so a name from the USB id or the firmware is better."""
+    return (description or "").lower().replace("-", " ").startswith("usb serial device")
 
 
 def _key(p):
@@ -25,13 +49,24 @@ def short_model(machine):
     return "%s (%s)" % (board, chip) if chip else board
 
 
-def port_label(p, names=None, nickname=""):
+def port_label(p, names=None, nickname="", kind=None):
     """'/dev/ttyACM2  "Bench"  Pico 2 (RP2350)  #9842': the port, the owner's name for the board if it has one, what it
     is, then the end of the board's serial number, which tells two boards of one kind apart (ttyACM1/2 follow the order
-    they were plugged in)."""
-    # a model learned by connecting beats the USB-id guess: a Pico and a Pico 2 look the same on USB
+    they were plugged in). kind (boardinfo.MICROPYTHON / CIRCUITPYTHON) names a board the OS gives no name for."""
+    # a model learned by connecting beats the USB-id guess: a Pico and a Pico 2 look the same on USB. But the bootloader
+    # port says what it is whatever was learned on that id before.
     learned = (names or {}).get(segment(_key(p))) if p.vid is not None else None
-    name = short_model(learned) if learned else KNOWN_BOARDS.get((p.vid, p.pid)) or p.product or p.description or "port"
+    if (p.vid, p.pid) == ESP32S3_ROM_USB:
+        name = KNOWN_BOARDS[ESP32S3_ROM_USB]
+    elif learned:
+        name = short_model(learned)
+    else:
+        name = KNOWN_BOARDS.get((p.vid, p.pid)) or p.product
+        if not name and generic_name(p.description):
+            if kind is None and p.vid is not None:
+                kind = guess_kind(p.vid, p.pid, getattr(p, "manufacturer", "") or "")
+            name = "%s board" % FIRMWARE_NAMES[kind] if kind in FIRMWARE_NAMES else "USB serial device"
+        name = name or p.description or "port"
     if p.serial_number:
         name += "  #%s" % p.serial_number[-4:].lower()
     return "%s  %s" % (p.device, "%s  %s" % (quoted(nickname), name) if nickname else name)
@@ -84,5 +119,5 @@ def list_boards(settings):
         key = _key(p)
         nickname = nickname_before_connect(settings, key)
         kind = firmware_kind(settings, key, p.vid, p.pid, p.manufacturer)
-        out.append(Entry(p.device, port_label(p, names, nickname), kind, nickname))
+        out.append(Entry(p.device, port_label(p, names, nickname, kind), kind, nickname))
     return out

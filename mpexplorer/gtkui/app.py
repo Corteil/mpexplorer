@@ -20,7 +20,7 @@ from ..openwith import (SYSTEM_OPEN, EditManager, app_template, handler_for, loo
 from ..ops import ConflictPolicy, copy_tree, delete_items, is_within, move_item, total_size, unique_name
 from .. import boardinfo, meminfo, updates
 from ..buildinfo import build_info
-from ..ports import board_id, device_of, list_boards, short_model
+from ..ports import BOOTLOADER_ADVICE, board_id, device_of, in_bootloader, list_boards, short_model
 from ..remember import (chip_key, device_start, host_start, move_folder_to_chip, port_choice, remember_board_name,
                         remember_board_rts, remember_folder, remember_port, remember_source, source_choice)
 from ..settings import Settings, segment
@@ -523,7 +523,9 @@ class App(Gtk.Window):
                 self._connect_state("connect", pane)
                 self.set_status("Connection failed")
                 text = str(exc)
-                if extterm.board_hung(exc):
+                if in_bootloader(board):
+                    text = "%s\n\n(%s)" % (BOOTLOADER_ADVICE, text)
+                elif extterm.board_hung(exc):
                     text = "%s\n\n(%s)" % (extterm.HUNG_ADVICE, text)
                 error(self, "Connection failed", text)
                 return
