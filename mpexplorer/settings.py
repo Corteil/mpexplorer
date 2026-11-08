@@ -150,6 +150,7 @@ SPEC = {
     "terminal.external_command": ("", string),      # external terminal: a template with {port} {baud}...; "" = miniterm
     "terminal.reconnect": ("auto", one_of("auto", "ask", "never")),     # after the external terminal closes
     "connection.fast_mode": (False, boolean),       # opt-in RAM-only agent (docs/AGENT_PLAN.md)
+    "appstore.folder": ("", string),                # the badge app store's local folder; "" = appstore.default_folder()
 }
 
 

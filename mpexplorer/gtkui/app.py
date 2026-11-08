@@ -33,6 +33,7 @@ from .dialogs import (OutputWindow, SyncDialog, TransferPopup, about_dialog, ask
                       ask_open_with, ask_sync_target, update_dialog)
 from .editor import Editor
 from .firmware import BackupDialog, EraseDialog, FirmwareDialog
+from .appstore import BadgeAppsDialog
 from .libraries import LibrariesDialog
 from .viewer import Viewer
 from .pane import HOST, Pane
@@ -172,6 +173,7 @@ class App(Gtk.Window):
         add(t, "Sync folders...", self.sync_folders)
         add(t, "Install firmware...", self.install_firmware)
         add(t, "Install libraries...", self.install_libraries)
+        add(t, "Badge apps...", self.badge_apps)
         add(t, "Back up or restore flash...", lambda: BackupDialog(self))
         add(t, "Erase flash...", lambda: EraseDialog(self))
         w = menu("Window")
@@ -243,6 +245,15 @@ class App(Gtk.Window):
         pane = self._need_backend(self._pane_of(self.conn))
         if pane:
             LibrariesDialog(self, pane.backend, self.conn.label or self.conn.port)
+
+    def badge_apps(self):
+        """Tools > Badge apps: the badge app store. With no badge connected it still browses and downloads."""
+        if not self.conn:
+            BadgeAppsDialog(self)
+            return
+        pane = self._need_backend(self._pane_of(self.conn))
+        if pane:
+            BadgeAppsDialog(self, pane.backend, self.conn.label or self.conn.port, pane=pane)
 
     # -- remembered state --------------------------------------------------
     def _restore_window(self):
@@ -685,10 +696,11 @@ class App(Gtk.Window):
             else:
                 conn.badge.show("Cancelled" if isinstance(exc, Cancelled) else "Failed" if exc else "Done")
 
-    def disconnect(self, pane=None, after=None, keep_copied=True, badge_status=PRESS_REBOOP):
+    def disconnect(self, pane=None, after=None, keep_copied=True, badge_status=PRESS_REBOOP, reset=None):
         """Close the board in a pane (by default the active one, else the only one). after runs once it is closed or
         queued to close. keep_copied: files copied from it are downloaded first, to paste on the next board.
-        badge_status: what a badge's screen says once mpexplorer has let go of it."""
+        badge_status: what a badge's screen says once mpexplorer has let go of it. reset: soft-reset the board as it
+        is closed (None = as Preferences say; Badge apps passes True so the badge's menu sees new apps)."""
         pane = pane or self._pane_of(self.conn)
         conn = self.conns.get(pane)
         if not conn and after:
@@ -704,7 +716,8 @@ class App(Gtk.Window):
                 self._show_host(pane)       # nothing connected here: the left pane goes back to the host
                 pane.fill_sources(self._ports, HOST, self._kinds)
                 remember_source(self.settings, "left", HOST)
-            reset = self.settings.get("general.reset_on_disconnect")
+            if reset is None:
+                reset = self.settings.get("general.reset_on_disconnect")
             if conn.badge and not reset:
                 self.runner.submit(lambda prog: conn.badge.show(status=badge_status, kind="gone"),
                                    label="Badge screen", quiet=True)

@@ -9,7 +9,7 @@ import sys
 
 from . import paths
 
-KINDS = ("firmware", "backup", "libraries", "program")
+KINDS = ("firmware", "backup", "libraries", "program", "appstore")
 
 
 def _downloads(home):

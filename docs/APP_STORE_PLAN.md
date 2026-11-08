@@ -9,6 +9,17 @@ real Tildagon (OS v2.2.0, COM23): 1.1 MB free, its 8 apps listed in 5 s and matc
 17 s: 6 files written, 3 unchanged and skipped by the on-badge SHA-256, all 9 checked on the badge against the release,
 `metadata.json` now says 3 and no update is left. Found while building: Codeberg apps name their tarball by tag
 (`13411001-v0.1.3.tar.gz`), and the largest app unpacks to 2.9 MB, so installs check the badge's free space first.
+The owner confirmed the badge's menu showed GPS Clock 3 after a reboop.
+**Phase 2 built** on the same branch (`gtkui/appstore.py`, Tools > Badge apps..., setting `appstore.folder`, file
+chooser kind `appstore`, `disconnect(reset=True)`, `tests/test_gui_appstore.py`, 10 tests): the saved list at once, then
+a refresh; search, Category and Show (All, Favourites, On the badge, Updates available, Not on the badge) with a count;
+a star column for favourites; details with requirements met or not; Install / Update / Reinstall, Remove, Install by
+code, Install all favourites, Restart the badge (disconnect with a soft reset); Refresh, Download for offline, Store
+folder...; it browses and downloads with no badge, and says so for a board not running Tildagon OS. **Tried by the owner
+in the real window on Windows with the Tildagon (OS v2.2.0): all working** (2026-11-08). Phase 3 came with it (the saved
+list offline, *not downloaded* rows, Store folder...); still to try: a store folder copied to another computer, and the
+Pi. Phase 4 left: a 2024 badge on OS 1.x, README, HAND_CHECKS round 8, HARDWARE.md. Not built: removing old releases from the store (`Store.prune` exists, but the badge does not record
+which release it has, so what an installed app still needs is unknown); left until it matters.
 Asked for by the owner: the badge
 app store in mpexplorer: download its catalogue, browse it, and keep a **local store** on this computer so apps can be
 installed onto a badge **offline** (no Wi-Fi on the badge or the computer, for example at camp).
