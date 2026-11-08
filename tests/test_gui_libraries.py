@@ -51,12 +51,19 @@ def app_poll():
     APP[0]._poll()
 
 
+def new_app(tmp_path):
+    """An App on a settings file of its own, registered for wait_until. Every test makes its own: one that borrowed
+    an earlier test's app only worked while the tests ran in one process, in order."""
+    app = App(settings=Settings.load(str(tmp_path / "cfg.json")))
+    APP[:] = [app]
+    return app
+
+
 def open_dialog(tmp_path, monkeypatch, answer=True):
     monkeypatch.setattr(lib, "DEST", str(tmp_path / "board" / "lib"))
     asked = []
     monkeypatch.setattr(dialog, "ask_yes_no", lambda parent, title, text: asked.append(text) or answer)
-    app = App(settings=Settings.load(str(tmp_path / "cfg.json")))
-    APP[:] = [app]
+    app = new_app(tmp_path)
     opener, _ = make_site()
     dlg = dialog.LibrariesDialog(app, LocalBackend(), "Test board", lib.Catalog(str(tmp_path / "cache"), opener))
     wait_until(lambda: len(dlg.store) == 2 and dlg.job is None)
@@ -198,7 +205,7 @@ def test_remove_asks_then_deletes(tmp_path, monkeypatch):
 
 def test_a_circuitpython_board_shows_its_drive_and_is_labelled(tmp_path, monkeypatch):
     from mpexplorer.circuitpython import DriveBackend
-    app = App(settings=Settings.load(str(tmp_path / "cfg.json")))
+    app = new_app(tmp_path)
     mount = tmp_path / "CIRCUITPY"
     (mount / "lib").mkdir(parents=True)
     (mount / "code.py").write_text("print(1)\n")
@@ -220,8 +227,7 @@ def open_bundle_dialog(tmp_path, monkeypatch):
     monkeypatch.setattr(lib, "DEST", str(tmp_path / "board" / "lib"))
     asked = []
     monkeypatch.setattr(dialog, "ask_yes_no", lambda parent, title, text: asked.append(text) or True)
-    app = App(settings=Settings.load(str(tmp_path / "cfg.json")))
-    APP[:] = [app]
+    app = new_app(tmp_path)
     opener, _ = make_site()
     bopener, _ = site()
     dlg = dialog.LibrariesDialog(app, LocalBackend(), "CP board", lib.Catalog(str(tmp_path / "cache"), opener),
@@ -272,7 +278,7 @@ def test_the_other_firmwares_list_needs_the_override(tmp_path, monkeypatch):
 
 def test_open_with_on_a_circuitpython_drive_edits_the_file_where_it_is(tmp_path):
     from mpexplorer.circuitpython import DriveBackend
-    app = App(settings=Settings.load(str(tmp_path / "cfg.json")))
+    app = new_app(tmp_path)
     mount = tmp_path / "CIRCUITPY"
     mount.mkdir()
     (mount / "code.py").write_text("print(1)\n")
@@ -358,7 +364,7 @@ def test_the_count_says_how_many_are_shown_when_something_is_hidden(tmp_path, mo
 def test_custom_library_sources_join_the_source_box_with_their_firmware(tmp_path, monkeypatch):
     from mpexplorer import sources as S
     from mpexplorer.gtkui import libraries as dialog_module
-    app = App(settings=Settings.load(str(tmp_path / "cfg.json")))
+    app = new_app(tmp_path)
     for preset in S.LIBRARY_PRESETS:
         S.add_source(app.settings, "libraries", dict(preset))
     monkeypatch.setattr(lib, "DEST", str(tmp_path / "board" / "lib"))
@@ -382,7 +388,7 @@ def test_custom_library_sources_join_the_source_box_with_their_firmware(tmp_path
 def test_manage_sources_opens_the_library_manager_and_the_box_follows(tmp_path, monkeypatch):
     from mpexplorer import sources as S
     from mpexplorer.gtkui import libraries as dialog_module
-    app = App(settings=Settings.load(str(tmp_path / "cfg.json")))
+    app = new_app(tmp_path)
     S.add_source(app.settings, "libraries", dict(S.LIBRARY_PRESETS[0]))
     opened = []
     monkeypatch.setattr(dialog_module, "SourcesDialog",
@@ -412,7 +418,7 @@ def test_the_confirmation_names_the_source_and_the_pypi_libraries_it_still_needs
     monkeypatch.setattr(lib, "DEST", str(tmp_path / "board" / "lib"))
     asked = []
     monkeypatch.setattr(dialog, "ask_yes_no", lambda parent, title, text: asked.append(text) or False)
-    app = App(settings=Settings.load(str(tmp_path / "cfg.json")))
+    app = new_app(tmp_path)
     repo = "adafruit/Adafruit_CircuitPython_Bundle"
     S.add_source(app.settings, "libraries", {"name": "Mine", "kind": "bundle", "repo": repo, "prefix": PREFIX,
                                               "for": "circuitpython"})

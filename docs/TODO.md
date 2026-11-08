@@ -132,9 +132,13 @@ GTK 3 via MSYS2; reconnect automatically after the external terminal closes; Win
 - [ ] Hardware tests on a Windows PC: miniterm / PuTTY / Tera Term against a Tildagon, a Pico and a CircuitPython Pico (does opening the port reset the board?).
 - [x] Preferences and Open with on Windows, by hand with the CI build (owner, 2026-11-07): Preferences opens; `boot.py` on the Tildagon
       opens in Notepad++ (fixes: `find_app`, Windows app commands, no ':' in the cache folder).
-- [ ] Flaky GUI test: `tests/test_gui_gtk.py::test_closing_one_board_leaves_the_other` failed once in CI's `gui` job (2026-11-07, run
-      42421933955) with "unexpected folder error box ... Expecting value: line 1 column 1" left by `test_paste_between_two_connected...`;
-      passed on the re-run. Find the race (a JSON reply read while the other fake board was closing?).
+- [x] Flaky GUI test "unexpected folder error box ... Expecting value: line 1 column 1" (CI run 42421933955, then locally;
+      fixed 2026-11-08). Two causes: a listing still running when a test closed its window ended later, read an empty reply
+      from the closing board, and opened its box in the next test (`App._poll` now stops once the window is destroyed: a
+      real app fix too); and the fake board's `contextlib.redirect_stdout` swapped stdout for the whole process, so two fake
+      boards running at once could write into each other's replies (`tests/fakedevice.py` now sends each thread's output to
+      its own run). Found by running the suite on 4 workers (pytest-xdist), which made it show nearly every run; then 3 clean
+      runs of 750 tests on 4 workers and one on 1.
 - [ ] Portable zip as a CI artifact and release asset, README Windows section; `portable.txt` mode; signing only once the owner has a certificate (waiting); installer later.
 
 ## 2i. File selectors for local files (plan: `docs/FILE_CHOOSER_PLAN.md`, asked for by the owner 2026-11-07)

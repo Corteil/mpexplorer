@@ -1517,6 +1517,19 @@ def two_boards(app, tmp_path):
     return first, second, a, b
 
 
+def test_a_job_that_ends_after_the_window_closed_opens_no_box(cfg, monkeypatch):
+    # a listing interrupted by closing the window read an empty reply and its error box turned up in the next test
+    app = App(settings=Settings.load(cfg))
+    said, done = [], []
+    monkeypatch.setattr("mpexplorer.gtkui.pane.error", lambda parent, title, text: said.append(text))
+    release = threading.Event()
+    app.runner.submit(lambda prog: release.wait(5) and None, lambda res, exc: done.append(True), "Listing", quiet=True)
+    app.destroy()
+    release.set()
+    pump(300)                                           # the job ends now, after the window has gone
+    assert app.closed and app._poll() is False and done == [] and said == []
+
+
 def test_two_boards_side_by_side(make_app, tmp_path):
     app = make_app()
     first, second, a, b = two_boards(app, tmp_path)

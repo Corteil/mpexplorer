@@ -106,7 +106,9 @@ class App(Gtk.Window):
             self._show_host(self.right)
         self.connect("delete-event", lambda *_: self._quit() or False)
         self.connect("configure-event", self._configured)
-        self.connect("destroy", lambda _w: (self._stop_status_timer(), self.watchdog.stop(), Gtk.main_quit()))
+        self.closed = False
+        self.connect("destroy", lambda _w: (setattr(self, "closed", True), self._stop_status_timer(),
+                                            self.watchdog.stop(), Gtk.main_quit()))
         self.show_all()
         if self.settings.problems:
             self.set_status("Settings: " + self.settings.problems[0], keep=True)       # a warning stays
@@ -1228,6 +1230,8 @@ class App(Gtk.Window):
 
     # -- main loop tick ----------------------------------------------------
     def _poll(self):
+        if self.closed:         # the window is gone: a listing that ends now must not open a box (it read an empty
+            return False        # reply from the board being closed; a flaky test showed it, 2026-11-08)
         self.watchdog.beat()
         try:
             self.edits.tick()

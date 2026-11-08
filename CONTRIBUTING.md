@@ -36,14 +36,15 @@ uses `/` as its path separator while `MSYSTEM` is set, so path code must not ass
 ### Build on a Windows PC (the script)
 `packaging/windows/build-local.ps1` does what the workflow does, from PowerShell in the repo, and leaves the repo alone:
 ```
-.\packaging\windows\build-local.ps1             # all tests (GUI ones too), build, check the exe: about 5 minutes
+.\packaging\windows\build-local.ps1             # all tests (GUI ones too) on every core, build, check: about 3 minutes
 .\packaging\windows\build-local.ps1 -NoTests    # build and check only: about 2 minutes
+.\packaging\windows\build-local.ps1 -Workers 1  # the tests on one core, to rule out a problem only seen in parallel
 .\packaging\windows\build-local.ps1 -Zip        # also mpexplorer-windows.zip, like the CI artifact
 ```
 It needs MSYS2 in `D:\msys64` (else `-Msys <folder>`) with the packages above plus `zip`, `git` (the build records its commit
 for Help > About) and `mingw-w64-ucrt-x86_64-python-pytest`;
 to set that up, unpack `msys2-x86_64-latest.sfx.exe` from repo.msys2.org (`msys2.sfx.exe -y -oD:\`), then in PowerShell with
 `$env:MSYSTEM = "UCRT64"`: `D:\msys64\usr\bin\bash.exe -lc "pacman -Syuu --noconfirm"` (twice) and the `pacman -S` line.
-Everything goes to `D:\mpexplorer-build` (`-Out <folder>`): a venv that sees MSYS2's GTK and adds esptool and pytest-timeout,
+Everything goes to `D:\mpexplorer-build` (`-Out <folder>`): a venv that sees MSYS2's GTK and adds esptool, pytest-timeout and pytest-xdist,
 PyInstaller's work folder, and `dist\mpexplorer\mpexplorer.exe`. The tests and the self-test run on a hidden desktop
 (`packaging/windows/hidden_desktop.py`, the Windows stand-in for `xvfb-run`), so their windows do not cover the screen.

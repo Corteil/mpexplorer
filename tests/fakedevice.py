@@ -7,6 +7,7 @@ import os
 import queue
 import re
 import struct
+import sys
 import threading
 import traceback
 
@@ -32,6 +33,45 @@ if not hasattr(os, "statvfs"):
 
 
 BANNER = 'MicroPython fake-1.0 on 2026-01-01; FakeBoard with FakeCPU\r\nType "help()" for more information.\r\n'
+
+
+class _ThreadStdout:
+    """sys.stdout while fake boards run code: each thread's writes go to the output of the run on that thread, else
+    to the stdout that was there before. contextlib.redirect_stdout swaps sys.stdout for the whole process, so two
+    fake boards running at once wrote into each other's replies (the second then read an empty reply: 'Expecting
+    value: line 1 column 1', a flaky GUI test seen in CI and here, 2026-11-07/08)."""
+
+    def __init__(self, fallback):
+        self.fallback, self.local = fallback, threading.local()
+
+    def _target(self):
+        return getattr(self.local, "out", None) or self.fallback
+
+    def write(self, text):
+        return self._target().write(text)
+
+    def flush(self):
+        return self._target().flush()
+
+    def __getattr__(self, name):
+        return getattr(self._target(), name)
+
+
+_install_lock = threading.Lock()
+
+
+@contextlib.contextmanager
+def _stdout_of_this_thread(out):
+    """Send this thread's print() output to `out` for the block, without touching other threads' output."""
+    with _install_lock:
+        proxy = sys.stdout
+        if not isinstance(proxy, _ThreadStdout):          # pytest may have put its own capture back in between
+            proxy = sys.stdout = _ThreadStdout(sys.stdout)
+    proxy.local.out = out
+    try:
+        yield
+    finally:
+        proxy.local.out = None
 
 
 class FriendlyREPL:
@@ -206,8 +246,9 @@ class FriendlyREPL:
         out = io.StringIO()
         err = ""
         self.globals["input"] = self._input
+        self._out_now = out
         try:
-            with contextlib.redirect_stdout(out):
+            with _stdout_of_this_thread(out):
                 exec(code, self.globals)
         except BaseException as e:
             err = 'Traceback (most recent call last):\n  File "<stdin>", line 1, in <module>\n%s: %s\n' % (
@@ -338,7 +379,7 @@ class FakeSerial(FriendlyREPL):
         threading.Thread(target=self._run, args=(code, ok), daemon=True).start()
 
     def _input(self, prompt=""):
-        print(prompt, end="")
+        print(prompt, end="", file=self._out_now)
         self.waiting_input.set()
         chars = []
         while True:
@@ -349,7 +390,7 @@ class FakeSerial(FriendlyREPL):
             if c in (b"\n", b"\r"):
                 text = b"".join(chars).decode()
                 if not self._friendly_prog:     # real MicroPython's input() echoes what it reads (readline does)
-                    print(text)
+                    print(text, file=self._out_now)
                 return text
             chars.append(c)
 
@@ -357,8 +398,9 @@ class FakeSerial(FriendlyREPL):
         out = io.StringIO()
         err = ""
         self.globals["input"] = self._input
+        self._out_now = out
         try:
-            with contextlib.redirect_stdout(out):
+            with _stdout_of_this_thread(out):
                 exec(code, self.globals)
         except Exception:
             err = traceback.format_exc()

@@ -15,14 +15,15 @@ if [ ! -d "$VENV" ]; then
 fi
 PY="$VENV/bin/python"
 [ -x "$PY" ] || [ -x "$PY.exe" ] || PY="$VENV/Scripts/python"
-"$PY" -m pip install -q --disable-pip-version-check "esptool>=5,<6" pytest-timeout
+"$PY" -m pip install -q --disable-pip-version-check "esptool>=5,<6" pytest-timeout pytest-xdist
 "$PY" -c "import gi; gi.require_version('Gtk', '3.0'); from gi.repository import Gtk; import sys; \
 print('Python', sys.version.split()[0], ' GTK', Gtk.get_major_version(), Gtk.get_minor_version(), Gtk.get_micro_version())"
 
 HIDDEN="$PWD/packaging/windows/hidden_desktop.py"     # windows go to a hidden desktop, not the owner's screen
 if [ "${MPX_TESTS:-1}" != "0" ]; then
-    echo "== tests (GUI tests included, on a hidden desktop)"
-    "$PY" "$HIDDEN" -m pytest -q --timeout=60 -p no:cacheprovider
+    # every core (pytest-xdist): 750 tests in ~95 s instead of ~205 s on the owner's 4-core PC (2026-11-08)
+    echo "== tests (GUI tests included, on a hidden desktop, ${MPX_WORKERS:-auto} workers)"
+    "$PY" "$HIDDEN" -m pytest -q --timeout=60 -p no:cacheprovider -n "${MPX_WORKERS:-auto}"
 fi
 
 echo "== PyInstaller"
