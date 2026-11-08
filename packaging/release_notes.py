@@ -16,11 +16,12 @@ def changelog_section(version, text):
 
 
 def notes(tag):
-    install = (ROOT / "packaging" / "release_install.md").read_text().replace("{tag}", tag)
+    # UTF-8 always: the CHANGELOG has non-ASCII (such as '␛'), and Windows would read it as cp1252 (2026-11-08)
+    install = (ROOT / "packaging" / "release_install.md").read_text(encoding="utf-8").replace("{tag}", tag)
     install = install.replace("{version}", tag.removeprefix("v")).strip()
-    changes = changelog_section(tag.removeprefix("v"), (ROOT / "CHANGELOG.md").read_text())
+    changes = changelog_section(tag.removeprefix("v"), (ROOT / "CHANGELOG.md").read_text(encoding="utf-8"))
     return changes + "\n\n" + install + "\n"
 
 
 if __name__ == "__main__":
-    sys.stdout.write(notes(sys.argv[1]))
+    sys.stdout.buffer.write(notes(sys.argv[1]).encode("utf-8"))     # UTF-8 whatever the console's code page

@@ -15,7 +15,7 @@ def test_version_matches_pyproject():
 
 
 def test_changelog_has_current_version():
-    assert "## [%s]" % mpexplorer.__version__ in (ROOT / "CHANGELOG.md").read_text()
+    assert "## [%s]" % mpexplorer.__version__ in (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
 
 
 def test_version_flag_needs_no_gtk():
