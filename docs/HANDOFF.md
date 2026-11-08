@@ -38,6 +38,15 @@ redirected when the program has its own console, and the bundled miniterm keeps 
 **2026-11-08:** 0.2.0 released with the Windows zip. Then the owner found that **PuTTY hangs a Tildagon when it closes** (closing
 the port with RTS on freezes the badge until reset; PuTTY always keeps RTS on). Reproduced with pyserial; mpexplorer now warns and
 offers miniterm, and says "press reset" on Windows error 31. Details: `docs/WINDOWS_PLAN.md` section 3.
+Also, after the owner got "picocom was not found" on Windows: Preferences > Terminal lists "miniterm (the default...)" first,
+only this system's presets (no picocom on Windows, no Tera Term on Linux), and greys out "(not installed)" programs
+(`extterm.choices`, `installed`, `template_of`). CONTRIBUTING.md now says how to set up another Windows PC.
+
+**State at hand-over (2026-11-08, moving to a faster Windows PC):** all of it is on branch **`fix-putty-tildagon`** (pushed, not
+merged into `main`). ruff and the whole suite pass on the owner's PC (774 passed, GUI tests on the hidden desktop); a local build
+started fine. **Not yet tried by hand:** the PuTTY warning and its three buttons, the "press reset" message, the greyed-out list.
+To do next: (1) the owner tries those with the Tildagon, (2) merge on "merge it into main", then check CI, (3) step 5 below.
+The boards (Tildagon COM8, Pico, Pico 2) are on the original PC: copy a build there to try it (CONTRIBUTING.md, step 7).
 
 **Next (step 5 and loose ends):**
 1. The hardware table in `docs/WINDOWS_PLAN.md` section 3: miniterm / PuTTY / Tera Term against a Tildagon, a Pico and a CircuitPython Pico
