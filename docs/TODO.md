@@ -124,12 +124,16 @@ label if one is missing on another theme.
 Decided (owner, 2026-11-06): on Windows the console is the emulated REPL plus an "Open in external terminal..." button (no Mode radios);
 GTK 3 via MSYS2; reconnect automatically after the external terminal closes; Windows 10 and 11 only; first release a portable zip; sign the build (waits for the owner's certificate); `portable.txt` next to the exe keeps settings in a `data` folder.
 - [x] Portability fixes in the core (2026-11-06): folders + `portable.txt`, disk space, drives view, hidden attribute, CIRCUITPY/UF2 by drive
-      letter, Open with, Windows names and case clashes before a copy, long paths, CRLF note. Not yet tried in the window on Windows or with boards.
+      letter, Open with, Windows names and case clashes before a copy, long paths, CRLF note. Tried in the window on Windows with boards:
+      hand-check round 7, all working (owner, 2026-11-08).
 - [x] Windows CI job (`windows-latest`, Python 3.11 and 3.13) running the portable tests (2026-11-06).
 - [x] External terminal: `extterm.py`, the button (all platforms), Preferences (`terminal.external_command`, `terminal.reconnect`); miniterm default (2026-11-06, tests only).
 - [ ] Try it by hand: miniterm on the Pi with a Pico, then on Windows; reconnect after a soft reset that moves the port.
-- [x] MSYS2 + PyInstaller packaging as a CI artifact (2026-11-06, workflow `windows-build.yml`; the built exe passes its self-test on the runner). Not looked at by hand yet.
-- [ ] Hardware tests on a Windows PC: miniterm / PuTTY / Tera Term against a Tildagon, a Pico and a CircuitPython Pico (does opening the port reset the board?).
+      Windows half done (2026-11-06 and 11-08: miniterm with a Tildagon, reconnect works; no port moved after a reset). The Pi half is open.
+- [x] MSYS2 + PyInstaller packaging as a CI artifact (2026-11-06, workflow `windows-build.yml`; the built exe passes its self-test on the runner).
+      Used by hand on two Windows 11 PCs (owner, 2026-11-07 and 11-08).
+- [x] Hardware tests on a Windows PC (2026-11-08, `docs/WINDOWS_PLAN.md` section 3): miniterm (scripted) and PuTTY (owner) against a
+      Tildagon, MicroPython Pico W and Pico 2, and CircuitPython Pico 2 and Pico W. Opening the port resets none of them. Tera Term not tried.
 - [x] Preferences and Open with on Windows, by hand with the CI build (owner, 2026-11-07): Preferences opens; `boot.py` on the Tildagon
       opens in Notepad++ (fixes: `find_app`, Windows app commands, no ':' in the cache folder).
 - [x] Flaky GUI test "unexpected folder error box ... Expecting value: line 1 column 1" (CI run 42421933955, then locally;

@@ -26,7 +26,8 @@ Status (2026-11-06): **steps 1 to 4 done in code and tests**, and the Windows bu
   - **CRLF:** after an Open with upload of a `.py` file with Windows line endings, the status line says so once per file
     (`openwith.crlf_note`); the bytes are uploaded as they are.
   - Tests: `tests/test_windows_core.py`. Suite on Windows: 500 passed, 38 skipped. **None of it tried in the GTK window on Windows**
-    (no GTK there until step 4) or with a real board on a Windows PC.
+    (no GTK there until step 4) or with a real board on a Windows PC. **Since tried:** all of it, in the window with real boards,
+    by the owner on 2026-11-08 (`docs/HAND_CHECKS.md` round 7), all working.
 - Step 2 done (2026-11-06): CI job `windows` on `windows-latest`, Python 3.11 and 3.13, ruff + the suite with `-rs` so every skip and its
   reason is in the log. No GUI tests there (no PyGObject) until the packaging step brings MSYS2.
 - Step 3 built (2026-11-06, branch `external-terminal`):

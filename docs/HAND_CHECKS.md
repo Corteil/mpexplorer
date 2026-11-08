@@ -1,7 +1,8 @@
 # Hand checks (CircuitPython, libraries, badges, custom sources)
 
-Rounds 1 to 5 were done by the owner in the real window on 2026-11-01 and passed; round 6 is waiting. Each first passed by script or under a fake display.
+Rounds 1 to 5 were done by the owner in the real window on 2026-11-01 and passed; round 7 (Windows) on 2026-11-08, passed; round 6 is waiting. Each first passed by script or under a fake display.
 To repeat them, start the app from `main` after closing any old window. Tell Claude what you see; screenshots help.
+Round 7 is for the Windows build: use the desktop shortcut *mpexplorer (test build)* (`D:\mpexplorer-build\dist\mpexplorer\mpexplorer.exe`).
 
 | Round | Area | Result |
 |-------|------|--------|
@@ -11,6 +12,7 @@ To repeat them, start the app from `main` after closing any old window. Tell Cla
 | 4 | Custom firmware sources | OK |
 | 5 | Custom library sources | OK |
 | 6 | Phase 5: folder and index library sources, exact revision, LiPo preset, board memory | not yet tried |
+| 7 | The window on Windows: drives, hidden files, copies and Windows names, editor and Open with, firmware tools, badge screen, port names, high DPI | OK (owner, Windows 11, 2026-11-08) |
 
 Bench boards: a Pico 2 with CircuitPython (`CIRCUITPY` drive), a Pico 2 with MicroPython, a Pico W with MicroPython 1.29.0.
 
@@ -95,6 +97,70 @@ Only do this on a board you don't mind wiping (switching firmware empties its fi
    version matching the running one is not marked `(newer than this board)`, a later revision is.
 4. **Pico LiPo preset:** Add > *Pimoroni Pico LiPo*; the boards include `pimoroni_pico_lipo2xl_w`.
 5. **Board memory:** Device > Board memory... on each connected board; CircuitPython boards say the flash chip is not reported.
+
+---
+
+## Round 7: the window on Windows (WINDOWS_PLAN.md step 5; all working, owner, test build of `main` at `75c6e69`, 2026-11-08)
+Bench (second Windows 11 PC, 2026-11-08): Tildagon COM13, Pico W MicroPython 1.29.0 COM15, Pico 2 MicroPython 1.29.0 COM18,
+Pico W CircuitPython 10.3.1 COM17 (`CIRCUITPY` drive G:). Port numbers can differ on your PC.
+
+### 1. Port list and connecting
+1. Press **Scan** and open a pane's port list. **Expect** no row to say `USB Serial Device`: `COM13  Tildagon  #0000`,
+   `COM15  Pico / Pico 2  #1931`, `COM18  Pico / Pico 2  #3c1e`, `COM17  CircuitPython board  #5837` (a board you have connected to
+   before shows the model it learned instead, such as `Pico 2 (RP2350)`), each with its **MP** or **CP** badge.
+2. Connect each board in turn. **Expect** the pane label to name the port, model and firmware; files listed; Disconnect works.
+3. Put the Tildagon in its bootloader (power off, hold boop while plugging in). Scan. **Expect** a row
+   `ESP32-S3 bootloader: no REPL, press reboop`. Connect to it: **expect** "Connection failed" that starts by saying it is the
+   bootloader port and to press reboop (or use Tools > Install firmware), not just "could not enter the raw REPL". Press reboop after.
+
+### 2. Badge screen (Tildagon)
+1. Connect the Tildagon. **Expect** its screen to show the mpexplorer page with a **green ring round the edge** (no dot at the top),
+   `CONNECTED`, this PC's name, the folder and free space.
+2. Copy a file to it: the ring turns **amber** while it works, then green again.
+3. Disconnect. **Expect** a **red ring**, `DISCONNECTED` and `press reboop button`.
+4. Connect again, choose PuTTY in Preferences > Terminal, then Device > Open in external terminal... > *Use PuTTY anyway*. **Expect** the
+   badge to show `press reboop` and `when finished` on two lines. Close PuTTY, press reboop (the badge hangs, as expected), reconnect.
+   Set Preferences > Terminal back to miniterm.
+
+### 3. Host pane: drives and hidden files
+1. In a host pane go **Up** from `C:\`. **Expect** a *This PC* view with one folder per drive (`C:\`, `D:\`, the `CIRCUITPY` drive...).
+   You cannot create, paste or rename anything there; opening a drive goes into it.
+2. Go to a folder with a hidden file (for example `C:\Users\<you>` has `NTUSER.DAT`). **Expect** it hidden until *Show hidden files* is ticked.
+3. Edit > Preferences, then close and reopen the app: **expect** your settings kept (they live in `%APPDATA%\mpexplorer`).
+
+### 4. Copies between the PC and boards
+1. Copy a folder of a few files from the PC to the Pico W (button, drag, and copy/paste), then back to a new folder on the PC.
+   **Expect** progress, speed and the same files at the far end. Try overwrite / skip / keep both on a second copy.
+2. The same to and from the CircuitPython Pico W (it writes through drive G:; the board restarts after each save, which is normal).
+3. **Names Windows cannot store:** on the Pico W, in Device > REPL console, run
+   `import os; os.mkdir('/clash'); [open('/clash/' + n, 'w').close() for n in ('CON.txt', 'Test.py', 'test.py')]`.
+   Copy `/clash` to the PC. **Expect** a refusal that names `CON.txt` (a name Windows reserves) and `Test.py` / `test.py`
+   (names that differ only in case) and says why, before anything is written. Delete `/clash` from the board afterwards.
+4. Copy between two boards side by side (one in each pane), then cut and paste within one board's pane.
+
+### 5. Editor, Run and Open with
+1. Double-click a `.py` file on the Pico W: the built-in editor opens. Change it, save, close, open again: **expect** the change.
+2. Select a `.py` file, Run on the board: **expect** its output.
+3. Right-click > **Open with...** on a board file: **expect** the built-in editor, *Run on the board*, the hex and image viewers, the
+   Windows apps for that type (Notepad, Notepad++ ...) and *Custom command*. Open it in Notepad, change it, save: **expect** the
+   status line to say it was uploaded, and the board's copy changed. Saving a `.py` file with Windows line endings (CRLF) also
+   **expects** a one-time note about them in the status line.
+4. *Always use this for .py files*, then double-click: it opens in that program. Remove the default again in Preferences > File types.
+
+### 6. Firmware tools (only on a board you do not mind reflashing)
+1. **UF2 drive:** hold BOOTSEL and plug in a Pico. **Expect** Tools > Install firmware to find it (the `RPI-RP2` / `RP2350` drive),
+   with board and version lists. Install MicroPython: **expect** "Installed: ..." and Connect works afterwards.
+2. **esptool (Tildagon):** in its bootloader (as in 1.3), Tools > Back up or restore flash... > Back up.... **Expect** progress
+   and a file the size of the badge's flash. Do not erase or restore unless you mean to. The backup can hold your Wi-Fi password:
+   keep it private. Press reboop afterwards.
+3. Tools > Start bootloader on a running MicroPython Pico: **expect** it to reappear as a UF2 drive.
+
+### 7. Look and feel
+1. **High DPI:** Windows Settings > System > Display > Scale at 150% (and back to your usual). Restart the app. **Expect** sharp text and
+   icons, nothing cut off, dialogs that fit the screen.
+2. Help > About MicroPython Explorer: **expect** the version and the commit it was built from.
+3. Optional: put an empty `portable.txt` next to `mpexplorer.exe`, restart: **expect** settings in a `data` folder there instead.
+   Delete it again to go back.
 
 ---
 

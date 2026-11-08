@@ -65,14 +65,16 @@ be on the original PC (copy a build there: CONTRIBUTING.md, step 7).
    silent board with RTS on (for the 2022 badge) and closes it that way if that fails too, and `close()` never drops RTS, so a
    Tildagon remembered with `boards.rts` on would hang on every disconnect. Fix: `ser.rts = False` just before `ser.close()`.
    It needs trying on the 2022 badge (the one board that needs RTS on) before it goes in.
-2. A hand pass over the window on Windows: drives view, hidden files, transfers, editor, Open with, firmware tools (UF2 drive, esptool),
-   high-DPI look. None of it has been looked at there beyond the terminal.
+2. Done 2026-11-08: the hand pass over the window on Windows (`docs/HAND_CHECKS.md` round 7: port names, badge screen, drives
+   view, hidden files, copies and Windows names, editor and Open with, firmware tools, high DPI), all working (owner).
+   With that, step 5 is done apart from signing; a 0.2.1 release with today's changes is the natural next step.
 3. Done in 0.2.0: `release.yml` calls `windows-build.yml` and attaches `mpexplorer-<version>-windows.zip` to the release.
 4. Signing waits for the owner's certificate (decided). Installer later.
 5. Earlier open items still stand: the Pi hand checks in `docs/TODO.md`, round 6 of `docs/HAND_CHECKS.md`.
 
 **Working on the Windows PC (lessons):**
-- Shells: Git Bash and PowerShell. No MSYS2 or GTK locally, so the GUI tests only run in CI (Linux `gui` job, and the Windows build job).
+- Shells: Git Bash and PowerShell. The first Windows PC had no MSYS2 or GTK, so its GUI tests only ran in CI; the second PC has
+  MSYS2 in `D:\msys64` and runs the whole suite, GUI tests included (CONTRIBUTING.md, "Setting up another Windows PC").
   Scratch venv: `python -m venv <scratch>/mpv` then `<scratch>/mpv/Scripts/pip install -e .[dev]`; run the suite to a log file.
 - **Bash heredocs and `sed` mangle backslashes here** (seen five times: `\n` became a newline, `\\` was halved). Write Python, regexes
   and Windows paths with the Write / Edit tools.
