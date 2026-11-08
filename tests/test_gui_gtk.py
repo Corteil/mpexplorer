@@ -3,6 +3,7 @@ skipped otherwise. Uses a temporary settings file and the fake board: never touc
 import json
 import os
 import sys
+import threading
 import time
 import types
 
@@ -285,7 +286,8 @@ def test_help_menu_has_about_with_the_build_version(make_app, monkeypatch):
     bar = [c for c in app.get_children()[0].get_children() if isinstance(c, common.Gtk.MenuBar)][0]
     menus = {item.get_label(): item.get_submenu() for item in bar.get_children()}
     assert list(menus)[-1] == "Help"
-    assert [i.get_label() for i in menus["Help"].get_children()] == ["About MicroPython Explorer"]
+    assert [i.get_label() for i in menus["Help"].get_children()] == ["Check for updates...",
+                                                                      "About MicroPython Explorer"]
     info = {"version": "0.1.1", "commit": "d39b18e", "date": "2026-11-08", "changed": True, "source": "CI run 57"}
     dlg = dialogs.about_dialog(app, info)
     assert dlg.get_version() == "0.1.1 (build d39b18e, 2026-11-08, changed locally)"
@@ -298,8 +300,36 @@ def test_help_menu_has_about_with_the_build_version(make_app, monkeypatch):
     dlg.destroy()
     shown = []                                          # the menu item opens it and it closes again
     monkeypatch.setattr(dialogs.Gtk.AboutDialog, "run", lambda self: shown.append(self.get_version()))
-    menus["Help"].get_children()[0].activate()
+    menus["Help"].get_children()[1].activate()
     assert shown and shown[0].startswith(dialogs.version_text(dialogs.build_info()).split()[0])
+
+
+def test_check_for_updates_asks_on_a_thread_and_offers_the_page(make_app, monkeypatch):
+    from mpexplorer import updates
+    from mpexplorer.gtkui import dialogs
+    app = make_app()
+    asked, answers, opened = [], [], []
+
+    def fake_check(info):
+        asked.append((info["version"], threading.current_thread().name))
+        return updates.Result("changes", "There are 4 newer changes on main.", "https://github.com/x/compare")
+    monkeypatch.setattr("mpexplorer.gtkui.app.updates.check", fake_check)
+    monkeypatch.setattr(dialogs.Gtk.MessageDialog, "run",
+                        lambda self: (answers.append(self.get_property("text")), common.Gtk.ResponseType.ACCEPT)[1])
+    monkeypatch.setattr("mpexplorer.gtkui.app.Gtk.show_uri_on_window", lambda win, url, t: opened.append(url))
+    app.check_updates()
+    assert not app.updates_item.get_sensitive()                 # one check at a time
+    for _ in range(50):
+        pump(50)
+        if answers:
+            break
+    assert asked[0][1] == "updates"                             # not the GUI thread, not the serial worker
+    assert answers == ["Newer changes on main"] and opened == ["https://github.com/x/compare"]
+    assert app.updates_item.get_sensitive()
+    dlg = dialogs.update_dialog(app, updates.Result("current", "You are up to date."))
+    buttons = [b.get_label() for b in dlg.get_action_area().get_children()]
+    assert buttons == ["Close"]                                 # no page to open
+    dlg.destroy()
 
 
 def test_one_colour_icons_come_first(monkeypatch):

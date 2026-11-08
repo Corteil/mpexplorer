@@ -32,6 +32,22 @@ def about_details(info):
     return "\n".join(lines)
 
 
+def update_dialog(parent, result):
+    """The answer of Help > Check for updates, with a button for the page when there is one. The caller runs it:
+    the response is Gtk.ResponseType.ACCEPT for that button."""
+    title = {"release": "A new version is out", "changes": "Newer changes on main", "current": "Up to date",
+             "error": "Check for updates"}[result.kind]
+    kind = Gtk.MessageType.WARNING if result.kind == "error" else Gtk.MessageType.INFO
+    dlg = Gtk.MessageDialog(transient_for=parent, modal=True, message_type=kind, buttons=Gtk.ButtonsType.NONE,
+                            text=title)
+    dlg.format_secondary_text(result.text)
+    if result.url:
+        dlg.add_button("Open the page", Gtk.ResponseType.ACCEPT)
+    dlg.add_button("Close", Gtk.ResponseType.CLOSE)
+    dlg.set_default_response(Gtk.ResponseType.CLOSE)
+    return dlg
+
+
 def about_dialog(parent, info=None):
     """Help > About: the version with its build, what the program is, and where it lives. The caller runs it."""
     info = info or build_info()

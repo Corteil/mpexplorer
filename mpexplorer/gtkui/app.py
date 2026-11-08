@@ -18,7 +18,8 @@ from ..badgescreen import BadgeScreen
 from ..openwith import (SYSTEM_OPEN, EditManager, app_template, handler_for, looks_executable, parse_handler,
                         program_path, remember_handler)
 from ..ops import ConflictPolicy, copy_tree, delete_items, is_within, move_item, total_size, unique_name
-from .. import boardinfo, meminfo
+from .. import boardinfo, meminfo, updates
+from ..buildinfo import build_info
 from ..ports import board_id, device_of, list_boards, short_model
 from ..remember import (chip_key, device_start, host_start, move_folder_to_chip, port_choice, remember_board_name,
                         remember_board_rts, remember_folder, remember_port, remember_source, source_choice)
@@ -29,7 +30,7 @@ from .common import (ICON, Gdk, GdkPixbuf, GLib, Gtk, ask_yes_no, button, error,
                      info, prompt, set_icon)
 from .console import ConsoleWindow
 from .dialogs import (OutputWindow, SyncDialog, TransferPopup, about_dialog, ask_conflict, ask_edit_conflict,
-                      ask_open_with, ask_sync_target)
+                      ask_open_with, ask_sync_target, update_dialog)
 from .editor import Editor
 from .firmware import BackupDialog, EraseDialog, FirmwareDialog
 from .libraries import LibrariesDialog
@@ -174,6 +175,7 @@ class App(Gtk.Window):
         w = menu("Window")
         w.connect("show", lambda m: self._fill_window_menu(m))
         h = menu("Help")
+        self.updates_item = add(h, "Check for updates...", self.check_updates)
         add(h, "About MicroPython Explorer", self.about)
         return bar
 
@@ -181,6 +183,29 @@ class App(Gtk.Window):
         dlg = about_dialog(self)
         dlg.run()
         dlg.destroy()
+
+    def check_updates(self):
+        """Ask GitHub on a thread of its own (not the serial worker: a slow network must not hold up the board)."""
+        self.updates_item.set_sensitive(False)
+        self.set_status("Checking for updates...")
+        info = build_info()
+
+        def work():
+            result = updates.check(info)
+            GLib.idle_add(lambda: (self._updates_done(result), False)[1])
+        threading.Thread(target=work, name="updates", daemon=True).start()
+
+    def _updates_done(self, result):
+        self.updates_item.set_sensitive(True)
+        self.set_status("Ready")
+        dlg = update_dialog(self, result)
+        answer = dlg.run()
+        dlg.destroy()
+        if answer == Gtk.ResponseType.ACCEPT and result.url:
+            try:
+                Gtk.show_uri_on_window(self, result.url, Gdk.CURRENT_TIME)
+            except Exception as e:       # noqa: BLE001 - no browser: say where to go instead
+                error(self, "Check for updates", "Could not open a browser (%s).\n\n%s" % (e, result.url))
 
     def _set_hidden(self, on):
         self.settings.set("general.show_hidden", on)        # _setting_changed does the rest

@@ -2,6 +2,14 @@
 
 All notable changes to mpexplorer. The format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+### Added
+- Help menu: About shows the version with the build it came from (commit and date; `--version` prints the same), and
+  Check for updates asks GitHub, only when chosen, whether a newer release or newer changes on main are out.
+- Windows: a portable build (GTK 3 from MSYS2, PyInstaller), an external terminal for the board's REPL, and
+  `packaging/windows/build-local.ps1` to build it on a PC.
+
 ## [0.1.1] - 2026-11-04
 
 ### Added
