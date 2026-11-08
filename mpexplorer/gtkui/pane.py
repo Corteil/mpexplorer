@@ -63,7 +63,7 @@ class Pane(Gtk.Frame):
         self.source_box.connect("changed", lambda _b: self._source_changed())
         self.source_box.connect("changed", lambda _b: self._update_badge())
         source.pack_start(self.source_box, True, True, 0)
-        self.connect_btn = icon_button(("network-transmit-receive", "network-offline"), "Connect to the board",
+        self.connect_btn = icon_button("network-offline", "Connect to the board",
                                        lambda: app.toggle_connection(self), "Connect")
         source.pack_start(self.connect_btn, False, False, 0)
         self.name_btn = icon_button(("bookmark-new", "user-bookmarks", "emblem-favorite"),
