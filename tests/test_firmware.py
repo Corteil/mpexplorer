@@ -134,7 +134,12 @@ def restart_when_written(drive, size):
     def watch():
         while not stop.wait(0.01):
             if target.exists() and target.stat().st_size >= size:
-                info.unlink()
+                try:
+                    info.unlink()
+                except PermissionError:
+                    # Windows: wait_gone may be reading the file this instant (WinError 32); a real bootloader's
+                    # drive just disappears, so try again rather than let the thread die (CI, windows 3.13, 2026-11-08)
+                    continue
                 return
     t = threading.Thread(target=watch, daemon=True)
     t.start()
