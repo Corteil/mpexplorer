@@ -86,11 +86,14 @@ def button(label, callback, tooltip=None):
 
 
 def _icon_name(icon):
-    """The first icon of `icon` (a name or a tuple of alternatives) that the current theme has, else None."""
+    """The first icon of `icon` (a name or a tuple of alternatives) that the current theme has, else None. Each name's
+    one-colour '-symbolic' form comes first, so the buttons match: the Adwaita bundled on Windows has folder-new and
+    the rest only in that form (they showed as words), and its coloured bin stood out (owner, 2026-11-07)."""
     theme = Gtk.IconTheme.get_default()
     for name in (icon,) if isinstance(icon, str) else icon:
-        if theme.has_icon(name):
-            return name
+        for candidate in (name + "-symbolic", name):
+            if theme.has_icon(candidate):
+                return candidate
     return None
 
 

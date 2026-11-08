@@ -279,6 +279,27 @@ def test_icon_button_falls_back_to_text_when_the_theme_lacks_the_icon():
     assert b.get_label() == "Thing" and b.get_tooltip_text() == "Do the thing"
 
 
+def test_one_colour_icons_come_first(monkeypatch):
+    # the Adwaita bundled on Windows: folder-new only as -symbolic (it showed the word), the bin in colour too
+    have = {"folder-new-symbolic", "user-trash", "user-trash-symbolic", "edit-delete-symbolic", "go-up"}
+    theme = types.SimpleNamespace(has_icon=lambda name: name in have)
+    monkeypatch.setattr(common.Gtk.IconTheme, "get_default", staticmethod(lambda: theme))
+    assert common._icon_name("folder-new") == "folder-new-symbolic"
+    assert common._icon_name(("user-trash", "edit-delete")) == "user-trash-symbolic"        # mono, not the coloured one
+    assert common._icon_name("go-up") == "go-up"                                # no -symbolic form: the plain one
+    assert common._icon_name(("no-such", "folder-new")) == "folder-new-symbolic"
+
+
+def test_the_file_buttons_show_icons_where_the_theme_has_them(make_app):
+    theme = common.Gtk.IconTheme.get_default()
+    if not theme.has_icon("folder-new-symbolic"):
+        pytest.skip("this icon theme has no symbolic icons")
+    app = make_app()
+    words = [b.get_label() for b in _buttons(app.get_children()[0]) if b.get_label() in
+             ("New folder", "Rename", "Delete", "Send time")]
+    assert words == []                              # each has an icon (they were words on Windows)
+
+
 def test_connect_button_swaps_its_hint_with_the_state(make_app, tmp_path):
     app = make_app()
     assert app.connect_btn.get_tooltip_text() == "Connect to the board"

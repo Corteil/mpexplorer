@@ -291,7 +291,7 @@ class App(Gtk.Window):
                 ("edit-cut", "Cut (Ctrl+X)", lambda: self.copy("cut"), "Cut", 0),
                 ("edit-paste", "Paste (Ctrl+V)", self.paste, "Paste", 0),
                 ("folder-new", "New folder (F7)", self.new_folder, "New folder", 6),
-                ("accessories-text-editor", "Rename (F2)", self.rename, "Rename", 0),
+                (("document-edit", "accessories-text-editor"), "Rename (F2)", self.rename, "Rename", 0),
                 (("user-trash", "edit-delete"), "Delete (Del)", self.delete, "Delete", 0)):
             files.pack_start(icon_button(icon, tip, cb, label), False, False, pad)
         bar = Gtk.FlowBox(selection_mode=Gtk.SelectionMode.NONE, max_children_per_line=2, homogeneous=False,
