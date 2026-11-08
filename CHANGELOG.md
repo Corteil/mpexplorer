@@ -4,6 +4,21 @@ All notable changes to mpexplorer. The format follows [Keep a Changelog](https:/
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-11-08
+
+### Fixed
+- Open in external terminal on Linux: the terminal program can end at once (lxterminal passes its window to one already
+  open), and mpexplorer then reconnected while miniterm still had the board, so both talked to it and miniterm showed
+  mpexplorer's `>>>` and `raw REPL` traffic. mpexplorer now takes the same port lock as miniterm, and waits until miniterm
+  has let go of the port before it reconnects ("still in use by the terminal: close it ... to come back here").
+- miniterm showed a 2024 or 2026 badge's escape codes as symbols (such as `␛`) instead of acting on them: it now passes
+  them straight to the terminal (`--filter direct`), on Linux and Windows.
+- The 2022 badge ignored every keystroke in miniterm: it only answers with RTS on, which mpexplorer's own Connect knew
+  but miniterm was never told. miniterm now gets RTS on for a board that needs it (never for a Tildagon, which hangs if
+  its port is closed with RTS on).
+- The port is never closed with RTS on, so a Tildagon cannot hang on a disconnect even if it was ever remembered as
+  needing RTS. Tried on the 2022 badge, the one board that does need RTS on: no reset, and it answers every time.
+
 ## [0.2.1] - 2026-11-08
 
 ### Fixed
