@@ -2,7 +2,7 @@
 from .. import extterm
 from ..openwith import (app_label, describe_handler, forget_handler, normalize_extension, program_path,
                         program_template, remember_handler)
-from .common import Gtk, ask_yes_no, error, find_app, info, prompt, scrolled
+from .common import Gtk, Pango, ask_yes_no, error, find_app, info, prompt, scrolled
 from .dialogs import ask_open_with, choose_program
 from .sources import SourcesPage
 
@@ -60,17 +60,27 @@ class PreferencesDialog(Gtk.Dialog):
     # -- Terminal: the external program for the board's real REPL ----------------
     def _terminal_page(self):
         page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, margin=12)
-        page.pack_start(Gtk.Label(label="Open in external terminal runs this program on the board's port. Leave it "
-                                  "empty for miniterm (comes with mpexplorer). {port}, {portnum}, {baud} and {title} "
-                                  "are filled in; the command runs without a shell.", xalign=0, wrap=True),
+        page.pack_start(Gtk.Label(label="Open in external terminal runs this program on the board's port: miniterm "
+                                  "(comes with mpexplorer), one from the list, or your own command. {port}, "
+                                  "{portnum}, {baud} and {title} are filled in; the command runs without a shell.",
+                                  xalign=0, wrap=True),
                         False, False, 0)
-        self.term_cmd = Gtk.ComboBoxText.new_with_entry()
-        for template in extterm.PRESETS.values():
-            self.term_cmd.append_text(template)
-        self.term_cmd.get_child().set_text(self.settings.get("terminal.external_command"))
-        self.term_cmd.get_child().set_placeholder_text("miniterm (the default)")
+        store = Gtk.ListStore(str, bool, str)       # entry, installed (sensitive), note shown after it
+        for template in extterm.choices():
+            found = extterm.installed(template)
+            store.append([template, found, "" if found else "  (not installed)"])
+        self.term_cmd = Gtk.ComboBox.new_with_model_and_entry(store)
+        self.term_cmd.set_entry_text_column(0)
+        for cell in self.term_cmd.get_cells():      # missing programs are greyed out and cannot be picked
+            self.term_cmd.add_attribute(cell, "sensitive", 1)
+        note = Gtk.CellRendererText(style=Pango.Style.ITALIC)
+        self.term_cmd.pack_start(note, False)
+        self.term_cmd.add_attribute(note, "text", 2)
+        self.term_cmd.add_attribute(note, "sensitive", 1)
+        self.term_cmd.get_child().set_text(self.settings.get("terminal.external_command") or extterm.MINITERM)
+        self.term_cmd.get_child().set_placeholder_text(extterm.MINITERM)
         self.term_cmd.connect("changed", lambda c: self.settings.set("terminal.external_command",
-                                                                     c.get_child().get_text().strip()))
+                                                                     extterm.template_of(c.get_child().get_text())))
         row = Gtk.Box(spacing=6)
         row.pack_start(self.term_cmd, True, True, 0)
         self.term_browse = Gtk.Button(label="Browse...")

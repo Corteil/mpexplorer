@@ -1208,6 +1208,29 @@ def test_browse_fills_in_the_program_for_open_with_and_the_terminal(make_app, mo
     dlg.destroy()
 
 
+def test_the_terminal_list_offers_miniterm_first_and_saves_it_as_the_default(make_app):
+    from mpexplorer import extterm
+    app = make_app()
+    dlg = PreferencesDialog(app)
+    rows = [r[0] for r in dlg.term_cmd.get_model()]
+    assert rows == extterm.choices() and rows[0] == extterm.MINITERM
+    for text, sensitive, note in dlg.term_cmd.get_model():          # a missing program is greyed out and says so
+        assert sensitive == extterm.installed(text) and (note == "") == sensitive
+    assert dlg.term_cmd.get_model()[0][1]                            # miniterm is always there
+    assert dlg.term_cmd.get_child().get_text() == extterm.MINITERM          # the default shows by name
+    dlg.term_cmd.set_active(rows.index(extterm.PRESETS["putty"]))
+    assert app.settings.get("terminal.external_command") == extterm.PRESETS["putty"]
+    dlg.term_cmd.set_active(0)
+    assert app.settings.get("terminal.external_command") == ""              # miniterm is saved as the empty default
+    dlg.destroy()
+    dlg = PreferencesDialog(app)
+    app.settings.set("terminal.external_command", extterm.PRESETS["putty"])
+    dlg.destroy()
+    dlg = PreferencesDialog(app)
+    assert dlg.term_cmd.get_child().get_text() == extterm.PRESETS["putty"]
+    dlg.destroy()
+
+
 @pytest.mark.skipif(sys.platform.startswith("win"), reason="Windows has no executable bit")
 def test_browse_refuses_a_file_that_is_not_a_program(make_app, monkeypatch, tmp_path):
     from mpexplorer.gtkui import dialogs

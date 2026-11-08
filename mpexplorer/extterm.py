@@ -29,6 +29,34 @@ PRESETS = {
                 '/W={title} /WAITCOM /AUTOWINCLOSE=off',     # one argument: Windows quotes it if it has spaces
     "picocom": "picocom -b {baud} {port}",
 }
+WINDOWS_ONLY, LINUX_ONLY = ("teraterm",), ("picocom",)
+# The Preferences list's first entry: it stands for the empty template (the bundled miniterm), which is what is saved.
+MINITERM = "miniterm (the default, comes with mpexplorer)"
+
+
+def choices(platform=None):
+    """The Preferences list for this system: miniterm first, then the presets whose program exists here."""
+    skip = LINUX_ONLY if is_windows(platform) else WINDOWS_ONLY
+    return [MINITERM] + [t for name, t in PRESETS.items() if name not in skip]
+
+
+def installed(text, platform=None, which=shutil.which, exists=os.path.isfile):
+    """Whether the program a Preferences entry runs is on this system (miniterm always is). Used to grey out the
+    entries that would only say "was not found"."""
+    template = template_of(text)
+    if not template:
+        return True
+    try:
+        program = split_command(template, platform)[0]
+    except (ValueError, IndexError):
+        return False
+    return exists(program) if os.path.isabs(program) else bool(which(program))
+
+
+def template_of(text):
+    """What the Preferences box holds -> the template to save ('' for miniterm)."""
+    text = (text or "").strip()
+    return "" if text == MINITERM else text
 
 # Boards that hang when their port is closed while RTS is on: the screen freezes, the USB serial stops answering
 # (Windows: error 31, "A device attached to the system is not functioning") and only the reset button brings it back.

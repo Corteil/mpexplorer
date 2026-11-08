@@ -54,6 +54,28 @@ def test_putty_and_tera_term_templates_fill_in_and_keep_arguments_whole():
     assert custom == ["C:\\Program Files\\PuTTY\\putty.exe", "-serial", "COM7"]
 
 
+def test_the_preferences_list_starts_with_miniterm_and_shows_only_this_systems_programs():
+    win, linux = extterm.choices("win32"), extterm.choices("linux")
+    assert win[0] == linux[0] == extterm.MINITERM
+    assert extterm.PRESETS["putty"] in win and extterm.PRESETS["teraterm"] in win
+    assert extterm.PRESETS["picocom"] not in win                    # picocom was "not found" on Windows (2026-11-08)
+    assert extterm.PRESETS["picocom"] in linux and extterm.PRESETS["teraterm"] not in linux
+    assert extterm.template_of(extterm.MINITERM) == "" and extterm.template_of("  ") == ""
+    assert extterm.template_of(" putty -serial {port} ") == "putty -serial {port}"
+
+
+def test_entries_whose_program_is_missing_are_reported_so_they_can_be_greyed_out():
+    only_putty = lambda n: "C:\\Program Files\\PuTTY\\putty.exe" if n == "putty" else None    # noqa: E731
+    assert extterm.installed(extterm.MINITERM, which=which_none)                 # bundled: always there
+    assert extterm.installed("", which=which_none)
+    assert extterm.installed(extterm.PRESETS["putty"], "win32", which=only_putty)
+    assert not extterm.installed(extterm.PRESETS["teraterm"], "win32", which=only_putty)
+    tt = '"C:\\Program Files (x86)\\teraterm\\ttermpro.exe" /C={portnum}'
+    assert extterm.installed(tt, "win32", exists=lambda p: p.endswith("ttermpro.exe"))
+    assert not extterm.installed(tt, "win32", exists=lambda p: False)
+    assert not extterm.installed('putty "unclosed', "linux", which=which_all)    # bad quoting: cannot run
+
+
 def test_putty_on_a_tildagon_gets_a_warning_and_other_pairs_do_not():
     # 2026-11-08, Windows: closing a Tildagon's port with RTS on froze the badge until its reset button was pressed.
     tildagon = "16d0:120e:7C4FAD337AC00000"

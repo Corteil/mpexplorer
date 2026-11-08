@@ -48,3 +48,17 @@ to set that up, unpack `msys2-x86_64-latest.sfx.exe` from repo.msys2.org (`msys2
 Everything goes to `D:\mpexplorer-build` (`-Out <folder>`): a venv that sees MSYS2's GTK and adds esptool, pytest-timeout and pytest-xdist,
 PyInstaller's work folder, and `dist\mpexplorer\mpexplorer.exe`. The tests and the self-test run on a hidden desktop
 (`packaging/windows/hidden_desktop.py`, the Windows stand-in for `xvfb-run`), so their windows do not cover the screen.
+
+### Setting up another Windows PC (for example a faster one for builds and tests)
+1. Install Git for Windows and, for CI and releases, the GitHub CLI (`winget install Git.Git GitHub.cli`, then `gh auth login`).
+2. Clone the repo to a local folder. A folder that OneDrive syncs works but slows the build down.
+3. MSYS2 as above (`-oD:\` gives `D:\msys64`; on a PC without a D: drive use `-oC:\` and pass `-Msys C:\msys64 -Out C:\mpexplorer-build`).
+4. ruff: it cannot be installed in MSYS2's Python (it needs Rust there), so use an ordinary Windows Python:
+   `python -m pip install --user ruff`, then `python -m ruff check .` in the repo.
+5. Check the setup with `.\packaging\windows\build-local.ps1`: the first run makes the venv, then runs every test, builds and checks.
+6. Tests alone, without building (the GUI ones on the hidden desktop), from the repo in PowerShell with `$env:MSYSTEM = "UCRT64"`
+   and `$env:CHERE_INVOKING = "1"`:
+   `D:\msys64\usr\bin\bash.exe -lc "/d/mpexplorer-build/venv/bin/python packaging/windows/hidden_desktop.py -m pytest -q -n auto"`
+   (only after step 5 has made the venv).
+7. The boards can stay on another PC: copy `dist\mpexplorer` (or the `-Zip` zip) there and run `mpexplorer.exe`. Nothing needs
+   installing on that PC.
