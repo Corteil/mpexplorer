@@ -11,8 +11,14 @@ import time
 
 LINE = 20       # characters that fit the 240 px round screen at font size 17
 GREEN, AMBER, RED, GREY = (0.2, 0.9, 0.5), (1.0, 0.8, 0.3), (1.0, 0.35, 0.3), (0.75, 0.8, 0.9)
+BACKGROUND = (0.04, 0.05, 0.12)
+RING = 9        # px: the state colour is a ring round the edge of the round screen
 
-# kind -> (dot colour, headline, headline colour, status colour, show the folder and free space)
+# What a Tildagon's reset button is called (it is labelled "reboop" on the badge).
+PRESS_REBOOP = "press reboop button"
+REBOOP_WHEN_DONE = "press reboop\nwhen finished"    # left on the screen while PuTTY has the port (it hangs the badge)
+
+# kind -> (ring colour, headline, headline colour, status colour, show the folder and free space)
 KINDS = {
     "idle": (GREEN, "CONNECTED", GREEN, GREY, True),
     "busy": (AMBER, "CONNECTED", GREEN, AMBER, True),
@@ -29,7 +35,11 @@ def fit(text, n=LINE, tail=False):
 
 
 def screen_code(kind, host, folder, status, since):
-    dot, head, head_col, status_col, details = KINDS[kind]
+    """The snippet that draws the page. A status with a newline is two lines; the first goes where the folder would
+    be, so only a page without the folder and free space (kind 'gone') has room for it."""
+    ring, head, head_col, status_col, details = KINDS[kind]
+    lines = str(status).split("\n")
+    extra = "" if details or len(lines) < 2 else fit(lines[-2])
     return (
         "try:\n import display\n ctx=display.get_ctx()\nexcept Exception:\n ctx=None\n"
         "if ctx is None:\n print('nodisplay')\nelse:\n"
@@ -37,9 +47,10 @@ def screen_code(kind, host, folder, status, since):
         " if %(details)r:\n"
         "  try:\n   import os\n   s=os.statvfs(%(folder)r)\n   free='%%.1f MB free'%%(s[0]*s[3]/1048576)\n"
         "  except Exception:\n   pass\n"
-        " ctx.rgb(0.04,0.05,0.12).rectangle(-120,-120,240,240).fill()\n"
+        " ctx.rgb(*%(bg)r).rectangle(-120,-120,240,240).fill()\n"
+        " ctx.rgb(*%(ring)r).arc(0,0,120,0,6.2832,0).fill()\n"
+        " ctx.rgb(*%(bg)r).arc(0,0,%(inner)d,0,6.2832,0).fill()\n"
         " ctx.text_align=ctx.CENTER\n ctx.text_baseline=ctx.MIDDLE\n"
-        " ctx.rgb(*%(dot)r).arc(0,-78,9,0,6.2832,0).fill()\n"
         " def t(y,size,col,s):\n  ctx.rgb(*col)\n  ctx.font_size=size\n  ctx.move_to(0,y).text(s)\n"
         " t(-48,26,(1,1,1),'mpexplorer')\n"
         " t(-22,20,%(head_col)r,%(head)r)\n"
@@ -47,13 +58,16 @@ def screen_code(kind, host, folder, status, since):
         " if %(details)r:\n"
         "  t(28,17,%(grey)r,%(folder_text)r)\n"
         "  t(50,17,%(grey)r,free)\n"
+        " if %(extra)r:\n"
+        "  t(52,17,%(status_col)r,%(extra)r)\n"
         # the screen is round: measured on a Tildagon, 20 characters at size 18 did not fit this low down
         " t(76,15,%(status_col)r,%(status)r)\n"
         " t(100,13,%(grey)r,%(since)r)\n"
         " display.end_frame(ctx)\n print('ok')\n"
-    ) % {"details": details, "folder": folder, "dot": dot, "head": head, "head_col": head_col, "grey": GREY,
-         "host": host, "folder_text": fit(folder, LINE, tail=True), "status_col": status_col,
-         "status": fit(status), "since": since}
+    ) % {"details": details, "folder": folder, "ring": ring, "bg": BACKGROUND, "inner": 120 - RING, "head": head,
+         "head_col": head_col, "grey": GREY, "host": host, "folder_text": fit(folder, LINE, tail=True),
+         "status_col": status_col, "extra": extra, "status": fit(lines[-1] if extra else " ".join(lines)),
+         "since": since}
 
 
 class BadgeScreen:

@@ -8,7 +8,7 @@ import pytest
 import fakedisplay
 from fakedevice import FakeSerial
 from mpexplorer.backends import CHUNK, DeviceBackend, LocalBackend, human_duration
-from mpexplorer.badgescreen import BadgeScreen, fit, screen_code
+from mpexplorer.badgescreen import PRESS_REBOOP, REBOOP_WHEN_DONE, BadgeScreen, fit, screen_code
 from mpexplorer.errors import BackendError, Cancelled
 from mpexplorer.jobs import JobRunner
 from mpexplorer.ops import (ConflictPolicy, Progress, copy_tree, delete_items, delete_tree, is_within,
@@ -320,8 +320,25 @@ def test_badge_screen_draws_the_status_page_and_skips_repeats(monkeypatch, tmp_p
     assert all(w in text for w in ("mpexplorer", "CONNECTED", "raspberrypi", "Ready", "MB free", "since"))
     assert screen.show() is False and len(rec.frames) == 1                 # nothing changed: no second exec
     assert screen.show("Uploading main.py", kind="busy") is True and "Uploading main.py" in " ".join(rec.last)
-    assert screen.show("press reset button", kind="gone") is True
-    assert "DISCONNECTED" in rec.last and "MB free" not in " ".join(rec.last)
+    assert screen.show(PRESS_REBOOP, kind="gone") is True
+    assert "DISCONNECTED" in rec.last and "MB free" not in " ".join(rec.last) and "press reboop button" in rec.last
+
+
+def test_badge_screen_state_is_a_ring_round_the_edge_not_a_dot():
+    code = screen_code("busy", "pi", "/", "Ready", "since 03:12")
+    assert ".arc(0,0,120,0,6.2832,0).fill()" in code and ".arc(0,0,111,0,6.2832,0).fill()" in code
+    assert code.index("(1.0, 0.8, 0.3)).arc(0,0,120") < code.index(").arc(0,0,111")    # amber ring, then the inside
+    assert ".arc(0,-78," not in code                                                     # the old dot
+
+
+def test_badge_screen_shows_a_two_line_message_when_disconnected(monkeypatch):
+    rec = fakedisplay.install(monkeypatch)
+    screen = BadgeScreen(RawREPL(FakeSerial(paste="on")), host="pi")
+    assert screen.show(REBOOP_WHEN_DONE, kind="gone") is True
+    assert "press reboop" in rec.last and "when finished" in rec.last
+    assert rec.last.index("press reboop") < rec.last.index("when finished")
+    # a page that shows the folder has no room for two lines: they are joined (and shortened) on the status line
+    assert "'press reboop when ..'" in screen_code("idle", "pi", "/", REBOOP_WHEN_DONE, "s")
 
 
 def test_badge_screen_leaves_a_board_without_a_display_alone(monkeypatch):

@@ -2022,6 +2022,19 @@ def test_putty_on_a_tildagon_can_still_be_used_or_cancelled(make_app, tmp_path, 
     assert launched and launched[0][0] == "putty"
 
 
+def test_putty_anyway_leaves_press_reboop_when_finished_on_the_badge(make_app, tmp_path, monkeypatch):
+    rec = fakedisplay.install(monkeypatch)
+    _app, launched, _chosen, _asked = _putty_on_a_tildagon(make_app, tmp_path, monkeypatch, "anyway")
+    assert launched and "DISCONNECTED" in rec.last
+    assert "press reboop" in rec.last and "when finished" in rec.last
+
+
+def test_miniterm_instead_of_putty_leaves_the_usual_badge_message(make_app, tmp_path, monkeypatch):
+    rec = fakedisplay.install(monkeypatch)
+    _app, launched, _chosen, _asked = _putty_on_a_tildagon(make_app, tmp_path, monkeypatch, "miniterm")
+    assert launched and "press reboop button" in rec.last and "when finished" not in rec.last
+
+
 def test_putty_warning_cancelled_stays_connected(make_app, tmp_path, monkeypatch):
     app, launched, chosen, _asked = _putty_on_a_tildagon(make_app, tmp_path, monkeypatch, None)
     pump(300)

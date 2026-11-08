@@ -14,7 +14,7 @@ from ..connection import Connection
 from ..errors import BackendError, Cancelled
 from ..jobs import JobRunner
 from .. import circuitpython, extterm, paths
-from ..badgescreen import BadgeScreen
+from ..badgescreen import PRESS_REBOOP, REBOOP_WHEN_DONE, BadgeScreen
 from ..openwith import (SYSTEM_OPEN, EditManager, app_template, handler_for, looks_executable, parse_handler,
                         program_path, remember_handler)
 from ..ops import ConflictPolicy, copy_tree, delete_items, is_within, move_item, total_size, unique_name
@@ -683,9 +683,10 @@ class App(Gtk.Window):
             else:
                 conn.badge.show("Cancelled" if isinstance(exc, Cancelled) else "Failed" if exc else "Done")
 
-    def disconnect(self, pane=None, after=None, keep_copied=True):
+    def disconnect(self, pane=None, after=None, keep_copied=True, badge_status=PRESS_REBOOP):
         """Close the board in a pane (by default the active one, else the only one). after runs once it is closed or
-        queued to close. keep_copied: files copied from it are downloaded first, to paste on the next board."""
+        queued to close. keep_copied: files copied from it are downloaded first, to paste on the next board.
+        badge_status: what a badge's screen says once mpexplorer has let go of it."""
         pane = pane or self._pane_of(self.conn)
         conn = self.conns.get(pane)
         if not conn and after:
@@ -703,7 +704,7 @@ class App(Gtk.Window):
                 remember_source(self.settings, "left", HOST)
             reset = self.settings.get("general.reset_on_disconnect")
             if conn.badge and not reset:
-                self.runner.submit(lambda prog: conn.badge.show(status="press reset button", kind="gone"),
+                self.runner.submit(lambda prog: conn.badge.show(status=badge_status, kind="gone"),
                                    label="Badge screen", quiet=True)
             self._connect_state("connect", pane)
             pane.connect_btn.set_sensitive(True)
@@ -774,7 +775,7 @@ class App(Gtk.Window):
             try:
                 reset = self.settings.get("general.reset_on_disconnect")
                 if conn.badge and not reset:
-                    conn.badge.show("press reset button", kind="gone")
+                    conn.badge.show(PRESS_REBOOP, kind="gone")
                 conn.badge = None
                 conn.device.close(reset)
             except Exception:
@@ -1140,6 +1141,7 @@ class App(Gtk.Window):
                  "never": "stays disconnected afterwards"}[self.settings.get("terminal.reconnect")]
         intro = "mpexplorer will disconnect from %s while %%s has the port, and %s." % (conn.port, again)
         warning = extterm.close_hang_warning(ext.argv, conn.usb)
+        badge_status = PRESS_REBOOP
         if warning:                 # this answer is the confirmation: no second question
             program = extterm.KEEP_RTS_ON[extterm.program_name(ext.argv)]
             pick = ask_choice(self, "%s will hang this badge when it closes" % program,
@@ -1147,6 +1149,8 @@ class App(Gtk.Window):
                               [("Cancel", None), ("Use %s anyway" % program, "anyway"), ("Use miniterm", "miniterm")])
             if pick is None:
                 return
+            if pick == "anyway":    # the badge will hang when PuTTY closes: say on its screen what to do then
+                badge_status = REBOOP_WHEN_DONE
             if pick == "miniterm":  # this time only: Preferences > Terminal keeps the chosen program
                 ext = extterm.ExternalTerminal(conn.port, conn.usb or conn.port, "", title=title)
                 try:
@@ -1165,8 +1169,9 @@ class App(Gtk.Window):
             self.set_status("Terminal open on %s: close it to come back here" % ext.port)
             GLib.timeout_add(500, self._watch_terminal, ext, pane)
         # queued after the disconnect's own close job, so the port is free before the program opens it
-        self.disconnect(pane, after=lambda: self.runner.submit(lambda prog: ext.start(), started,
-                                                               "Starting the terminal", quiet=True))
+        self.disconnect(pane, badge_status=badge_status,
+                        after=lambda: self.runner.submit(lambda prog: ext.start(), started,
+                                                         "Starting the terminal", quiet=True))
 
     def _watch_terminal(self, ext, pane):
         if pane in self.conns:                  # connected again by hand meanwhile: nothing left to do
