@@ -19,7 +19,7 @@ jobs:
         with:
           msystem: UCRT64
           update: true
-          install: zip
+          install: zip git          # git: the spec records the commit being built (Help > About)
           pacboy: >-
             gtk3:p adwaita-icon-theme:p python:p python-gobject:p python-pip:p python-setuptools:p
             python-pyserial:p python-pillow:p python-cryptography:p python-yaml:p python-pytest:p

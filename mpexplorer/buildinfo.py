@@ -19,8 +19,8 @@ def from_git(root, run=subprocess.run):
     if not os.path.exists(os.path.join(root, ".git")):
         return None
 
-    def git(*args):
-        out = run(["git", "-C", root] + list(args), capture_output=True, text=True, timeout=5,
+    def git(*args):      # safe.directory: only reading, and a build's git may not own the checkout (CI, MSYS2)
+        out = run(["git", "-C", root, "-c", "safe.directory=*"] + list(args), capture_output=True, text=True, timeout=5,
                   creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         if out.returncode:
             raise OSError(out.stderr.strip() or "git failed")
@@ -47,7 +47,8 @@ def read_build_file(package_dir=PACKAGE_DIR):
 def write_build_file(path, root, env=None, run=subprocess.run):
     """For the build: record the commit being built (and the CI run, if any) at path. Returns the dict written."""
     env = os.environ if env is None else env
-    info = from_git(root, run) or {"commit": "unknown", "date": "", "changed": False}
+    info = from_git(root, run) or {"commit": (env.get("GITHUB_SHA") or "")[:7] or "unknown", "date": "",
+                                   "changed": False}
     run_no = env.get("GITHUB_RUN_NUMBER")
     info["source"] = "CI run %s" % run_no if run_no else "local build"
     with open(path, "w", encoding="utf-8") as f:

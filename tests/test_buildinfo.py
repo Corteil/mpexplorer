@@ -5,11 +5,11 @@ from mpexplorer import __version__, buildinfo
 
 
 def fake_git(answers, calls=None):
-    """A stand-in for subprocess.run: git's reply chosen by its first argument after -C <root>."""
+    """A stand-in for subprocess.run: git's reply chosen by its subcommand (after -C <root> -c safe.directory=*)."""
     def run(argv, **kw):
         if calls is not None:
             calls.append(argv)
-        out = answers.get(argv[3])
+        out = answers.get(argv[5])
         if isinstance(out, Exception):
             raise out
         if out is None:
@@ -26,7 +26,7 @@ def test_from_git_reads_commit_date_and_local_changes(tmp_path):
     calls = []
     assert buildinfo.from_git(str(tmp_path), fake_git(CLEAN, calls)) == \
         {"commit": "d39b18e", "date": "2026-11-08", "changed": False}
-    assert calls[0][:3] == ["git", "-C", str(tmp_path)]
+    assert calls[0][:5] == ["git", "-C", str(tmp_path), "-c", "safe.directory=*"]       # it may not own the checkout
     edited = dict(CLEAN, status=" M mpexplorer/app.py")
     assert buildinfo.from_git(str(tmp_path), fake_git(edited))["changed"] is True
 
@@ -52,6 +52,17 @@ def test_a_frozen_build_reads_what_the_build_wrote(tmp_path):
                     "source": "CI run 57"}
     buildinfo.write_build_file(str(pkg / buildinfo.BUILD_FILE), str(root), {}, fake_git(CLEAN))
     assert json.loads((pkg / buildinfo.BUILD_FILE).read_text())["source"] == "local build"
+
+
+def test_a_build_without_git_uses_the_ci_commit(tmp_path):
+    # MSYS2 has no git of its own: the first local build said "build unknown"
+    out = str(tmp_path / buildinfo.BUILD_FILE)
+    no_git = fake_git({"rev-parse": FileNotFoundError("git")})
+    (tmp_path / ".git").mkdir()
+    ci = {"GITHUB_SHA": "d39b18e0123456789", "GITHUB_RUN_NUMBER": "58"}
+    info = buildinfo.write_build_file(out, str(tmp_path), ci, no_git)
+    assert (info["commit"], info["source"]) == ("d39b18e", "CI run 58")
+    assert buildinfo.write_build_file(out, str(tmp_path), {}, no_git)["commit"] == "unknown"
 
 
 def test_a_clone_asks_git_and_an_installed_copy_has_only_the_version(tmp_path):
