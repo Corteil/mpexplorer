@@ -4,6 +4,14 @@ All notable changes to mpexplorer. The format follows [Keep a Changelog](https:/
 
 ## [Unreleased]
 
+### Removed
+- Folder sync (Tools > Sync folders), at the owner's request. Copying files and folders between the panes is unchanged.
+
+### Changed
+- The Connect button no longer looks greyed out when a pane has a port chosen that is there to connect to: it shows the
+  same two arrows and x, dark (mpexplorer's own icon). The grey icon is kept only when there is nothing to connect to
+  (Host, or a port that has gone). The button can be pressed in every case, as before.
+
 ## [0.3.0] - 2026-11-08
 
 ### Added

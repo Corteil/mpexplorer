@@ -423,266 +423,6 @@ def test_transfer_progress_sits_above_the_transfer_information(make_app):
     assert app.bar.get_fraction() == 0
 
 
-def _sync_plan(tmp_path):
-    from mpexplorer.backends import LocalBackend
-    from mpexplorer.sync import build_plan
-    src, dst = tmp_path / "src", tmp_path / "dst"
-    (src / "lib").mkdir(parents=True)
-    dst.mkdir()
-    for name in ("a.py", "b.txt", "lib/m.py", "lib/n.py"):
-        (src / name).write_text(name)
-    (dst / "extra.txt").write_text("old")
-    be = LocalBackend()
-    return build_plan(be, str(src), be, str(dst))
-
-
-def _review(app, plan):
-    """A sync dialog that starts at the review of this plan (the real one compares first)."""
-    from mpexplorer.gtkui.dialogs import SyncDialog
-    return SyncDialog(app, plan.src_be, plan.src, plan.dst_be, plan.dst, plan=plan)
-
-
-def _tick(dialog, kind, rel):
-    return next(r[0] for r in dialog.store if (r[5], r[6]) == (kind, rel))
-
-
-def _click(dialog, kind, rel):
-    path = next(r.path for r in dialog.store if (r[5], r[6]) == (kind, rel))
-    dialog._toggled(None, str(path))
-
-
-def test_sync_dialog_shows_both_folders_and_the_space_and_lets_items_be_unticked(make_app, tmp_path):
-    app = make_app()
-    plan = _sync_plan(tmp_path)
-    dialog = _review(app, plan)
-    try:
-        texts = [w.get_text() for w in dialog.get_content_area().get_children()[0].get_children()
-                 if isinstance(w, Gtk.Label)]
-        assert any(str(tmp_path / "src") in t for t in texts) and any(str(tmp_path / "dst") in t for t in texts)
-        assert "needed" in dialog.space.get_text() and "free" in dialog.space.get_text()
-        assert dialog.sync_btn.get_label() == "Sync" and all(r[0] for r in dialog.store)      # everything ticked
-        assert [r[6] for r in dialog.store if r[5] == "delete"] == []                           # mirror is off
-        # leave one file out
-        _click(dialog, "copy", "b.txt")
-        assert _tick(dialog, "copy", "b.txt") is False and "3 of 4 file(s)" in dialog.summary.get_text()
-        # a folder takes its files along
-        _click(dialog, "mkdir", "lib")
-        assert not _tick(dialog, "copy", "lib/m.py") and not _tick(dialog, "copy", "lib/n.py")
-        # a file brings its folder back
-        _click(dialog, "copy", "lib/n.py")
-        assert _tick(dialog, "mkdir", "lib") and _tick(dialog, "copy", "lib/n.py")
-        assert not _tick(dialog, "copy", "lib/m.py")
-        # nothing ticked: nothing to sync
-        dialog._set_all(False)
-        assert not dialog.sync_btn.get_sensitive()
-        dialog._set_all(True)
-        sent = []
-        dialog.start_transfer = lambda mirror, selected: sent.append((mirror, selected))
-        dialog.mirror.set_active(True)
-        # and one deletion left out
-        _click(dialog, "delete", "extra.txt")
-        dialog.response(Gtk.ResponseType.OK)
-        (mirror, selected), = sent
-        assert mirror is True and ("copy", "b.txt") in selected and ("delete", "extra.txt") not in selected
-    finally:
-        dialog.destroy()
-
-
-def test_sync_dialog_warns_when_the_target_is_too_small(make_app, tmp_path):
-    app = make_app()
-    plan = _sync_plan(tmp_path)
-    plan.dst_free = 3                                         # smaller than the files to copy
-    dialog = _review(app, plan)
-    try:
-        assert "not enough" in dialog.space.get_text()
-        plan.dst_free = None
-        dialog._summarise()
-        assert "unknown" in dialog.space.get_text()
-    finally:
-        dialog.destroy()
-
-
-def _target_dialog(app, tmp_path, from_selection, src="/dev/lib/proj"):
-    from mpexplorer.backends import LocalBackend
-    from mpexplorer.gtkui.dialogs import SyncTargetDialog
-    be = LocalBackend()
-    return SyncTargetDialog(app, be, src, from_selection, be, str(tmp_path))
-
-
-def test_sync_target_dialog_offers_a_folder_for_a_selected_folder(make_app, tmp_path):
-    app = make_app()
-    dialog = _target_dialog(app, tmp_path, from_selection=True)
-    try:
-        assert dialog.make.get_active() and dialog.name.get_text() == "proj"             # ticked for a selected folder
-        assert dialog.target() == str(tmp_path / "proj") and dialog.go.get_sensitive()
-        assert "created first" in dialog.result.get_text()
-        dialog.name.set_text("copy-of-proj")
-        assert dialog.target() == str(tmp_path / "copy-of-proj")
-        for bad in ("", "a/b", "..", "."):                                               # not usable as one folder name
-            dialog.name.set_text(bad)
-            assert not dialog.go.get_sensitive(), bad
-        dialog.make.set_active(False)                                                    # sync into the target itself
-        assert dialog.target() == str(tmp_path) and dialog.go.get_sensitive()
-    finally:
-        dialog.destroy()
-
-
-def test_sync_target_dialog_does_not_default_to_a_new_folder_for_the_current_folder(make_app, tmp_path):
-    app = make_app()
-    current = _target_dialog(app, tmp_path, from_selection=False)
-    root = _target_dialog(app, tmp_path, from_selection=True, src="/")                   # the root has no name to use
-    try:
-        assert not current.make.get_active() and current.target() == str(tmp_path)
-        assert not root.make.get_active() and not root.make.get_sensitive() and root.target() == str(tmp_path)
-    finally:
-        current.destroy()
-        root.destroy()
-
-
-def test_mirror_deletion_needs_a_confirmation(make_app, tmp_path, monkeypatch):
-    from mpexplorer.gtkui import dialogs
-    app = make_app()
-    sent, asked = [], []
-    plan = _sync_plan(tmp_path)
-    for answer in (False, True):
-        monkeypatch.setattr(dialogs, "confirm_mirror_delete",
-                            lambda parent, label, path, count, tops, a=answer: asked.append((count, tops)) or a)
-        dialog = _review(app, plan)
-        dialog.start_transfer = lambda mirror, selected: sent.append(selected)
-        dialog.mirror.set_active(True)
-        dialog.response(Gtk.ResponseType.OK)
-        if not answer:
-            dialog.destroy()                      # a refusal leaves the dialog open
-    assert asked == [(1, [("extra.txt", 1)])] * 2
-    # only the second answer went through
-    assert len(sent) == 1 and ("delete", "extra.txt") in sent[0]
-
-
-def test_no_confirmation_when_nothing_is_deleted(make_app, tmp_path, monkeypatch):
-    from mpexplorer.gtkui import dialogs
-    app = make_app()
-    sent = []
-    monkeypatch.setattr(dialogs, "confirm_mirror_delete", lambda *a: pytest.fail("asked although nothing is deleted"))
-    dialog = _review(app, _sync_plan(tmp_path))
-    dialog.start_transfer = lambda mirror, selected: sent.append(selected)
-    dialog.response(Gtk.ResponseType.OK)                                                 # mirror is off
-    assert len(sent) == 1 and not any(k[0] == "delete" for k in sent[0])
-
-
-def test_many_deletions_are_listed_by_folder_and_can_be_unticked(make_app, tmp_path):
-    from mpexplorer.backends import LocalBackend
-    from mpexplorer.gtkui import dialogs
-    from mpexplorer.sync import build_plan
-    src, dst = tmp_path / "src", tmp_path / "dst"
-    src.mkdir()
-    (src / "keep.txt").write_text("k")
-    for top, n in (("big", dialogs.MAX_DELETE_ROWS), ("small", 5)):
-        (dst / top).mkdir(parents=True)
-        for i in range(n):
-            (dst / top / ("f%d" % i)).write_text("x")
-    be = LocalBackend()
-    app = make_app()
-    dialog = _review(app, build_plan(be, str(src), be, str(dst)))
-    try:
-        dialog.mirror.set_active(True)
-        rows = [(r[5], r[6], r[1]) for r in dialog.store if r[5] == "delete-group"]       # one row per top-level folder
-        assert sorted(rows) == [("delete-group", "big", "Delete %d" % (dialogs.MAX_DELETE_ROWS + 1)),
-                                ("delete-group", "small", "Delete 6")]                    # the files and their folder
-        assert sum(k[0] == "delete" for k in dialog._selected()) == dialogs.MAX_DELETE_ROWS + 1 + 6
-        dialog._toggled(None, str(next(r.path for r in dialog.store if r[6] == "big")))
-        assert not any(k[1].startswith("big") for k in dialog._selected() if k[0] == "delete")
-        assert any(k[1].startswith("small") for k in dialog._selected() if k[0] == "delete")
-    finally:
-        dialog.destroy()
-
-
-def _wait(cond, secs=8.0):
-    end = time.time() + secs
-    while not cond() and time.time() < end:
-        pump(50)
-    return cond()
-
-
-def test_sync_dialog_compares_inside_itself_then_shows_the_review(make_app, tmp_path):
-    from mpexplorer.backends import LocalBackend
-    from mpexplorer.gtkui.dialogs import SyncDialog
-    app = make_app()
-    src, dst = tmp_path / "src", tmp_path / "dst"
-    src.mkdir()
-    dst.mkdir()
-    (src / "a.py").write_text("a")
-    be = LocalBackend()
-    dialog = SyncDialog(app, be, str(src), be, str(dst))
-    try:
-        assert dialog.phase == "scanning" and dialog.progress_box.get_visible() and not dialog.review.get_visible()
-        assert not dialog.sync_btn.get_sensitive()                                    # nothing to sync until compared
-        assert _wait(lambda: dialog.phase == "review")
-        assert dialog.review.get_visible() and not dialog.progress_box.get_visible() and dialog.sync_btn.get_sensitive()
-        assert [(r[5], r[6]) for r in dialog.store] == [("copy", "a.py")]
-        assert app.status.get_text() == "Ready"                                       # main status bar not used
-    finally:
-        dialog.destroy()
-
-
-def test_sync_dialog_says_when_there_is_nothing_to_do(make_app, tmp_path):
-    from mpexplorer.backends import LocalBackend
-    from mpexplorer.gtkui.dialogs import SyncDialog
-    app = make_app()
-    for name in ("src", "dst"):
-        (tmp_path / name).mkdir()
-        (tmp_path / name / "same.txt").write_text("same")
-    be = LocalBackend()
-    dialog = SyncDialog(app, be, str(tmp_path / "src"), be, str(tmp_path / "dst"))
-    try:
-        assert _wait(lambda: dialog.phase == "done")
-        assert "Nothing to do" in dialog.result.get_text() and dialog.cancel_btn.get_label() == "Close"
-        assert not dialog.sync_btn.get_visible()
-    finally:
-        dialog.destroy()
-
-
-def test_sync_dialog_transfers_inside_itself_and_reports_the_result(make_app, tmp_path):
-    app = make_app()
-    plan = _sync_plan(tmp_path)
-    dialog = _review(app, plan)
-    try:
-        dialog._set_all(True)
-        _click(dialog, "copy", "b.txt")                                               # leave one file out
-        dialog.response(Gtk.ResponseType.OK)
-        assert dialog.phase == "transferring" and dialog.progress_box.get_visible() and not dialog.review.get_visible()
-        assert _wait(lambda: dialog.phase == "done")
-        text = dialog.result.get_text()
-        assert text.startswith("Done: 3 file(s)") and "copied" in text and dialog.cancel_btn.get_label() == "Close"
-        assert (tmp_path / "dst" / "a.py").exists() and (tmp_path / "dst" / "lib" / "m.py").exists()
-        assert not (tmp_path / "dst" / "b.txt").exists() and app.status.get_text() == "Sync complete"
-        dialog.response(Gtk.ResponseType.CANCEL)                                      # "Close"
-        assert dialog.phase == "closed"
-    finally:
-        if dialog.phase != "closed":
-            dialog.destroy()
-
-
-def test_sync_dialog_shows_the_scan_and_the_transfer_progress_itself(make_app, tmp_path):
-    from types import SimpleNamespace
-    from mpexplorer.ops import Progress
-    app = make_app()
-    dialog = _review(app, _sync_plan(tmp_path))
-    try:
-        prog = Progress()
-        prog.label = "Comparing lib/m.py"
-        dialog.job, dialog.phase = SimpleNamespace(prog=prog), "scanning"
-        dialog._tick()
-        assert dialog.progress_text.get_text() == "Comparing lib/m.py"               # what is being scanned
-        prog.label, prog.total, prog.done = "m.py", 4096, 1024
-        dialog.phase = "transferring"
-        dialog._tick()
-        assert dialog.bar.get_fraction() == 0.25
-        assert dialog.progress_text.get_text().startswith("m.py   1.0 KB of 4.0 KB (25%)")
-    finally:
-        dialog.job = None
-        dialog.destroy()
-
-
 def test_inline_jobs_do_not_use_the_main_status_bar(make_app):
     import threading
     app = make_app()
@@ -691,29 +431,13 @@ def test_inline_jobs_do_not_use_the_main_status_bar(make_app):
     def job(prog):
         prog.label, prog.total, prog.done = "x", 100, 50
         gate.wait(5)
-    app.runner.submit(job, label="Comparing folders ...", inline=True)
+    app.runner.submit(job, label="Installing badge apps ...", inline=True)     # a dialog's own job (Badge apps)
     pump(400)
     try:
         assert app.bar.get_fraction() == 0 and app.status.get_text() == "Ready"
     finally:
         gate.set()
     pump(300)
-
-
-def test_sync_dialog_progress_bar_is_centred_at_60_percent_with_its_text_under_it(make_app, tmp_path):
-    app = make_app()
-    dialog = _review(app, _sync_plan(tmp_path))
-    try:
-        dialog.review.hide()                                  # hold the dialog in its progress state
-        dialog.progress_box.show_all()
-        pump(400)
-        grid, bar = dialog.progress_box.get_allocation(), dialog.bar.get_allocation()
-        text = dialog.progress_text.get_allocation()
-        assert 0.55 < bar.width / grid.width < 0.65
-        assert abs((bar.x + bar.width / 2) - (grid.x + grid.width / 2)) <= 3
-        assert abs(text.x - bar.x) <= 1 and text.y > bar.y
-    finally:
-        dialog.destroy()
 
 
 def _slow_job(gate):
@@ -1811,6 +1535,44 @@ def test_each_pane_comes_back_with_what_it_had_chosen(make_app, two_ports, tmp_p
     assert app.left.backend is app.local and not app.conns          # chosen, but not connected until asked
 
 
+def _icon_of(btn):
+    img = btn.get_image()
+    return img.get_icon_name()[0] if img is not None and img.get_icon_name()[0] else btn.get_label()
+
+
+def test_the_connect_icon_is_dark_when_the_chosen_port_is_there(make_app, two_ports, tmp_path, monkeypatch):
+    # the grey network-offline icon looked disabled on an available port; the owner wants the same two arrows and x,
+    # dark (2026-11-11): mpexplorer's own icon, which ships with it, so this test needs no particular theme
+    ready = "mpexplorer-connect-symbolic"
+    app = make_app(general__source__left="Host", general__source__right="/dev/ttyACM1")
+    btn = app.right.connect_btn
+    assert _icon_of(btn) == ready and btn.get_sensitive()
+    assert _icon_of(app.left.connect_btn).startswith("network-offline")             # Host: nothing to connect to
+    app.right.source_box.get_child().set_text("Host")
+    pump()
+    assert _icon_of(btn).startswith("network-offline")
+    app.right.source_box.get_child().set_text(PORTS[1])
+    pump()
+    assert _icon_of(btn) == ready
+    monkeypatch.setattr("mpexplorer.gtkui.app.list_boards", lambda settings: [])        # the board is unplugged
+    app.scan_ports()
+    assert _icon_of(btn).startswith("network-offline") and btn.get_sensitive()       # grey, but still clickable
+    from mpexplorer.ports import Entry
+    back = [Entry(t.split("  ")[0], t, None, "") for t in PORTS]
+    monkeypatch.setattr("mpexplorer.gtkui.app.list_boards", lambda settings: list(back))   # plugged in again
+    app.scan_ports()
+    assert _icon_of(btn) == ready
+    app.connected(DeviceBackend(RawREPL(FakeSerial())), str(tmp_path), "/dev/ttyACM3", "2e8a:0005:AAA", pane=app.right)
+    pump()
+    connected = _icon_of(btn)
+    assert connected != ready and not connected.startswith("network-offline")         # connected: the dark arrows
+    app.scan_ports()                                                                   # a rescan leaves it alone
+    assert _icon_of(btn) == connected
+    app.disconnect(app.right)
+    pump()
+    assert _icon_of(btn) == ready                                                      # still there: ready again
+
+
 def test_choosing_in_a_pane_is_remembered(make_app, two_ports):
     app = make_app()
     app.left.source_box.get_child().set_text(PORTS[1])
@@ -1888,24 +1650,6 @@ def test_a_job_that_does_not_name_a_board_tells_no_screen_of_two(make_app, tmp_p
     app.runner.submit(lambda prog: None, lambda r, e: done.append(True), "Something")
     until(lambda: done)
     assert "Done" not in left.shown and "Done" not in right.shown
-
-
-def test_sync_can_run_between_two_boards(make_app, tmp_path):
-    from mpexplorer.gtkui.dialogs import SyncDialog
-    from mpexplorer.sync import apply_plan, build_plan
-    from mpexplorer.ops import Progress
-    app = make_app()
-    first, second, a, b = two_boards(app, tmp_path)
-    (a / "main.py").write_text("hello")
-    (a / "lib").mkdir()
-    (a / "lib" / "x.py").write_text("deep")
-    plan = build_plan(first, str(a), second, str(b))
-    apply_plan(plan, Progress())
-    assert (b / "main.py").read_text() == "hello" and (b / "lib" / "x.py").read_text() == "deep"
-    assert not build_plan(first, str(a), second, str(b)).of("copy")
-    dlg = SyncDialog(app, first, str(a), second, str(b), plan=build_plan(first, str(a), second, str(b)))
-    pump()
-    dlg.destroy()
 
 
 # -- Open in external terminal (docs/WINDOWS_PLAN.md section 3) ---------------------------------

@@ -736,7 +736,7 @@ def test_the_tools_are_in_the_menu(setup):
     menu = [c for c in app.get_child().get_children() if isinstance(c, Gtk.MenuBar)][0]
     tools = [i for i in menu.get_children() if i.get_label() == "Tools"][0].get_submenu()
     assert [i.get_label() for i in tools.get_children()] == [
-        "Sync folders...", "Install firmware...", "Install libraries...", "Badge apps...",
+        "Install firmware...", "Install libraries...", "Badge apps...",
         "Back up or restore flash...", "Erase flash..."]
 
 

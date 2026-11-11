@@ -133,7 +133,7 @@ Three layers, each catching different mistakes:
    friendly REPL and `input()`.
 2. **Real MicroPython, unix port** (`tests/test_real_micropython.py`, CI job `micropython`): a real interpreter on a pty
    (`tests/ptyserial.py`, a serial-port look-alike whose tty turns Ctrl-C into SIGINT as a keyboard would).
-   - The unix port ignores Ctrl-A, so there is no raw REPL to talk to. File, console and sync tests therefore run
+   - The unix port ignores Ctrl-A, so there is no raw REPL to talk to. File and console tests therefore run
      real MicroPython behind `tests/rawrepl_shim.py`, which provides the raw-REPL framing (and answers "not supported"
      to raw-paste). This verifies everything that executes *inside* the snippets: `os.ilistdir/stat/rename`, file
      I/O, `readinto` + `memoryview`, `binascii`, `hashlib`, `json`, tracebacks, `input()`, KeyboardInterrupt.
@@ -188,15 +188,13 @@ keys a board by vid:pid:serial so its last folder follows it to any /dev/ttyACMx
 - Still to build: a File types tab (needs Open with...), a Connection tab (needs agent mode). Settings for those are declared
   but nothing uses them yet, so the dialog does not show them.
 
-## Folder sync
-`sync.py` builds a `Plan` (mkdir / copy / delete actions) by walking both folders, then `apply_plan` runs it.
-Size differs -> changed; same size -> compare SHA-256 (`Backend.checksum`, computed on the board with `hashlib`).
-If a board has no `hashlib`, equal-size files are assumed identical and the plan says so. Deletes are always
-planned but only run when the user ticks "mirror". A file/folder type clash aborts planning rather than guessing.
+## Folder sync (removed)
+Tools > Sync folders (`sync.py` and its dialogs) was removed on 2026-11-11 at the owner's request; it is in git history
+before that date (last in 0.3.0) if it is ever wanted back.
 
 ## Two boards
 A `Connection` (`connection.py`) holds one board's port, settings key, backend, console session, badge screen and console window. `App.conns`
-maps a pane to its connection, and a port can be open in one pane only. Backends do not care: `copy_tree` and Sync take any two.
+maps a pane to its connection, and a port can be open in one pane only. Backends do not care: `copy_tree` takes any two.
 There is still one `JobRunner`, so every job runs in turn and no serial line is shared; the cost is that a long job on one board makes
 the other wait, and `cancel_all` affects both. Jobs name the boards they use with `devices=`, for the badge screens.
 

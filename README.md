@@ -56,10 +56,6 @@ board over USB serial. **Nothing is installed on the board** in normal use: it w
   miniterm by default, or PuTTY, Tera Term, picocom or your own command (Preferences > Terminal). mpexplorer disconnects
   while it is open and reconnects when it closes, even if the board comes back on another port. On a system without
   VTE (Windows) this is the console's only terminal, and the Mode buttons are not shown.
-- **Folder sync** (Tools > Sync folders): compares by size and SHA-256 (computed on the
-  device, so nothing is transferred to check), shows a preview, copies only what changed, optional mirror-delete.
-  `__pycache__`, `.git`, `*.pyc` are skipped. Files are written under a temporary name so a cancel never loses
-  the old copy.
 - Built-in text editor that saves straight back to the board; run a script and see its output; soft reset
 - **Choose the program that opens a file:** double-click or Enter opens a file with the program saved for its extension, or the
   built-in editor if none is saved. Right-click > **Open with...** (Shift+Enter) lists the built-in editor, *Run on the board*

@@ -14,6 +14,8 @@ from gi.repository import Gdk, GdkPixbuf, Gio, GLib, Gtk, Pango  # noqa: E402,F4
 from .. import filechoice  # noqa: E402
 
 ICON = Path(__file__).resolve().parent.parent / "icon.png"
+OWN_ICONS = Path(__file__).resolve().parent.parent / "icons"    # mpexplorer's own symbolic icons (mpexplorer-*.svg)
+_own_icons_added = []
 
 
 def fmt_time(t):
@@ -108,9 +110,16 @@ def _icon_name(icon):
     one-colour '-symbolic' form comes first, so the buttons match: the Adwaita bundled on Windows has folder-new and
     the rest only in that form (they showed as words), and its coloured bin stood out (owner, 2026-11-07)."""
     theme = Gtk.IconTheme.get_default()
+    if not _own_icons_added and OWN_ICONS.is_dir() and hasattr(theme, "append_search_path"):
+        theme.append_search_path(str(OWN_ICONS))       # once: icons kept loose in a search path are found by name
+        _own_icons_added.append(True)
     for name in (icon,) if isinstance(icon, str) else icon:
         for candidate in (name + "-symbolic", name):
             if theme.has_icon(candidate):
+                return candidate
+            # has_icon says no for an icon kept loose in a search path (not in a theme), though lookup_icon finds it
+            if (candidate.startswith("mpexplorer-") and hasattr(theme, "lookup_icon")
+                    and theme.lookup_icon(candidate, 16, 0) is not None):
                 return candidate
     return None
 

@@ -8,7 +8,7 @@ import time
 import weakref
 
 from .. import __version__
-from ..backends import CHUNK, DeviceBackend, Entry, LocalBackend, human
+from ..backends import CHUNK, DeviceBackend, LocalBackend, human
 from ..clipboard import Clipboard, copied_dir
 from ..connection import Connection
 from ..errors import BackendError, Cancelled
@@ -29,8 +29,8 @@ from ..watchdog import Watchdog
 from .common import (ICON, Gdk, GdkPixbuf, GLib, Gtk, ask_choice, ask_yes_no, button, error, find_app, fmt_time,
                      icon_button, info, prompt, set_icon)
 from .console import ConsoleWindow
-from .dialogs import (OutputWindow, SyncDialog, TransferPopup, about_dialog, ask_conflict, ask_edit_conflict,
-                      ask_open_with, ask_sync_target, update_dialog)
+from .dialogs import (OutputWindow, TransferPopup, about_dialog, ask_conflict, ask_edit_conflict, ask_open_with,
+                      update_dialog)
 from .editor import Editor
 from .firmware import BackupDialog, EraseDialog, FirmwareDialog
 from .appstore import BadgeAppsDialog
@@ -105,6 +105,7 @@ class App(Gtk.Window):
             self.right.fill_sources(self._ports, right, self._kinds)
         if right == HOST:
             self._show_host(self.right)
+        self._refresh_connect_icons()                   # the remembered choices are in: dark plug where a port is ready
         self.connect("delete-event", lambda *_: self._quit() or False)
         self.connect("configure-event", self._configured)
         self.closed = False
@@ -170,7 +171,6 @@ class App(Gtk.Window):
         add(d, "Name this board...", self.name_board)
         add(d, "Soft reset", self.soft_reset)
         t = menu("Tools")
-        add(t, "Sync folders...", self.sync_folders)
         add(t, "Install firmware...", self.install_firmware)
         add(t, "Install libraries...", self.install_libraries)
         add(t, "Badge apps...", self.badge_apps)
@@ -468,9 +468,11 @@ class App(Gtk.Window):
         first = self._ports[choice] if choice is not None and not self.right.source() else None
         self.right.fill_sources(self._ports, first, self._kinds)
         self.left.fill_sources(self._ports, None, self._kinds)
+        self._refresh_connect_icons()
 
     def source_changed(self, pane):
         """Choosing Host takes effect at once. A port only takes effect with the pane's Connect button."""
+        self._refresh_connect_icons()
         if pane.source() == HOST or pane.source() in self._ports:
             remember_source(self.settings, self._side(pane), pane.source())
         if pane.source() == HOST:
@@ -666,12 +668,31 @@ class App(Gtk.Window):
 
     def _connect_state(self, state, pane=None):
         """The Connect button shows what a click would do: plug in, unplug, or wait."""
-        # not connected: grey arrows with the small mark; connected: the two dark arrows (owner, 2026-11-08)
+        # connected: the two dark arrows (owner, 2026-11-08). Not connected: the two arrows with the x, dark when the
+        # pane's port is there to connect to (mpexplorer's own icon, icons/mpexplorer-connect-symbolic.svg), grey only
+        # when it is not (Host, or a port that has gone); the grey one looked disabled on an available port and a plug
+        # icon was not wanted (owner, 2026-11-11). The button stays clickable either way.
+        pane = pane or self.right
+        if state == "connect" and self._port_ready(pane):
+            state = "ready"
         icon, tip, label = {"connect": ("network-offline", "Connect to the board", "Connect"),
+                            "ready": (("mpexplorer-connect", "network-offline"), "Connect to the board", "Connect"),
                             "connecting": ("emblem-synchronizing", "Connecting...", "Connecting..."),
                             "disconnect": (("network-transmit-receive", "network-wired"), "Disconnect from the board",
                                            "Disconnect")}[state]
-        set_icon((pane or self.right).connect_btn, icon, tip, label)
+        set_icon(pane.connect_btn, icon, tip, label)
+
+    def _port_ready(self, pane):
+        """True when the pane has a port chosen that is in the port list (there is a board to connect to)."""
+        port = device_of(pane.source() or "")
+        return port not in ("", HOST) and port in {device_of(t) for t in getattr(self, "_ports", [])}
+
+    def _refresh_connect_icons(self):
+        """After the port list or a pane's choice changed: the not-connected icons follow (connected and connecting
+        buttons keep theirs)."""
+        for pane in self.panes:
+            if pane not in self.conns and pane.connect_btn.get_sensitive():
+                self._connect_state("connect", pane)
 
     def _badge_draw(self, **kw):
         """Queue a redraw of the badge's status screen (a no-op without one)."""
@@ -1221,23 +1242,6 @@ class App(Gtk.Window):
         pane.fill_sources(self._ports, text, self._kinds)
         self.connect_device(pane)
         return False
-
-    def sync_folders(self):
-        src = self.active
-        dst = self.other_pane(src)
-        if not (self._need_backend(src) and self._need_backend(dst)):
-            return
-        picked = src.selected()                         # one selected folder is synced instead of the current folder
-        chosen = picked[0][1] if len(picked) == 1 and (src.entry(picked[0][0]) or Entry("", False)).is_dir else None
-        s_be, s_dir, d_be = src.backend, chosen or src.cwd, dst.backend
-        d_dir = ask_sync_target(self, s_be, s_dir, bool(chosen), d_be, dst.cwd)
-        if d_dir is None:
-            return
-        if s_be is d_be and (is_within(s_be, d_dir, s_dir) or is_within(s_be, s_dir, d_dir)):
-            error(self, "Sync", "The two folders must be separate (neither inside the other).")
-            return
-
-        SyncDialog(self, s_be, s_dir, d_be, d_dir)
 
     def free_space(self):
         if self.device and self._need_backend(self._pane_of(self.conn)):

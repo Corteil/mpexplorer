@@ -3,9 +3,6 @@ import pytest
 from fakedevice import FakeSerial
 from mpexplorer.backends import DeviceBackend, LocalBackend
 from mpexplorer.console import ConsoleSession, build_code, clean_traceback
-from mpexplorer.errors import BackendError, Cancelled
-from mpexplorer.ops import Progress
-from mpexplorer.sync import apply_plan, build_plan
 from mpexplorer.transport import RawREPL
 
 
@@ -21,76 +18,6 @@ def env(repl, tmp_path):
     src.mkdir()
     dst.mkdir()
     return LocalBackend(), DeviceBackend(repl), src, dst
-
-
-def run_sync(plan, delete=False):
-    apply_plan(plan, Progress(), include_delete=delete)
-
-
-def test_sync_new_changed_extra_and_idempotent(env):
-    local, dev, src, dst = env
-    (src / "a.py").write_text("print(1)")
-    (src / "lib").mkdir()
-    (src / "lib" / "m.py").write_text("x=1")
-    (src / "__pycache__").mkdir()
-    (src / "__pycache__" / "junk.pyc").write_text("zz")
-    plan = build_plan(local, str(src), dev, str(dst))
-    assert sorted((a.kind, a.rel) for a in plan.actions) == [
-        ("copy", "a.py"), ("copy", "lib/m.py"), ("mkdir", "lib")]         # excluded names are skipped
-    run_sync(plan)
-    assert (dst / "lib" / "m.py").read_text() == "x=1" and not (dst / "__pycache__").exists()
-    assert not list(dst.rglob("*.mpx-part"))
-
-    again = build_plan(local, str(src), dev, str(dst))
-    assert again.actions == [] and again.unchanged == 2
-
-    (src / "a.py").write_text("print(2)")                                 # same size, different content
-    (dst / "old.txt").write_text("stale")
-    (dst / "olddir").mkdir()
-    (dst / "olddir" / "f").write_text("q")
-    plan = build_plan(local, str(src), dev, str(dst))
-    assert [(a.kind, a.rel, a.reason) for a in plan.actions if a.kind == "copy"] == [("copy", "a.py", "changed")]
-    run_sync(plan)                                                        # no delete: extras survive
-    assert (dst / "a.py").read_text() == "print(2)" and (dst / "old.txt").exists()
-    run_sync(plan, delete=True)
-    assert not (dst / "old.txt").exists() and not (dst / "olddir").exists()
-
-
-def test_sync_device_to_local_and_size_only(env):
-    local, dev, src, dst = env
-    (src / "f.bin").write_bytes(b"abcd")
-    (dst / "f.bin").write_bytes(b"abce")
-    assert build_plan(dev, str(src), local, str(dst), use_checksum=False).actions == []
-    plan = build_plan(dev, str(src), local, str(dst))
-    assert [a.rel for a in plan.of("copy")] == ["f.bin"]
-    run_sync(plan)
-    assert (dst / "f.bin").read_bytes() == b"abcd"
-
-
-def test_sync_creates_missing_destination_and_detects_mismatch(env, tmp_path):
-    local, dev, src, dst = env
-    (src / "a").write_text("1")
-    newdst = tmp_path / "fresh"
-    plan = build_plan(local, str(src), dev, str(newdst))
-    assert plan.actions[0].kind == "mkdir" and plan.actions[0].rel == ""
-    run_sync(plan)
-    assert (newdst / "a").read_text() == "1"
-    (src / "thing").write_text("file")
-    (dst / "thing").mkdir()
-    with pytest.raises(BackendError):
-        build_plan(local, str(src), dev, str(dst))
-
-
-def test_sync_cancel_keeps_old_file(env):
-    local, dev, src, dst = env
-    (src / "a").write_bytes(b"new!")
-    (dst / "a").write_bytes(b"old")
-    plan = build_plan(local, str(src), dev, str(dst))
-    prog = Progress()
-    prog.cancel()
-    with pytest.raises(Cancelled):
-        apply_plan(plan, prog)
-    assert (dst / "a").read_bytes() == b"old"
 
 
 def test_checksum_matches_both_sides(env):
@@ -204,34 +131,6 @@ def test_trace_reports_everything_sent_and_received():
     assert "error" in kinds and "info" in kinds
     repl.trace = lambda k, t: 1 / 0                   # a broken observer is ignored
     assert repl.exec("print(1)").strip() == b"1"
-
-
-def test_plan_records_the_free_space_and_what_was_ignored(env, tmp_path):
-    local, dev, src, dst = env
-    (src / "a.py").write_text("x")
-    plan = build_plan(local, str(src), dev, str(dst))
-    assert isinstance(plan.dst_free, int) and plan.dst_free > 0 and "__pycache__" in plan.exclude
-    missing = build_plan(local, str(src), dev, str(tmp_path / "not" / "there"))      # asks the nearest existing parent
-    assert isinstance(missing.dst_free, int)
-
-
-def test_apply_plan_runs_only_the_selected_items(env):
-    local, dev, src, dst = env
-    (src / "a.py").write_text("a")
-    (src / "b.py").write_text("b")
-    (src / "lib").mkdir()
-    (src / "lib" / "m.py").write_text("m")
-    (dst / "stale.txt").write_text("old")
-    (dst / "keep.txt").write_text("old")
-    plan = build_plan(local, str(src), dev, str(dst))
-    # everything except b.py and keep.txt
-    chosen = {("copy", "a.py"), ("mkdir", "lib"), ("copy", "lib/m.py"), ("delete", "stale.txt")}
-    apply_plan(plan, Progress(), include_delete=True, selected=chosen)
-    assert (dst / "a.py").exists() and (dst / "lib" / "m.py").exists() and not (dst / "b.py").exists()
-    assert not (dst / "stale.txt").exists() and (dst / "keep.txt").exists()
-    # a ticked deletion still needs include_delete
-    apply_plan(plan, Progress(), include_delete=False, selected={("delete", "keep.txt")})
-    assert (dst / "keep.txt").exists()
 
 
 class BootSerial:

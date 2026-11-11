@@ -16,7 +16,6 @@ import pytest
 from mpexplorer.backends import CHUNK, DeviceBackend, LocalBackend
 from mpexplorer.console import ConsoleSession
 from mpexplorer.ops import ConflictPolicy, Progress, copy_tree, delete_tree, move_item
-from mpexplorer.sync import apply_plan, build_plan
 from mpexplorer.terminal import paste_bytes
 from mpexplorer.transport import DeviceError, RawREPL
 from test_terminal import DOWN, LEFT, UP, Term
@@ -135,28 +134,6 @@ def test_checksum_free_space_and_run(dev, tmp_path):
         assert d.free_space(root) > 0
     except DeviceError:
         pytest.skip("this MicroPython build has no os.statvfs")
-
-
-def test_sync_end_to_end(dev, tmp_path):
-    d, _root = dev
-    src, dst = tmp_path / "src", tmp_path / "dst"
-    src.mkdir()
-    dst.mkdir()
-    local = LocalBackend()
-    (src / "a.py").write_text("print(1)")
-    (src / "lib").mkdir()
-    (src / "lib" / "m.py").write_text("x=1")
-    plan = build_plan(local, str(src), d, str(dst))
-    assert sorted((a.kind, a.rel) for a in plan.actions) == [("copy", "a.py"), ("copy", "lib/m.py"), ("mkdir", "lib")]
-    apply_plan(plan, Progress())
-    assert (dst / "lib" / "m.py").read_text() == "x=1"
-    again = build_plan(local, str(src), d, str(dst))
-    assert again.actions == []
-    (src / "a.py").write_text("print(2)")                      # same size, different content
-    plan = build_plan(local, str(src), d, str(dst))
-    if plan.notes:
-        pytest.skip("no hashlib on this build, so same-size changes cannot be detected")
-    assert [a.rel for a in plan.of("copy")] == ["a.py"]
 
 
 # ------------------------------------------------------------------- console

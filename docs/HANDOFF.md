@@ -5,6 +5,15 @@ Written so a new Claude session can take over with no other context. Update it a
 v1.28.0, the `gui` job running every `tests/test_gui_*.py` under xvfb) and the Windows build green. Older sections below are
 history and may be out of date.
 
+**2026-11-11 (branch `remove-sync-connect-icon`):** folder sync removed at the owner's request (`sync.py`, the Sync folders
+dialogs, the Tools menu entry, their tests; `tests/test_sync_console.py` is now `tests/test_console.py`). Sections below that
+describe sync are history. The Connect button shows the two arrows and x, dark, when the pane's port is in the list (our
+own icon `mpexplorer/icons/mpexplorer-connect-symbolic.svg`, original artwork: filled paths only so GTK recolours it; the
+owner turned down a plug icon), and the grey `network-offline` only for Host or a port that has gone (`App._port_ready`,
+`_refresh_connect_icons`). GTK 3's `has_icon` misses icons kept loose in a search path, so `common._icon_name` also asks
+`lookup_icon` for `mpexplorer-*` names. Local wheels: delete the git-ignored `build/` folder first, or setuptools keeps
+files that have gone from the source (a deleted `sync.py` was still in the wheel).
+
 ## START HERE (2026-11-08, late): releases 0.2.1 and 0.2.2, then the badge app store
 Work is on the second Windows PC (clone `D:\Code\mpexplorer`, MSYS2 `D:\msys64`, build `D:\mpexplorer-build`; boards
 here: Tildagon COM23 and COM13, Picos, the 2022 badge; the owner also tests on the Pi).
