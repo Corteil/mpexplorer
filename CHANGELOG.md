@@ -4,8 +4,10 @@ All notable changes to mpexplorer. The format follows [Keep a Changelog](https:/
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-11-11
+
 ### Removed
-- Folder sync (Tools > Sync folders), at the owner's request. Copying files and folders between the panes is unchanged.
+- Folder sync (Tools > Sync folders). Copying files and folders between the panes is unchanged.
 
 ### Changed
 - The Connect button no longer looks greyed out when a pane has a port chosen that is there to connect to: it shows the

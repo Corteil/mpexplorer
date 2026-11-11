@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mpexplorer"
-version = "0.3.0"
+version = "0.3.1"
 description = "Dual-pane file explorer for MicroPython boards (Pico, EMF badges). Nothing is installed on the target."
 readme = "README.md"
 requires-python = ">=3.11"
